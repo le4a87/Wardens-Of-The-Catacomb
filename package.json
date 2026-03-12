@@ -7,7 +7,8 @@
     "serve": "python -m http.server 8080",
     "server:net": "node server/networkServer.js",
     "dev": "node server/devLauncher.js",
-    "check": "node server/check-all.js"
+    "check": "node server/check-all.js",
+    "perf:test": "node server/perfRunner.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

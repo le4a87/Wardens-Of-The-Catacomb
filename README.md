@@ -61,6 +61,7 @@ Stop with `Ctrl+C`.
 - `npm run serve`: static host only (`python -m http.server 8080`)
 - `npm run server:net`: authoritative WebSocket server only
 - `npm run check`: syntax check all JS files (`node --check` sweep)
+- `npm run perf:test`: run automated local+network perf flow and emit `artifacts/perf/latest.json`
 
 ## How to Play
 
@@ -199,7 +200,14 @@ Drop behavior includes gold, health potions, treasure bags, and breakable-contai
   - Very low gains when heavily over-leveled for the floor
 
 ## Development Notes
-- Large runtime files have been split into domain modules (`src/game/*`, `src/rendering/*`, `src/net/*`)
+- Network and runtime monoliths were split into focused modules:
+  - client session/input/prediction/map-readiness helpers in `src/net/*`
+  - shared runtime methods in `src/game/*`
+  - server protocol/scheduler/serialization helpers in `server/net/*`
+- Delta snapshot protocol is in use with stable entity IDs and keyframe recovery.
+- Snapshot ack and per-client recovery are implemented to reduce prolonged desync.
+- Projectile reconciliation includes held-fire cadence linkage for reduced origin drift/snap.
+- Tick scheduling is drift-compensated with monotonic timing and scheduler telemetry.
 - Use `npm run check` before pushing changes
 - Network architecture is currently designed to evolve toward true multi-entity multiplayer in later phases
 
@@ -210,8 +218,9 @@ This section reflects a code review pass over the current repository state.
 - `game.js`: browser bootstrap, character select, local start, and network client session orchestration
 - `src/game/*`: game simulation/runtime systems
 - `src/rendering/*`: rendering pipeline and HUD
-- `src/net/*`: client-side network state sync/interpolation
-- `server/networkServer.js`: authoritative server loop and room/session management
+- `src/net/*`: client-side network state sync/interpolation, prediction, map-chunk readiness, and session interaction helpers
+- `server/networkServer.js`: authoritative server entrypoint and room management
+- `server/net/*`: server-side protocol routing, state serialization, delta helpers, map chunk streaming, scheduler, telemetry
 
 ### Network Protocol (Current)
 - Client -> Server:
@@ -231,16 +240,34 @@ This section reflects a code review pass over the current repository state.
   - `state.map` is still handled client-side for older servers.
 
 ### File Size Hotspots (non-`node_modules`)
-- `src/game/GameRuntimeBase.js` (~591 lines)
-- `server/networkServer.js` (~573 lines)
-- `game.js` (~487 lines)
+- `game.js` (~473 lines)
+- `server/networkServer.js` (~467 lines)
+- `src/game/GameRuntimeBase.js` (~447 lines)
+- `server/perfRunner.js` (~435 lines)
 
-These are the primary candidates for further modularization if you want to enforce a strict file-size policy.
+No current source monoliths exceed 500 lines.
 
 ### Quality Gates
-- Automated check currently available:
+- Automated checks:
   - `npm run check` (syntax sweep via `node --check`)
-- There is no unit/integration/performance test suite yet; manual playtesting is still required for gameplay and network behavior.
+  - `npm run perf:test` (scripted local+network performance flow)
+- Perf artifacts:
+  - latest run: `artifacts/perf/latest.json`
+  - active baseline: `artifacts/perf/baseline.json`
+  - prior baseline snapshots can be stored as `artifacts/perf/baseline_previous.json`
+
+### Performance Baseline Workflow
+- Baseline is captured from 3 perf runs and aggregated into `artifacts/perf/baseline.json`.
+- New changes are validated by running `npm run perf:test` and comparing `latest.json` metrics against baseline metrics.
+- Task pass criteria for performance work:
+  - target metric must improve by at least 2% vs baseline (unless a stricter threshold is specified).
+- If a baseline metric is invalid for a target area (for example, missing or zero sample counts), baseline must be recaptured before gating.
+- Primary comparison metrics include:
+  - `avgSnapshotBytes`, `p95SnapshotBytes`
+  - `avgCorrectionPx`, `maxCorrectionPx`
+  - `p95FrameGapMs`, `clientJitterMs`
+  - `projectileOriginErrorPx_p95`, `projectileSnapEvents`
+  - server telemetry (tick/serialize/broadcast timing and scheduler drift stats)
 
 ### Current Collaboration Notes
 - The project is suitable for collaborative feature work, but contributors should treat network mode as an active area (phase-1 authoritative model).

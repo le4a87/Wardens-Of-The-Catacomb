@@ -1,6 +1,17 @@
 import { Game } from "./src/Game.js";
 import { NetClient } from "./src/net/NetClient.js";
-import { applyMapStateToGame, applyMapMetaToGame, applyMapChunkToGame, applySnapshotToGame, syncByIdLerp } from "./src/net/clientStateSync.js";
+import {
+  applyMapStateToGame,
+  applyMapMetaToGame,
+  applyMapChunkToGame,
+  applyMetaStateToGame,
+  applySnapshotToGame,
+  isKnownMapTileAt,
+  syncByIdLerp
+} from "./src/net/clientStateSync.js";
+import { chunkKey, computeChunkReadiness } from "./src/net/mapChunkReadiness.js";
+import { predictProjectileSpawn, prunePredictedProjectiles } from "./src/net/projectilePrediction.js";
+import { canRunPredictedCollision, collectInput, handleNetworkUiActions, predictFromInput, setSelectedClass, shouldSendNetworkInput, updateNetworkRole } from "./src/net/sessionInteraction.js";
 
 const canvas = document.getElementById("game");
 const selector = document.getElementById("character-select");
@@ -27,8 +38,12 @@ let netPendingInputs = [];
 let netMapSignature = "";
 let netPendingSnapshot = null;
 const NET_INPUT_DT = 1 / 60;
-const NET_RENDER_DELAY_MS_CONTROLLER = 8;
-const NET_RENDER_DELAY_MS_SPECTATOR = 48;
+const NET_CLOCK_OFFSET_SMOOTHING = 0.12;
+const netDelayParams = new URLSearchParams(window.location.search);
+const parsedControllerDelay = Number.parseInt(netDelayParams.get("netDelayController") || "22", 10);
+const parsedSpectatorDelay = Number.parseInt(netDelayParams.get("netDelaySpectator") || "64", 10);
+const NET_RENDER_DELAY_MS_CONTROLLER = Number.isFinite(parsedControllerDelay) ? Math.max(0, parsedControllerDelay) : 22;
+const NET_RENDER_DELAY_MS_SPECTATOR = Number.isFinite(parsedSpectatorDelay) ? Math.max(0, parsedSpectatorDelay) : 64;
 const NET_MAX_SNAPSHOT_BUFFER = 20;
 const NET_MIN_SEND_MS = 12;
 const NET_FORCE_SEND_IDLE_MS = 66;
@@ -37,20 +52,48 @@ let netLastInputSendAt = 0;
 let netLastSentInput = null;
 let netLastInputProcessAt = 0;
 let netMapChunksReceived = 0;
+let netMapChunkSize = 24;
+let netRequiredChunkKeys = new Set();
+let netReceivedChunkKeys = new Set();
+let netLastServerPlayer = null;
+let netClockOffsetMs = 0;
+let netClockOffsetReady = false;
+let netPredictedProjectiles = new Map();
+let netNextHeldPrimaryPredictAtMs = 0;
+let netLastSnapshotRecvAtMs = 0;
+let netSnapshotIntervalMeanMs = 33;
+let netSnapshotJitterMs = 0;
+let netLastSnapshotGapMs = 33;
 
 function updateNetworkStatus(text) {
   if (networkStatus) networkStatus.textContent = text;
   if (currentGame && currentGame.networkEnabled) currentGame.networkLoadingMessage = text;
 }
 
-function setSelectedClass(classType) {
-  selectedClass = classType === "fighter" || classType === "warrior" ? "fighter" : "archer";
-  for (const button of classButtons) {
-    const option = button.dataset.classOption === "warrior" ? "fighter" : button.dataset.classOption;
-    const isActive = option === selectedClass;
-    button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+function getRenderDelayMs() {
+  return isNetworkController() ? NET_RENDER_DELAY_MS_CONTROLLER : NET_RENDER_DELAY_MS_SPECTATOR;
+}
+
+function observeServerTime(serverTime) {
+  if (!Number.isFinite(serverTime)) return;
+  const observedOffset = Date.now() - serverTime;
+  if (!netClockOffsetReady) {
+    netClockOffsetMs = observedOffset;
+    netClockOffsetReady = true;
+    return;
   }
+  netClockOffsetMs += (observedOffset - netClockOffsetMs) * NET_CLOCK_OFFSET_SMOOTHING;
+}
+
+function estimateServerNowMs() {
+  if (!netClockOffsetReady) return NaN;
+  return Date.now() - netClockOffsetMs;
+}
+
+function updateRequiredChunkReadiness(game, playerX, playerY) {
+  const readiness = computeChunkReadiness(game, playerX, playerY, netMapChunkSize, netReceivedChunkKeys);
+  netRequiredChunkKeys = readiness.requiredChunkKeys;
+  if (game) game.networkHasChunks = readiness.hasChunks;
 }
 
 function stopNetworkSession() {
@@ -78,6 +121,18 @@ function stopNetworkSession() {
   netLastSentInput = null;
   netLastInputProcessAt = 0;
   netMapChunksReceived = 0;
+  netMapChunkSize = 24;
+  netRequiredChunkKeys = new Set();
+  netReceivedChunkKeys = new Set();
+  netLastServerPlayer = null;
+  netClockOffsetMs = 0;
+  netClockOffsetReady = false;
+  netPredictedProjectiles = new Map();
+  netNextHeldPrimaryPredictAtMs = 0;
+  netLastSnapshotRecvAtMs = 0;
+  netSnapshotIntervalMeanMs = 33;
+  netSnapshotJitterMs = 0;
+  netLastSnapshotGapMs = 33;
   if (networkSession) networkSession.hidden = true;
 }
 
@@ -105,165 +160,30 @@ function applySnapshot(game, state, controller = false, ackSeq = 0) {
     controller,
     ackSeq,
     isNetworkController: isNetworkController(),
+    localPlayerId: netPlayerId,
+    netPredictedProjectiles,
     netPendingInputs,
-    netLastAckSeq
+    netLastAckSeq,
+    snapshotJitterMs: netSnapshotJitterMs,
+    frameGapMs: netLastSnapshotGapMs
   });
   netPendingInputs = next.netPendingInputs;
   netLastAckSeq = next.netLastAckSeq;
 }
 
-function collectInput(game, consumeQueued = true) {
-  const keys = game.input.keys;
-  let moveX = 0;
-  let moveY = 0;
-  if (keys.has("arrowleft") || keys.has("a")) moveX -= 1;
-  if (keys.has("arrowright") || keys.has("d")) moveX += 1;
-  if (keys.has("arrowup") || keys.has("w")) moveY -= 1;
-  if (keys.has("arrowdown") || keys.has("s")) moveY += 1;
-  return {
-    moveX,
-    moveY,
-    hasAim: !!game.input.mouse.hasAim,
-    aimX: game.input.mouse.worldX,
-    aimY: game.input.mouse.worldY,
-    firePrimaryQueued: consumeQueued ? game.input.consumeLeftQueued() : false,
-    firePrimaryHeld: !!game.input.mouse.leftDown,
-    fireAltQueued: consumeQueued ? game.input.consumeRightQueued() : false
-  };
-}
-
-function shouldSendNetworkInput(input, nowMs) {
-  if (!netLastSentInput) return true;
-  const prev = netLastSentInput;
-  const changedMove = input.moveX !== prev.moveX || input.moveY !== prev.moveY;
-  const changedAimMode = input.hasAim !== prev.hasAim;
-  const changedAimPos =
-    input.hasAim &&
-    prev.hasAim &&
-    (Math.abs(input.aimX - prev.aimX) > 1.5 || Math.abs(input.aimY - prev.aimY) > 1.5);
-  const hasAction = !!input.firePrimaryQueued || !!input.fireAltQueued;
-  if (changedMove || changedAimMode || changedAimPos || hasAction) return true;
-  return nowMs - netLastInputSendAt >= NET_FORCE_SEND_IDLE_MS;
-}
-
-function handleNetworkUiActions(game) {
-  if (!netClient || !isNetworkController()) {
-    game.input.consumeUiLeftClicks();
-    if (game.input.consumeWheelDelta) game.input.consumeWheelDelta();
-    return;
-  }
-  const wheelDelta = game.input.consumeWheelDelta ? game.input.consumeWheelDelta() : 0;
-  if (wheelDelta !== 0 && (game.skillTreeOpen || game.shopOpen)) {
-    const target = game.skillTreeOpen
-      ? { area: game.uiRects.skillTreeScrollArea, max: game.uiRects.skillTreeScrollMax, key: "skillTree" }
-      : { area: game.uiRects.shopScrollArea, max: game.uiRects.shopScrollMax, key: "shop" };
-    const max = Number.isFinite(target.max) ? target.max : 0;
-    const step = Math.sign(wheelDelta) * Math.max(36, Math.abs(wheelDelta));
-    const next = (game.uiScroll?.[target.key] || 0) + step;
-    game.uiScroll[target.key] = Math.max(0, Math.min(max, next));
-  }
-  if (game.input.consumeKeyQueued("escape")) {
-    netClient.sendAction({ kind: "escape" });
-  }
-  const clicks = game.input.consumeUiLeftClicks();
-  if (clicks.length === 0) return;
-
-  const hit = (x, y, rect) => game.pointInRect(x, y, rect);
-  for (const click of clicks) {
-    if (hit(click.x, click.y, game.uiRects.shopButton)) {
-      netClient.sendAction({ kind: "toggleShop" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.shopClose)) {
-      netClient.sendAction({ kind: "closeShop" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.skillTreeButton)) {
-      netClient.sendAction({ kind: "toggleSkillTree" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.skillTreeClose)) {
-      netClient.sendAction({ kind: "closeSkillTree" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.statsButton)) {
-      netClient.sendAction({ kind: "toggleStats" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.statsClose)) {
-      netClient.sendAction({ kind: "closeStats" });
-      continue;
-    }
-    const itemRects = game.uiRects.shopItems || [];
-    for (const item of itemRects) {
-      if (hit(click.x, click.y, item.rect)) {
-        netClient.sendAction({ kind: "buyUpgrade", key: item.key });
-        break;
-      }
-    }
-    if (hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
-      netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.skillPiercingNode)) {
-      netClient.sendAction({ kind: "spendSkill", key: "piercingStrike" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.skillMultiarrowNode)) {
-      netClient.sendAction({ kind: "spendSkill", key: "multiarrow" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.skillWarriorMomentumNode)) {
-      netClient.sendAction({ kind: "spendSkill", key: "warriorMomentum" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.skillWarriorRageNode)) {
-      netClient.sendAction({ kind: "spendSkill", key: "warriorRage" });
-    }
-  }
-}
-
-function updateNetworkRole(game) {
-  if (!game) return;
-  const role = isNetworkController() ? "Controller" : "Spectator";
-  game.networkEnabled = true;
-  game.networkRole = role;
-  if (networkTakeControl) networkTakeControl.disabled = role === "Controller";
-}
-
-function predictFromInput(game, input, dt) {
-  if (!isNetworkController()) return;
-  if (!netMapSignature) return;
-  let mx = input.moveX;
-  let my = input.moveY;
-  if (mx || my) {
-    const len = Math.hypot(mx, my) || 1;
-    const speed = game.getPlayerMoveSpeed();
-    game.moveWithCollision(game.player, (mx / len) * speed * dt, (my / len) * speed * dt);
-    game.player.moving = true;
-  } else {
-    game.player.moving = false;
-  }
-
-  if (input.hasAim) {
-    const ax = input.aimX - game.player.x;
-    const ay = input.aimY - game.player.y;
-    const alen = Math.hypot(ax, ay) || 1;
-    game.player.dirX = ax / alen;
-    game.player.dirY = ay / alen;
-  }
-}
-
 function startNetworkRenderLoop(game) {
-  const consumeSnapshotForRender = (targetTime) => {
+  const consumeSnapshotForRender = (targetServerTime, targetRecvTime) => {
     if (netSnapshotBuffer.length === 0) return null;
     // Keep buffer bounded and drop stale backlog to prevent catch-up bursts.
     if (netSnapshotBuffer.length > NET_MAX_SNAPSHOT_BUFFER) {
       netSnapshotBuffer.splice(0, netSnapshotBuffer.length - NET_MAX_SNAPSHOT_BUFFER);
     }
+    const useServerClock = Number.isFinite(targetServerTime);
     let chosenIndex = -1;
     for (let i = 0; i < netSnapshotBuffer.length; i++) {
-      if (netSnapshotBuffer[i].recvTime <= targetTime) chosenIndex = i;
+      const pkt = netSnapshotBuffer[i];
+      const compareTime = useServerClock && Number.isFinite(pkt.serverTime) ? pkt.serverTime : pkt.recvTime;
+      if (compareTime <= (useServerClock ? targetServerTime : targetRecvTime)) chosenIndex = i;
       else break;
     }
     if (chosenIndex < 0) {
@@ -283,10 +203,12 @@ function startNetworkRenderLoop(game) {
 
   const loop = () => {
     if (!currentGame || currentGame !== game) return;
-    handleNetworkUiActions(game);
-    const renderDelay = isNetworkController() ? NET_RENDER_DELAY_MS_CONTROLLER : NET_RENDER_DELAY_MS_SPECTATOR;
-    const targetTime = performance.now() - renderDelay;
-    const pkt = consumeSnapshotForRender(targetTime);
+    handleNetworkUiActions(game, netClient, isNetworkController());
+    const renderDelay = getRenderDelayMs();
+    const targetRecvTime = performance.now() - renderDelay;
+    const estimatedServerNow = estimateServerNowMs();
+    const targetServerTime = Number.isFinite(estimatedServerNow) ? estimatedServerNow - renderDelay : NaN;
+    const pkt = consumeSnapshotForRender(targetServerTime, targetRecvTime);
     if (pkt) {
       applySnapshot(
         game,
@@ -294,7 +216,6 @@ function startNetworkRenderLoop(game) {
         isNetworkController(),
         Number.isFinite(pkt.lastInputSeq) ? pkt.lastInputSeq : 0
       );
-      game.networkReady = true;
     }
     if (isNetworkController()) {
       const input = collectInput(game, false);
@@ -307,6 +228,7 @@ function startNetworkRenderLoop(game) {
       }
     }
     if (Array.isArray(game.map) && game.map.length > 0) game.revealAroundPlayer();
+    prunePredictedProjectiles(netPredictedProjectiles);
     game.renderer.draw(game);
     netRenderRaf = requestAnimationFrame(loop);
   };
@@ -343,6 +265,7 @@ function startNetworkGame() {
   game.networkReady = false;
   game.networkHasMap = false;
   game.networkHasChunks = false;
+  game.networkChunkSync = true;
   game.networkLoadingMessage = "Connecting...";
   currentGame = game;
   updateNetworkStatus(`Connecting to ${wsUrl}...`);
@@ -358,22 +281,26 @@ function startNetworkGame() {
   });
   netClient.on("join.ok", (msg) => {
     netControllerId = msg.controllerId || null;
-    updateNetworkRole(game);
+    updateNetworkRole(game, isNetworkController(), networkTakeControl);
     updateNetworkStatus(`Joined "${msg.roomId}" as ${game.networkRole}`);
   });
   netClient.on("room.roster", (msg) => {
     netControllerId = msg.controllerId || null;
-    updateNetworkRole(game);
+    updateNetworkRole(game, isNetworkController(), networkTakeControl);
     const players = Array.isArray(msg.players) ? msg.players.length : 0;
     updateNetworkStatus(`Room: ${players} connected | Role: ${game.networkRole}`);
   });
   const handleMapReady = () => {
+    const playerX = Number.isFinite(netLastServerPlayer?.x) ? netLastServerPlayer.x : game.player.x;
+    const playerY = Number.isFinite(netLastServerPlayer?.y) ? netLastServerPlayer.y : game.player.y;
+    updateRequiredChunkReadiness(game, playerX, playerY);
     if (!game.networkHasMap || !game.networkHasChunks) return;
     if (netPendingSnapshot && (!netPendingSnapshot.mapSignature || netPendingSnapshot.mapSignature === netMapSignature)) {
+      observeServerTime(netPendingSnapshot.serverTime);
       netSnapshotBuffer.push({ recvTime: performance.now(), ...netPendingSnapshot });
       netPendingSnapshot = null;
     }
-    updateNetworkRole(game);
+    updateNetworkRole(game, isNetworkController(), networkTakeControl);
     updateNetworkStatus(`Room synced | Role: ${game.networkRole}`);
     game.networkReady = true;
   };
@@ -384,8 +311,14 @@ function startNetworkGame() {
     netLastAckSeq = 0;
     netSnapshotBuffer = [];
     netMapChunksReceived = 0;
+    netMapChunkSize = 24;
+    netRequiredChunkKeys = new Set();
+    netReceivedChunkKeys = new Set();
+    netLastServerPlayer = null;
+    netPredictedProjectiles = new Map();
     game.networkHasMap = true;
     game.networkHasChunks = false;
+    game.networkChunkSync = true;
     game.armorStands = syncByIdLerp(game.armorStands, msg.armorStands, 1);
     updateNetworkStatus("Loading nearby map chunks...");
   });
@@ -393,11 +326,12 @@ function startNetworkGame() {
     const chunkSig = typeof msg.mapSignature === "string" ? msg.mapSignature : "";
     if (chunkSig && netMapSignature && chunkSig !== netMapSignature) return;
     if (applyMapChunkToGame(game, msg)) {
+      netMapChunkSize = Number.isFinite(msg.chunkSize) ? Math.max(1, Math.floor(msg.chunkSize)) : netMapChunkSize;
+      const cx = Number.isFinite(msg.cx) ? Math.floor(msg.cx) : NaN;
+      const cy = Number.isFinite(msg.cy) ? Math.floor(msg.cy) : NaN;
+      if (Number.isFinite(cx) && Number.isFinite(cy)) netReceivedChunkKeys.add(chunkKey(cx, cy));
       netMapChunksReceived += 1;
-      if (netMapChunksReceived >= 1) {
-        game.networkHasChunks = true;
-        handleMapReady();
-      }
+      handleMapReady();
     }
   });
   // Backward-compatibility with pre-chunk servers.
@@ -406,37 +340,73 @@ function startNetworkGame() {
     netPendingInputs = [];
     netLastAckSeq = 0;
     netSnapshotBuffer = [];
+    netRequiredChunkKeys = new Set();
+    netReceivedChunkKeys = new Set();
+    netLastServerPlayer = null;
+    netPredictedProjectiles = new Map();
     game.networkHasMap = true;
     game.networkHasChunks = true;
+    game.networkChunkSync = false;
     game.armorStands = syncByIdLerp(game.armorStands, msg.armorStands, 1);
     handleMapReady();
   });
+  netClient.on("state.meta", (msg) => {
+    observeServerTime(msg.serverTime);
+    const metaSig = typeof msg.mapSignature === "string" ? msg.mapSignature : "";
+    if (metaSig && netMapSignature && metaSig !== netMapSignature) return;
+    const meta = msg && msg.meta && typeof msg.meta === "object" ? msg.meta : msg;
+    applyMetaStateToGame(game, meta);
+  });
   netClient.on("state.snapshot", (msg) => {
+    const recvAt = performance.now();
+    if (netLastSnapshotRecvAtMs > 0) {
+      const gap = Math.max(0, recvAt - netLastSnapshotRecvAtMs);
+      netLastSnapshotGapMs = gap;
+      netSnapshotIntervalMeanMs += (gap - netSnapshotIntervalMeanMs) * 0.1;
+      netSnapshotJitterMs += (Math.abs(gap - netSnapshotIntervalMeanMs) - netSnapshotJitterMs) * 0.18;
+    }
+    netLastSnapshotRecvAtMs = recvAt;
     netControllerId = msg.controllerId || netControllerId;
+    observeServerTime(msg.serverTime);
+    if (Number.isFinite(msg.snapshotSeq)) {
+      netClient.send("state.snapshotAck", { snapshotSeq: Math.floor(msg.snapshotSeq) });
+    }
     const snapshotSig = typeof msg.mapSignature === "string" ? msg.mapSignature : "";
     if (snapshotSig && netMapSignature && snapshotSig !== netMapSignature) {
       netPendingSnapshot = msg;
       game.networkReady = false;
       game.networkHasChunks = false;
       netMapChunksReceived = 0;
+      netMapChunkSize = 24;
+      netRequiredChunkKeys = new Set();
+      netReceivedChunkKeys = new Set();
+      netLastServerPlayer = null;
+      netPredictedProjectiles = new Map();
       updateNetworkStatus("Synchronizing floor data...");
-      updateNetworkRole(game);
+      updateNetworkRole(game, isNetworkController(), networkTakeControl);
       return;
     }
     if (snapshotSig && !netMapSignature) {
       netPendingSnapshot = msg;
       game.networkReady = false;
       game.networkHasChunks = false;
+      netLastServerPlayer = null;
+      netPredictedProjectiles = new Map();
       updateNetworkStatus("Waiting for map meta...");
-      updateNetworkRole(game);
+      updateNetworkRole(game, isNetworkController(), networkTakeControl);
       return;
     }
-    netSnapshotBuffer.push({ recvTime: performance.now(), ...msg });
+    const p = msg?.state?.player;
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+      netLastServerPlayer = { x: p.x, y: p.y };
+      updateRequiredChunkReadiness(game, p.x, p.y);
+    }
+    netSnapshotBuffer.push({ recvTime: recvAt, ...msg });
     if (netSnapshotBuffer.length > NET_MAX_SNAPSHOT_BUFFER * 2) {
       netSnapshotBuffer.splice(0, netSnapshotBuffer.length - NET_MAX_SNAPSHOT_BUFFER);
     }
-    if (game.networkHasMap && game.networkHasChunks) game.networkReady = true;
-    updateNetworkRole(game);
+    if (game.networkHasMap && game.networkHasChunks) handleMapReady();
+    updateNetworkRole(game, isNetworkController(), networkTakeControl);
   });
   netClient.on("warn", (msg) => updateNetworkStatus(`Warning: ${msg.message || "Server warning"}`));
   netClient.on("error", (msg) => updateNetworkStatus(`Error: ${msg.message || "Connection error"}`));
@@ -456,7 +426,7 @@ function startNetworkGame() {
     if (nowMs - netLastInputSendAt < NET_MIN_SEND_MS && !input.firePrimaryQueued && !input.fireAltQueued) {
       return;
     }
-    if (!shouldSendNetworkInput(input, nowMs)) return;
+    if (!shouldSendNetworkInput(input, nowMs, netLastSentInput, netLastInputSendAt, NET_FORCE_SEND_IDLE_MS)) return;
     netLastInputSendAt = nowMs;
     netLastSentInput = {
       moveX: input.moveX,
@@ -472,7 +442,17 @@ function startNetworkGame() {
       input.firePrimaryHeld = false;
       input.fireAltQueued = false;
     } else {
-      predictFromInput(game, input, inputDt);
+      netNextHeldPrimaryPredictAtMs = predictProjectileSpawn(
+        game,
+        input,
+        nowMs,
+        isNetworkController(),
+        netPredictedProjectiles,
+        netNextHeldPrimaryPredictAtMs
+      );
+      if (netMapSignature && game.networkReady) {
+        predictFromInput(game, input, inputDt, canRunPredictedCollision(game, isKnownMapTileAt));
+      }
       netPendingInputs.push({
         seq: input.seq,
         dt: inputDt,
@@ -498,9 +478,11 @@ if (!selector || !startButton || classButtons.length === 0) {
   currentGame = new Game(canvas, { classType: "archer" });
   currentGame.start();
 } else {
-  setSelectedClass("archer");
+  selectedClass = setSelectedClass("archer", classButtons);
   for (const button of classButtons) {
-    button.addEventListener("click", () => setSelectedClass(button.dataset.classOption));
+    button.addEventListener("click", () => {
+      selectedClass = setSelectedClass(button.dataset.classOption, classButtons);
+    });
   }
   startButton.addEventListener("click", startLocalGame);
   if (startNetworkButton) startNetworkButton.addEventListener("click", startNetworkGame);

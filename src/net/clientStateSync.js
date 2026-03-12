@@ -27,13 +27,28 @@ export function applyMapMetaToGame(game, payload) {
   const tile = game.config.map.tile;
   game.mapWidth = mapWidth;
   game.mapHeight = mapHeight;
-  game.map = Array.from({ length: mapHeight }, () => Array(mapWidth).fill("#"));
+  // Use a dedicated unknown marker so client-side prediction can avoid treating
+  // unsynced tiles as solid collision walls.
+  game.map = Array.from({ length: mapHeight }, () => Array(mapWidth).fill("?"));
   game.worldWidth = mapWidth * tile;
   game.worldHeight = mapHeight * tile;
   game.explored = Array.from({ length: mapHeight }, () => Array(mapWidth).fill(false));
   game.navDistance = Array.from({ length: mapHeight }, () => Array(mapWidth).fill(-1));
   game.navPlayerTile = { x: -1, y: -1 };
   return typeof payload.mapSignature === "string" ? payload.mapSignature : `${game.floor}:${game.mapWidth}x${game.mapHeight}`;
+}
+
+export function isKnownMapTileAt(game, x, y) {
+  if (!game || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const tileSize = game.config?.map?.tile || 32;
+  const tx = Math.floor(x / tileSize);
+  const ty = Math.floor(y / tileSize);
+  if (!Number.isFinite(tx) || !Number.isFinite(ty)) return false;
+  if (ty < 0 || tx < 0 || ty >= game.map.length || tx >= game.map[0].length) return false;
+  const row = game.map[ty];
+  if (!row) return false;
+  const tile = row[tx];
+  return tile !== "?";
 }
 
 export function applyMapChunkToGame(game, payload) {
@@ -102,6 +117,57 @@ export function syncByIdLerp(target, source, positionAlpha = 1, decorate) {
   return target;
 }
 
+function applyDeltaCollection(target, delta, { keyframe = false, positionAlpha = 1, decorate, mapSpawn } = {}) {
+  if (!Array.isArray(target)) target = [];
+  const d = delta && typeof delta === "object" ? delta : null;
+  if (!d) return target;
+  const existing = new Map();
+  for (const item of target) {
+    if (item && item.id != null) existing.set(item.id, item);
+  }
+
+  const spawnList = Array.isArray(d.spawn) ? d.spawn : [];
+  const updateList = Array.isArray(d.update) ? d.update : [];
+  const despawnList = Array.isArray(d.despawn) ? d.despawn : [];
+
+  if (keyframe) existing.clear();
+
+  for (const raw of spawnList) {
+    if (!raw || raw.id == null) continue;
+    const entry = mapSpawn ? mapSpawn(raw) : raw;
+    const obj = { ...entry };
+    if (decorate) decorate(obj);
+    existing.set(obj.id, obj);
+  }
+
+  for (const patch of updateList) {
+    if (!patch || patch.id == null) continue;
+    const current = existing.get(patch.id);
+    if (!current) {
+      const obj = { ...patch };
+      if (decorate) decorate(obj);
+      existing.set(obj.id, obj);
+      continue;
+    }
+    const prevX = Number.isFinite(current.x) ? current.x : null;
+    const prevY = Number.isFinite(current.y) ? current.y : null;
+    const nextX = Number.isFinite(patch.x) ? patch.x : null;
+    const nextY = Number.isFinite(patch.y) ? patch.y : null;
+    Object.assign(current, patch);
+    if (prevX !== null && prevY !== null && nextX !== null && nextY !== null && positionAlpha < 1) {
+      current.x = prevX * (1 - positionAlpha) + nextX * positionAlpha;
+      current.y = prevY * (1 - positionAlpha) + nextY * positionAlpha;
+    }
+    if (decorate) decorate(current);
+  }
+
+  for (const id of despawnList) existing.delete(id);
+
+  target.length = 0;
+  for (const item of existing.values()) target.push(item);
+  return target;
+}
+
 function syncNamedObject(target, source) {
   if (!source || typeof source !== "object") return target;
   if (!target || typeof target !== "object") return { ...source };
@@ -116,38 +182,48 @@ function syncNamedObject(target, source) {
   return target;
 }
 
+function hasOwn(obj, key) {
+  return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+export function applyMetaStateToGame(game, state) {
+  if (!state || typeof state !== "object") return;
+  if (Number.isFinite(state.time)) game.time = state.time;
+  if (Number.isFinite(state.floor)) game.floor = state.floor;
+  if (Number.isFinite(state.level)) game.level = state.level;
+  if (Number.isFinite(state.score)) game.score = state.score;
+  if (Number.isFinite(state.gold)) game.gold = state.gold;
+  if (Number.isFinite(state.experience)) game.experience = state.experience;
+  if (Number.isFinite(state.expToNextLevel)) game.expToNextLevel = state.expToNextLevel;
+  if (Number.isFinite(state.skillPoints)) game.skillPoints = state.skillPoints;
+  if (hasOwn(state, "hasKey")) game.hasKey = !!state.hasKey;
+  if (hasOwn(state, "gameOver")) game.gameOver = !!state.gameOver;
+  if (hasOwn(state, "paused")) game.paused = !!state.paused;
+  if (hasOwn(state, "shopOpen")) game.shopOpen = !!state.shopOpen;
+  if (hasOwn(state, "skillTreeOpen")) game.skillTreeOpen = !!state.skillTreeOpen;
+  if (hasOwn(state, "statsPanelOpen")) game.statsPanelOpen = !!state.statsPanelOpen;
+  if (Number.isFinite(state.warriorMomentumTimer)) game.warriorMomentumTimer = state.warriorMomentumTimer;
+  if (Number.isFinite(state.warriorRageActiveTimer)) game.warriorRageActiveTimer = state.warriorRageActiveTimer;
+  if (Number.isFinite(state.warriorRageCooldownTimer)) game.warriorRageCooldownTimer = state.warriorRageCooldownTimer;
+  if (state.skills && typeof state.skills === "object") game.skills = syncNamedObject(game.skills, state.skills);
+  if (state.upgrades && typeof state.upgrades === "object") game.upgrades = syncNamedObject(game.upgrades, state.upgrades);
+}
+
 export function applySnapshotToGame({
   game,
   state,
   controller = false,
   ackSeq = 0,
   isNetworkController = false,
+  localPlayerId = null,
+  netPredictedProjectiles = null,
   netPendingInputs = [],
-  netLastAckSeq = 0
+  netLastAckSeq = 0,
+  snapshotJitterMs = 0,
+  frameGapMs = 16.67
 }) {
   if (!state || typeof state !== "object") return { netPendingInputs, netLastAckSeq };
-  let controllerProjectileOffsetX = 0;
-  let controllerProjectileOffsetY = 0;
-
-  game.time = Number.isFinite(state.time) ? state.time : game.time;
-  game.floor = Number.isFinite(state.floor) ? state.floor : game.floor;
-  game.level = Number.isFinite(state.level) ? state.level : game.level;
-  game.score = Number.isFinite(state.score) ? state.score : game.score;
-  game.gold = Number.isFinite(state.gold) ? state.gold : game.gold;
-  game.experience = Number.isFinite(state.experience) ? state.experience : game.experience;
-  game.expToNextLevel = Number.isFinite(state.expToNextLevel) ? state.expToNextLevel : game.expToNextLevel;
-  game.skillPoints = Number.isFinite(state.skillPoints) ? state.skillPoints : game.skillPoints;
-  game.hasKey = !!state.hasKey;
-  game.gameOver = !!state.gameOver;
-  game.paused = !!state.paused;
-  game.shopOpen = !!state.shopOpen;
-  game.skillTreeOpen = !!state.skillTreeOpen;
-  game.statsPanelOpen = !!state.statsPanelOpen;
-  game.warriorMomentumTimer = Number.isFinite(state.warriorMomentumTimer) ? state.warriorMomentumTimer : game.warriorMomentumTimer;
-  game.warriorRageActiveTimer = Number.isFinite(state.warriorRageActiveTimer) ? state.warriorRageActiveTimer : game.warriorRageActiveTimer;
-  game.warriorRageCooldownTimer = Number.isFinite(state.warriorRageCooldownTimer) ? state.warriorRageCooldownTimer : game.warriorRageCooldownTimer;
-  game.skills = syncNamedObject(game.skills, state.skills);
-  game.upgrades = syncNamedObject(game.upgrades, state.upgrades);
+  applyMetaStateToGame(game, state);
 
   if (state.player && typeof state.player === "object") {
     if (!controller) {
@@ -179,17 +255,38 @@ export function applySnapshotToGame({
       const dx = correctedX - game.player.x;
       const dy = correctedY - game.player.y;
       const errorSq = dx * dx + dy * dy;
-      if (errorSq > 220 * 220) {
+      const errorDist = Math.sqrt(errorSq);
+      const jitterMs = Number.isFinite(snapshotJitterMs) ? Math.max(0, snapshotJitterMs) : 0;
+      const frameGap = Number.isFinite(frameGapMs) ? Math.max(0, frameGapMs) : 16.67;
+      const pendingDepth = Array.isArray(netPendingInputs) ? netPendingInputs.length : 0;
+      const jitterFactor = Math.max(0, Math.min(2.5, jitterMs / 8));
+      const gapFactor = Math.max(0, Math.min(2, (frameGap - 16.67) / 20));
+      const pendingFactor = Math.max(0, Math.min(1.5, pendingDepth / 60));
+      const adapt = jitterFactor * 0.6 + gapFactor * 0.25 + pendingFactor * 0.15;
+      const hardSnapDist = 220 + adapt * 56;
+      const softSnapDist = 24 + adapt * 20;
+      const settleDist = 5 + adapt * 3;
+      if (errorDist > hardSnapDist) {
         game.player.x = correctedX;
         game.player.y = correctedY;
-      } else if (ackSeq > 0 && errorSq > 28 * 28) {
-        game.player.x += dx * 0.12;
-        game.player.y += dy * 0.12;
+      } else if (ackSeq > 0 && errorDist > softSnapDist) {
+        const denom = Math.max(1, hardSnapDist - softSnapDist);
+        const errorNorm = Math.max(0, Math.min(1, (errorDist - softSnapDist) / denom));
+        const jitterDamping = Math.max(0.5, 1 - jitterMs / 26);
+        const baseBlend = 0.07;
+        const maxBlend = 0.24;
+        const blend = (baseBlend + (maxBlend - baseBlend) * errorNorm) * jitterDamping;
+        const maxStep = Math.max(settleDist, errorDist * 0.34);
+        const step = Math.min(maxStep, errorDist * blend);
+        if (errorDist > 0.0001) {
+          const inv = 1 / errorDist;
+          game.player.x += dx * inv * step;
+          game.player.y += dy * inv * step;
+        }
+      } else if (ackSeq > 0 && errorDist > settleDist) {
+        game.player.x += dx * 0.05;
+        game.player.y += dy * 0.05;
       }
-      // In controller mode, projectiles can appear to spawn "behind" due to server-authoritative latency.
-      // Apply a short-lived visual offset for very new, nearby projectiles.
-      controllerProjectileOffsetX = game.player.x - baseX;
-      controllerProjectileOffsetY = game.player.y - baseY;
       game.player.health = state.player.health;
       game.player.maxHealth = state.player.maxHealth;
       if (Number.isFinite(state.player.fireCooldown)) game.player.fireCooldown = state.player.fireCooldown;
@@ -208,32 +305,76 @@ export function applySnapshotToGame({
   if (state.door && typeof state.door === "object") game.door = { ...state.door };
   if (state.pickup && typeof state.pickup === "object") game.pickup = { ...state.pickup };
   const snapAlpha = isNetworkController ? 0.72 : 0.62;
-  const visuallyAdjustProjectile = (p) => {
-    if (!isNetworkController || !controller) return p;
-    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return p;
-    const life = Number.isFinite(p.life) ? p.life : 0;
-    if (life < 0.75) return p;
-    const dx = p.x - game.player.x;
-    const dy = p.y - game.player.y;
-    if (dx * dx + dy * dy > 180 * 180) return p;
+  const reconcileProjectileSpawn = (p, type) => {
+    if (!p || !controller || !isNetworkController) return p;
+    if (!netPredictedProjectiles || typeof netPredictedProjectiles.get !== "function") return p;
+    if (typeof p.ownerId === "string" && localPlayerId && p.ownerId !== localPlayerId) return p;
+    const seq = Number.isFinite(p.spawnSeq) ? Math.floor(p.spawnSeq) : 0;
+    if (seq <= 0) return p;
+    const bucket = netPredictedProjectiles.get(seq);
+    if (!Array.isArray(bucket) || bucket.length === 0) return p;
+    let bestIdx = -1;
+    let bestDistSq = Infinity;
+    for (let i = 0; i < bucket.length; i++) {
+      const candidate = bucket[i];
+      if (!candidate || candidate.type !== type) continue;
+      const dx = (Number.isFinite(candidate.x) ? candidate.x : 0) - (Number.isFinite(p.x) ? p.x : 0);
+      const dy = (Number.isFinite(candidate.y) ? candidate.y : 0) - (Number.isFinite(p.y) ? p.y : 0);
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestDistSq) {
+        bestDistSq = d2;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx < 0) return p;
+    const matched = bucket.splice(bestIdx, 1)[0];
+    if (bucket.length === 0) netPredictedProjectiles.delete(seq);
+    const blend = Number.isFinite(p.life) && p.life > 0.85 ? 0.82 : 0.58;
     return {
       ...p,
-      x: p.x + controllerProjectileOffsetX,
-      y: p.y + controllerProjectileOffsetY
+      x: matched.x * blend + p.x * (1 - blend),
+      y: matched.y * blend + p.y * (1 - blend)
     };
   };
-  game.armorStands = syncByIdLerp(game.armorStands, state.armorStands, 1);
-  game.enemies = syncByIdLerp(game.enemies, state.enemies, snapAlpha);
-  game.drops = syncByIdLerp(game.drops, state.drops, snapAlpha);
-  game.breakables = syncByIdLerp(game.breakables, state.breakables, 1);
-  game.bullets = syncByIdLerp(game.bullets, (state.bullets || []).map(visuallyAdjustProjectile), 1);
-  game.fireArrows = syncByIdLerp(game.fireArrows, (state.fireArrows || []).map(visuallyAdjustProjectile), 1);
-  game.fireZones = syncByIdLerp(game.fireZones, state.fireZones, 1);
-  game.meleeSwings = syncByIdLerp(game.meleeSwings, state.meleeSwings, 1);
-  game.floatingTexts = syncByIdLerp(game.floatingTexts, state.floatingTexts, 1, (t) => {
-    t.maxLife = t.maxLife || t.life;
-    t.vy = t.vy || 22;
-  });
+  if (state.delta && typeof state.delta === "object") {
+    const keyframe = !!state.delta.keyframe;
+    game.enemies = applyDeltaCollection(game.enemies, state.delta.enemies, { keyframe, positionAlpha: snapAlpha });
+    game.drops = applyDeltaCollection(game.drops, state.delta.drops, { keyframe, positionAlpha: snapAlpha });
+    game.breakables = applyDeltaCollection(game.breakables, state.delta.breakables, { keyframe, positionAlpha: 1 });
+    game.bullets = applyDeltaCollection(game.bullets, state.delta.bullets, {
+      keyframe,
+      positionAlpha: 1,
+      mapSpawn: (p) => reconcileProjectileSpawn(p, "bullet")
+    });
+    game.fireArrows = applyDeltaCollection(game.fireArrows, state.delta.fireArrows, {
+      keyframe,
+      positionAlpha: 1,
+      mapSpawn: (p) => reconcileProjectileSpawn(p, "fireArrow")
+    });
+    game.fireZones = applyDeltaCollection(game.fireZones, state.delta.fireZones, { keyframe, positionAlpha: 1 });
+    game.meleeSwings = applyDeltaCollection(game.meleeSwings, state.delta.meleeSwings, { keyframe, positionAlpha: 1 });
+    game.floatingTexts = applyDeltaCollection(game.floatingTexts, state.delta.floatingTexts, {
+      keyframe,
+      positionAlpha: 1,
+      decorate: (t) => {
+        t.maxLife = t.maxLife || t.life;
+        t.vy = t.vy || 22;
+      }
+    });
+  } else {
+    game.armorStands = syncByIdLerp(game.armorStands, state.armorStands, 1);
+    game.enemies = syncByIdLerp(game.enemies, state.enemies, snapAlpha);
+    game.drops = syncByIdLerp(game.drops, state.drops, snapAlpha);
+    game.breakables = syncByIdLerp(game.breakables, state.breakables, 1);
+    game.bullets = syncByIdLerp(game.bullets, (state.bullets || []).map((p) => reconcileProjectileSpawn(p, "bullet")), 1);
+    game.fireArrows = syncByIdLerp(game.fireArrows, (state.fireArrows || []).map((p) => reconcileProjectileSpawn(p, "fireArrow")), 1);
+    game.fireZones = syncByIdLerp(game.fireZones, state.fireZones, 1);
+    game.meleeSwings = syncByIdLerp(game.meleeSwings, state.meleeSwings, 1);
+    game.floatingTexts = syncByIdLerp(game.floatingTexts, state.floatingTexts, 1, (t) => {
+      t.maxLife = t.maxLife || t.life;
+      t.vy = t.vy || 22;
+    });
+  }
 
   return { netPendingInputs, netLastAckSeq };
 }

@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "generatedAt": "2026-03-12T16:28:56.554Z",
+    "runCount": 3,
+    "sourceRuns": [
+      "run-1.json",
+      "run-2.json",
+      "run-3.json"
+    ]
+  },
+  "avgTickMs": 35.51818181447999,
+  "p95TickMs": 36.468912760416664,
+  "p95FrameGapMs": 37,
+  "snapshotCatchupEvents": 0,
+  "avgSnapshotBytes": 1105.0413832199547,
+  "p95SnapshotBytes": 1304.6666666666667,
+  "avgCorrectionPx": 152.0708183177824,
+  "maxCorrectionPx": 266.30007460060517,
+  "projectileOriginErrorPx_p95": 44.04025460353612,
+  "projectileOriginSampleCount": 13,
+  "projectileSnapEvents": 0,
+  "clientJitterMs": 21.081825395332416,
+  "clientFrameGapSpikes": 0,
+  "avgBufferDepth": 2.2404217428984805,
+  "p95BufferDepth": 4.333333333333333,
+  "mapReadyTimeMs": 3,
+  "unknownTileCollisionCount": 0,
+  "serverMetrics": {
+    "tickDurationMs": {
+      "avg": 0.07859199741179268,
+      "p95": 0.1851753294467926
+    },
+    "serializeDurationMs": {
+      "avg": 0.04407256284225819,
+      "p95": 0.10895933210849762
+    },
+    "snapshotBroadcastDurationMs": {
+      "avg": 0.16198752458342194,
+      "p95": 0.2296043336391449
+    },
+    "tickScheduleOverrunMs": {
+      "avg": 0.8551138839138966,
+      "p95": 1.3170748882957923,
+      "count": 242
+    },
+    "tickScheduleUnderrunMs": {
+      "avg": 0,
+      "p95": 0,
+      "count": 0
+    },
+    "droppedSnapshots": 0,
+    "snapshotBroadcastCount": 153
+  }
+}

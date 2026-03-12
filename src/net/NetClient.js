@@ -41,8 +41,8 @@ export class NetClient {
     return true;
   }
 
-  join(roomId, name, classType) {
-    return this.send("join", { roomId, name, classType });
+  join(roomId, name, classType, protocolVersion = 2) {
+    return this.send("join", { roomId, name, classType, protocolVersion });
   }
 
   sendInput(input) {

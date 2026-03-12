@@ -1,16 +1,30 @@
 import { WebSocketServer } from "ws";
 import { GameSim } from "../src/sim/GameSim.js";
+import { buildDeltaCollection, buildJoinKeyframeState } from "./net/deltaProtocol.js";
+import { buildMapChunkRows } from "./net/mapChunkStreaming.js";
+import { getStableId, serializeMetaState, serializeState } from "./net/stateSerialization.js";
+import { average, makeSamplePusher, monotonicNowMs, percentile } from "./net/telemetry.js";
+import { handleClientClose, handleClientMessage } from "./net/clientMessageHandler.js";
+import { startRoomSchedulers } from "./net/serverScheduler.js";
 
 const PORT = Number.parseInt(process.env.PORT || "8090", 10);
 // Higher rates reduce perceived input latency and visual jitter.
 const TICK_RATE = Number.parseInt(process.env.TICK_RATE || "72", 10);
-const SNAPSHOT_RATE = Number.parseInt(process.env.SNAPSHOT_RATE || "30", 10);
+const SNAPSHOT_RATE = Number.parseInt(process.env.SNAPSHOT_RATE || "28", 10);
+const META_BROADCAST_MIN_MS = Number.parseInt(process.env.META_BROADCAST_MIN_MS || "160", 10);
 const MAP_CHUNK_SIZE = Number.parseInt(process.env.MAP_CHUNK_SIZE || "24", 10);
 const MAP_CHUNK_RADIUS = Number.parseInt(process.env.MAP_CHUNK_RADIUS || "2", 10);
 const MAP_CHUNK_PUSH_MS = Number.parseInt(process.env.MAP_CHUNK_PUSH_MS || "120", 10);
+const DELTA_KEYFRAME_EVERY = Number.parseInt(process.env.DELTA_KEYFRAME_EVERY || "30", 10);
+const SNAPSHOT_ACK_GAP_FORCE_KEYFRAME = Number.parseInt(process.env.SNAPSHOT_ACK_GAP_FORCE_KEYFRAME || "8", 10);
 const MAX_ROOMS = 64;
 const MAX_PEERS_PER_ROOM = 8;
 const MAX_WS_BUFFERED_BYTES = Number.parseInt(process.env.MAX_WS_BUFFERED_BYTES || "262144", 10);
+const MAX_TELEMETRY_SAMPLES = Number.parseInt(process.env.MAX_TELEMETRY_SAMPLES || "4096", 10);
+const TICK_DRIFT_EPSILON_MS = Number.parseFloat(process.env.TICK_DRIFT_EPSILON_MS || "0.5");
+const MAX_TICKS_PER_LOOP = Number.parseInt(process.env.MAX_TICKS_PER_LOOP || "6", 10);
+const MAX_SNAPSHOT_STEPS_PER_LOOP = Number.parseInt(process.env.MAX_SNAPSHOT_STEPS_PER_LOOP || "3", 10);
+const pushTelemetrySample = makeSamplePusher(MAX_TELEMETRY_SAMPLES);
 
 function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -21,17 +35,9 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+
 function normClassType(value) {
   return value === "fighter" || value === "warrior" ? "fighter" : "archer";
-}
-
-function getStableId(room, domain, prefix, obj) {
-  if (!obj || typeof obj !== "object") return `${prefix}_0`;
-  const map = room.idMaps[domain];
-  if (map.has(obj)) return map.get(obj);
-  const id = `${prefix}_${room.idCounters[domain]++}`;
-  map.set(obj, id);
-  return id;
 }
 
 function makeDefaultInput() {
@@ -64,174 +70,6 @@ function sanitizeInput(raw, previous) {
   return next;
 }
 
-function shallowPlayerState(simPlayer) {
-  return {
-    x: simPlayer.x,
-    y: simPlayer.y,
-    size: simPlayer.size,
-    health: simPlayer.health,
-    maxHealth: simPlayer.maxHealth,
-    dirX: simPlayer.dirX,
-    dirY: simPlayer.dirY,
-    facing: simPlayer.facing,
-    moving: simPlayer.moving,
-    classType: simPlayer.classType
-  };
-}
-
-function serializeBullet(room, b, domain = "bullet", prefix = "b") {
-  return {
-    id: getStableId(room, domain, prefix, b),
-    x: b.x,
-    y: b.y,
-    vx: b.vx,
-    vy: b.vy,
-    angle: b.angle,
-    life: b.life,
-    size: b.size
-  };
-}
-
-function serializeEnemy(room, e) {
-  return {
-    id: getStableId(room, "enemy", "e", e),
-    type: e.type,
-    x: e.x,
-    y: e.y,
-    size: e.size,
-    hp: e.hp,
-    maxHp: e.maxHp,
-    hpBarTimer: e.hpBarTimer || 0,
-    goldEaten: e.goldEaten || 0,
-    damageMin: e.damageMin,
-    damageMax: e.damageMax
-  };
-}
-
-function serializeDrop(room, d) {
-  return {
-    id: getStableId(room, "drop", "d", d),
-    type: d.type,
-    x: d.x,
-    y: d.y,
-    size: d.size,
-    amount: d.amount,
-    life: d.life
-  };
-}
-
-function serializeBreakable(room, b) {
-  return {
-    id: getStableId(room, "breakable", "br", b),
-    type: b.type,
-    x: b.x,
-    y: b.y,
-    size: b.size,
-    hp: b.hp
-  };
-}
-
-function getTileChar(map, x, y) {
-  if (!map || y < 0 || y >= map.length || x < 0) return "#";
-  const row = map[y];
-  if (typeof row === "string") return row[x] || "#";
-  if (Array.isArray(row)) return row[x] || "#";
-  return "#";
-}
-
-function makeActiveBounds(sim, padTiles = 10) {
-  const tile = sim.config?.map?.tile || 32;
-  const pad = Math.max(0, padTiles) * tile;
-  const playW = typeof sim.getPlayAreaWidth === "function" ? sim.getPlayAreaWidth() : 960;
-  const viewH = Number.isFinite(sim?.canvas?.height) ? sim.canvas.height : 640;
-  const cam =
-    typeof sim.getCamera === "function"
-      ? sim.getCamera()
-      : {
-          x: Math.max(0, (sim.player?.x || 0) - playW / 2),
-          y: Math.max(0, (sim.player?.y || 0) - viewH / 2)
-        };
-  return {
-    left: cam.x - pad,
-    top: cam.y - pad,
-    right: cam.x + playW + pad,
-    bottom: cam.y + viewH + pad
-  };
-}
-
-function isInsideBounds(obj, bounds, extra = 0) {
-  if (!obj || !bounds) return false;
-  const x = Number.isFinite(obj.x) ? obj.x : 0;
-  const y = Number.isFinite(obj.y) ? obj.y : 0;
-  const size = Number.isFinite(obj.size) ? obj.size : 0;
-  const r = Math.max(0, size * 0.5 + extra);
-  return x + r >= bounds.left && x - r <= bounds.right && y + r >= bounds.top && y - r <= bounds.bottom;
-}
-
-function serializeState(room) {
-  const sim = room.sim;
-  const activeBounds = makeActiveBounds(sim, 10);
-  const activeEnemies = sim.enemies.filter((e) => isInsideBounds(e, activeBounds, 72));
-  const activeDrops = sim.drops.filter((d) => isInsideBounds(d, activeBounds, 64));
-  const activeBreakables = (sim.breakables || []).filter((b) => isInsideBounds(b, activeBounds, 72));
-  const activeBullets = sim.bullets.filter((b) => isInsideBounds(b, activeBounds, 160));
-  const activeFireArrows = sim.fireArrows.filter((a) => isInsideBounds(a, activeBounds, 180));
-  const activeFireZones = sim.fireZones.filter((z) => isInsideBounds(z, activeBounds, (Number.isFinite(z.radius) ? z.radius : 0) + 42));
-  const activeMeleeSwings = sim.meleeSwings.filter((s) => isInsideBounds(s, activeBounds, (Number.isFinite(s.range) ? s.range : 0) + 32));
-  const activeTexts = sim.floatingTexts.filter((t) => isInsideBounds(t, activeBounds, 36));
-  return {
-    mapSignature: `${sim.floor}:${sim.mapWidth}x${sim.mapHeight}`,
-    time: sim.time,
-    floor: sim.floor,
-    level: sim.level,
-    score: sim.score,
-    gold: sim.gold,
-    experience: sim.experience,
-    expToNextLevel: sim.expToNextLevel,
-    skillPoints: sim.skillPoints,
-    hasKey: sim.hasKey,
-    gameOver: sim.gameOver,
-    paused: sim.paused,
-    shopOpen: sim.shopOpen,
-    skillTreeOpen: sim.skillTreeOpen,
-    statsPanelOpen: sim.statsPanelOpen,
-    warriorMomentumTimer: sim.warriorMomentumTimer || 0,
-    warriorRageActiveTimer: sim.warriorRageActiveTimer || 0,
-    warriorRageCooldownTimer: sim.warriorRageCooldownTimer || 0,
-    skills: sim.skills,
-    upgrades: sim.upgrades,
-    player: shallowPlayerState(sim.player),
-    door: { ...sim.door },
-    pickup: { ...sim.pickup },
-    enemies: activeEnemies.map((e) => serializeEnemy(room, e)),
-    drops: activeDrops.map((d) => serializeDrop(room, d)),
-    breakables: activeBreakables.map((b) => serializeBreakable(room, b)),
-    bullets: activeBullets.map((b) => serializeBullet(room, b, "bullet", "b")),
-    fireArrows: activeFireArrows.map((a) => serializeBullet(room, a, "fireArrow", "fa")),
-    fireZones: activeFireZones.map((z) => ({ id: getStableId(room, "fireZone", "fz", z), x: z.x, y: z.y, radius: z.radius, life: z.life })),
-    meleeSwings: activeMeleeSwings.map((s) => ({
-      id: getStableId(room, "meleeSwing", "ms", s),
-      x: s.x,
-      y: s.y,
-      angle: s.angle,
-      arc: s.arc,
-      range: s.range,
-      life: s.life
-    })),
-    floatingTexts: activeTexts.slice(-12).map((t) => ({
-      id: getStableId(room, "floatingText", "ft", t),
-      x: t.x,
-      y: t.y,
-      text: t.text,
-      color: t.color,
-      life: t.life,
-      size: t.size,
-      maxLife: t.maxLife,
-      vy: t.vy
-    }))
-  };
-}
-
 class Room {
   constructor(id, classType) {
     this.id = id;
@@ -244,9 +82,35 @@ class Room {
     this.controllerId = null;
     this.lastTickMs = Date.now();
     this.lastSnapshotMs = 0;
+    this.lastMetaBroadcastMs = 0;
+    this.lastMetaPayloadJson = "";
     this.lastChunkPushMs = 0;
     this.lastMapSignature = this.mapSignature();
+    this.snapshotCounter = 0;
+    this.snapshotSeq = 0;
+    this.telemetry = {
+      tickDurationsMs: [],
+      serializeDurationsMs: [],
+      snapshotBroadcastDurationsMs: [],
+      tickScheduleOverrunMs: [],
+      tickScheduleUnderrunMs: [],
+      tickOverrunCount: 0,
+      tickUnderrunCount: 0,
+      droppedSnapshots: 0,
+      snapshotBroadcastCount: 0
+    };
+    this.tickDriftSampleCounter = 0;
     this.clientChunkState = new Map();
+    this.deltaCache = {
+      enemies: new Map(),
+      drops: new Map(),
+      breakables: new Map(),
+      bullets: new Map(),
+      fireArrows: new Map(),
+      fireZones: new Map(),
+      meleeSwings: new Map(),
+      floatingTexts: new Map()
+    };
     this.idCounters = {
       enemy: 1,
       drop: 1,
@@ -276,6 +140,7 @@ class Room {
   }
 
   addClient(client) {
+    client.lastSnapshotAckSeq = 0;
     this.clients.set(client.id, client);
     this.clientChunkState.set(client.id, { sent: new Set() });
     if (!this.controllerId) this.controllerId = client.id;
@@ -300,24 +165,68 @@ class Room {
     return client ? client.input : makeDefaultInput();
   }
 
-  tick(nowMs) {
+  tick(nowMs, scheduleDriftMs = 0) {
+    this.tickDriftSampleCounter += 1;
+    if (Number.isFinite(scheduleDriftMs)) {
+      if (scheduleDriftMs > TICK_DRIFT_EPSILON_MS) {
+        this.telemetry.tickOverrunCount += 1;
+        if (this.tickDriftSampleCounter % 3 === 0) {
+          pushTelemetrySample(this.telemetry.tickScheduleOverrunMs, scheduleDriftMs);
+        }
+      } else if (scheduleDriftMs < -TICK_DRIFT_EPSILON_MS) {
+        this.telemetry.tickUnderrunCount += 1;
+        if (this.tickDriftSampleCounter % 3 === 0) {
+          pushTelemetrySample(this.telemetry.tickScheduleUnderrunMs, -scheduleDriftMs);
+        }
+      }
+    }
+    const t0 = monotonicNowMs();
+    const preBulletCount = this.sim.bullets.length;
+    const preFireArrowCount = this.sim.fireArrows.length;
     const dt = Math.min((nowMs - this.lastTickMs) / 1000, 0.05);
     this.lastTickMs = nowMs;
     this.sim.tick(dt, this.getControllerInput());
     const c = this.clients.get(this.controllerId);
+    const taggedSeq = c ? c.input?.seq || c.lastInputSeq || 0 : 0;
+    const ownerId = this.controllerId || null;
+    for (let i = preBulletCount; i < this.sim.bullets.length; i++) {
+      const bullet = this.sim.bullets[i];
+      if (!bullet || typeof bullet !== "object") continue;
+      bullet.spawnSeq = taggedSeq;
+      bullet.ownerId = ownerId;
+    }
+    for (let i = preFireArrowCount; i < this.sim.fireArrows.length; i++) {
+      const fireArrow = this.sim.fireArrows[i];
+      if (!fireArrow || typeof fireArrow !== "object") continue;
+      fireArrow.spawnSeq = taggedSeq;
+      fireArrow.ownerId = ownerId;
+    }
     if (c) {
       c.input.firePrimaryQueued = false;
       c.input.fireAltQueued = false;
     }
+    pushTelemetrySample(this.telemetry.tickDurationsMs, monotonicNowMs() - t0);
   }
 
   broadcast(type, payload) {
+    const t0 = monotonicNowMs();
     const msg = JSON.stringify({ type, roomId: this.id, ...payload });
+    let dropped = 0;
     for (const c of this.clients.values()) {
       if (c.ws.readyState !== c.ws.OPEN) continue;
-      if (type === "state.snapshot" && c.ws.bufferedAmount > MAX_WS_BUFFERED_BYTES) continue;
+      if (type === "state.snapshot" && c.ws.bufferedAmount > MAX_WS_BUFFERED_BYTES) {
+        dropped += 1;
+        continue;
+      }
       c.ws.send(msg);
     }
+    const elapsed = monotonicNowMs() - t0;
+    if (type === "state.snapshot") {
+      this.telemetry.snapshotBroadcastCount += 1;
+      this.telemetry.droppedSnapshots += dropped;
+      pushTelemetrySample(this.telemetry.snapshotBroadcastDurationsMs, elapsed);
+    }
+    return { elapsedMs: elapsed, dropped };
   }
 
   broadcastRoster() {
@@ -368,20 +277,8 @@ class Room {
         if (cx < 0 || cy < 0) continue;
         const key = `${sig}:${cx}:${cy}`;
         if (chunkState.sent.has(key) && nowMs - this.lastChunkPushMs < MAP_CHUNK_PUSH_MS) continue;
-        const startX = cx * MAP_CHUNK_SIZE;
-        const startY = cy * MAP_CHUNK_SIZE;
-        if (startX >= this.sim.mapWidth || startY >= this.sim.mapHeight) continue;
-        const chunkH = Math.max(0, Math.min(MAP_CHUNK_SIZE, this.sim.mapHeight - startY));
-        const rows = [];
-        for (let row = 0; row < chunkH; row++) {
-          const y = startY + row;
-          let s = "";
-          const chunkW = Math.max(0, Math.min(MAP_CHUNK_SIZE, this.sim.mapWidth - startX));
-          for (let col = 0; col < chunkW; col++) {
-            s += getTileChar(this.sim.map, startX + col, y);
-          }
-          rows.push(s);
-        }
+        const chunk = buildMapChunkRows(this.sim, cx, cy, MAP_CHUNK_SIZE);
+        if (!chunk) continue;
         client.ws.send(
           JSON.stringify({
             type: "state.mapChunk",
@@ -390,7 +287,7 @@ class Room {
             cx,
             cy,
             chunkSize: MAP_CHUNK_SIZE,
-            rows
+            rows: chunk.rows
           })
         );
         chunkState.sent.add(key);
@@ -400,24 +297,129 @@ class Room {
   }
 
   maybeBroadcastSnapshot(nowMs) {
-    const intervalMs = 1000 / SNAPSHOT_RATE;
-    if (nowMs - this.lastSnapshotMs < intervalMs) return;
-    this.lastSnapshotMs = nowMs;
     const sig = this.mapSignature();
     if (sig !== this.lastMapSignature) {
       this.lastMapSignature = sig;
+      this.snapshotCounter = 0;
+      for (const cache of Object.values(this.deltaCache)) cache.clear();
       for (const state of this.clientChunkState.values()) state.sent.clear();
       this.sendMapMeta();
+      this.maybeBroadcastMeta(nowMs, true);
     }
     for (const client of this.clients.values()) this.sendMapChunksToClient(client, nowMs);
     const controllerClient = this.clients.get(this.controllerId);
+    const serializeStart = monotonicNowMs();
+    const fullState = serializeState(this);
+    pushTelemetrySample(this.telemetry.serializeDurationsMs, monotonicNowMs() - serializeStart);
+    this.snapshotCounter += 1;
+    this.snapshotSeq += 1;
+    const cadenceKeyframe = this.snapshotCounter % Math.max(1, DELTA_KEYFRAME_EVERY) === 1;
+    let ackRecoveryKeyframe = false;
+    for (const client of this.clients.values()) {
+      const ackSeq = Number.isFinite(client.lastSnapshotAckSeq) ? client.lastSnapshotAckSeq : 0;
+      if (this.snapshotSeq - ackSeq > SNAPSHOT_ACK_GAP_FORCE_KEYFRAME) {
+        ackRecoveryKeyframe = true;
+        break;
+      }
+    }
+    const keyframe = cadenceKeyframe || ackRecoveryKeyframe;
+    const delta = { keyframe };
+    const enemyDelta = buildDeltaCollection(this.deltaCache.enemies, fullState.enemies, keyframe);
+    const dropDelta = buildDeltaCollection(this.deltaCache.drops, fullState.drops, keyframe);
+    const breakableDelta = buildDeltaCollection(this.deltaCache.breakables, fullState.breakables, keyframe);
+    const bulletDelta = buildDeltaCollection(this.deltaCache.bullets, fullState.bullets, keyframe);
+    const fireArrowDelta = buildDeltaCollection(this.deltaCache.fireArrows, fullState.fireArrows, keyframe);
+    const fireZoneDelta = buildDeltaCollection(this.deltaCache.fireZones, fullState.fireZones, keyframe);
+    const meleeSwingDelta = buildDeltaCollection(this.deltaCache.meleeSwings, fullState.meleeSwings, keyframe);
+    const floatingTextDelta = buildDeltaCollection(this.deltaCache.floatingTexts, fullState.floatingTexts, keyframe);
+    if (keyframe || enemyDelta) delta.enemies = enemyDelta || {};
+    if (keyframe || dropDelta) delta.drops = dropDelta || {};
+    if (keyframe || breakableDelta) delta.breakables = breakableDelta || {};
+    if (keyframe || bulletDelta) delta.bullets = bulletDelta || {};
+    if (keyframe || fireArrowDelta) delta.fireArrows = fireArrowDelta || {};
+    if (keyframe || fireZoneDelta) delta.fireZones = fireZoneDelta || {};
+    if (keyframe || meleeSwingDelta) delta.meleeSwings = meleeSwingDelta || {};
+    if (keyframe || floatingTextDelta) delta.floatingTexts = floatingTextDelta || {};
+    const state = {
+      mapSignature: fullState.mapSignature,
+      time: fullState.time,
+      player: fullState.player,
+      door: fullState.door,
+      pickup: fullState.pickup,
+      delta
+    };
     this.broadcast("state.snapshot", {
       serverTime: nowMs,
+      snapshotSeq: this.snapshotSeq,
       controllerId: this.controllerId,
       lastInputSeq: controllerClient ? controllerClient.lastInputSeq : 0,
       mapSignature: sig,
-      state: serializeState(this)
+      state
     });
+    this.maybeBroadcastMeta(nowMs);
+  }
+
+  maybeBroadcastMeta(nowMs, force = false) {
+    const meta = serializeMetaState(this.sim);
+    const payloadJson = JSON.stringify(meta);
+    const changed = payloadJson !== this.lastMetaPayloadJson;
+    if (!force && !changed && nowMs - this.lastMetaBroadcastMs < META_BROADCAST_MIN_MS) return;
+    this.lastMetaPayloadJson = payloadJson;
+    this.lastMetaBroadcastMs = nowMs;
+    this.broadcast("state.meta", {
+      serverTime: nowMs,
+      mapSignature: this.mapSignature(),
+      meta
+    });
+  }
+
+  sendMeta(toClient, nowMs = Date.now(), force = true) {
+    if (!toClient || toClient.ws.readyState !== toClient.ws.OPEN) return;
+    const meta = serializeMetaState(this.sim);
+    const payloadJson = JSON.stringify(meta);
+    const changed = payloadJson !== this.lastMetaPayloadJson;
+    if (force || changed || nowMs - this.lastMetaBroadcastMs >= META_BROADCAST_MIN_MS) {
+      this.lastMetaPayloadJson = payloadJson;
+      this.lastMetaBroadcastMs = nowMs;
+    }
+    toClient.ws.send(
+      JSON.stringify({
+        type: "state.meta",
+        roomId: this.id,
+        serverTime: nowMs,
+        mapSignature: this.mapSignature(),
+        meta
+      })
+    );
+  }
+
+  getTelemetrySnapshot() {
+    return {
+      tickDurationMs: {
+        avg: average(this.telemetry.tickDurationsMs),
+        p95: percentile(this.telemetry.tickDurationsMs, 95)
+      },
+      serializeDurationMs: {
+        avg: average(this.telemetry.serializeDurationsMs),
+        p95: percentile(this.telemetry.serializeDurationsMs, 95)
+      },
+      snapshotBroadcastDurationMs: {
+        avg: average(this.telemetry.snapshotBroadcastDurationsMs),
+        p95: percentile(this.telemetry.snapshotBroadcastDurationsMs, 95)
+      },
+      tickScheduleOverrunMs: {
+        avg: average(this.telemetry.tickScheduleOverrunMs),
+        p95: percentile(this.telemetry.tickScheduleOverrunMs, 95),
+        count: this.telemetry.tickOverrunCount
+      },
+      tickScheduleUnderrunMs: {
+        avg: average(this.telemetry.tickScheduleUnderrunMs),
+        p95: percentile(this.telemetry.tickScheduleUnderrunMs, 95),
+        count: this.telemetry.tickUnderrunCount
+      },
+      droppedSnapshots: this.telemetry.droppedSnapshots,
+      snapshotBroadcastCount: this.telemetry.snapshotBroadcastCount
+    };
   }
 }
 
@@ -453,6 +455,7 @@ wss.on("connection", (ws) => {
     roomId: null,
     name: "Player",
     classType: "archer",
+    protocolVersion: 1,
     input: makeDefaultInput(),
     lastInputSeq: 0
   };
@@ -460,162 +463,38 @@ wss.on("connection", (ws) => {
   safeSend(ws, {
     type: "hello",
     playerId: client.id,
-    protocol: 1,
+    protocol: 2,
     note: "Server authoritative alpha. One active controller per room; others are spectators."
   });
 
   ws.on("message", (raw) => {
-    let msg = null;
-    try {
-      msg = JSON.parse(raw.toString());
-    } catch {
-      safeSend(ws, { type: "error", message: "Invalid JSON" });
-      return;
-    }
-
-    if (!msg || typeof msg !== "object" || typeof msg.type !== "string") {
-      safeSend(ws, { type: "error", message: "Malformed message" });
-      return;
-    }
-
-    if (msg.type === "join") {
-      const roomId = typeof msg.roomId === "string" && msg.roomId.trim() ? msg.roomId.trim().slice(0, 32) : "lobby";
-      const classType = normClassType(msg.classType);
-      const room = getOrCreateRoom(roomId, classType);
-      if (!room) {
-        safeSend(ws, { type: "error", message: "Room limit reached" });
-        return;
-      }
-      if (room.clients.size >= MAX_PEERS_PER_ROOM) {
-        safeSend(ws, { type: "error", message: "Room full" });
-        return;
-      }
-
-      if (client.roomId && rooms.has(client.roomId)) {
-        const oldRoom = rooms.get(client.roomId);
-        oldRoom.removeClient(client.id);
-        oldRoom.broadcastRoster();
-        if (oldRoom.isEmpty()) rooms.delete(oldRoom.id);
-      }
-
-      client.roomId = room.id;
-      client.name = typeof msg.name === "string" && msg.name.trim() ? msg.name.trim().slice(0, 20) : `Player-${client.id.slice(-4)}`;
-      client.classType = classType;
-      client.input = makeDefaultInput();
-      room.addClient(client);
-
-      safeSend(ws, {
-        type: "join.ok",
-        roomId: room.id,
-        playerId: client.id,
-        controllerId: room.controllerId,
-        classType: room.sim.classType
-      });
-      room.sendMapMeta(client);
-      room.sendMapChunksToClient(client, Date.now());
-      safeSend(ws, {
-        type: "state.snapshot",
-        roomId: room.id,
-        serverTime: Date.now(),
-        controllerId: room.controllerId,
-        lastInputSeq: room.clients.get(room.controllerId)?.lastInputSeq || 0,
-        mapSignature: room.mapSignature(),
-        state: serializeState(room)
-      });
-      room.broadcastRoster();
-      return;
-    }
-
-    if (msg.type === "input") {
-      if (!client.roomId || !rooms.has(client.roomId)) return;
-      const room = rooms.get(client.roomId);
-      if (room.controllerId !== client.id) {
-        safeSend(ws, { type: "warn", message: "Spectators cannot control this room in phase-1." });
-        return;
-      }
-      client.input = sanitizeInput(msg.input, client.input);
-      client.lastInputSeq = client.input.seq || client.lastInputSeq;
-      return;
-    }
-
-    if (msg.type === "action") {
-      if (!client.roomId || !rooms.has(client.roomId)) return;
-      const room = rooms.get(client.roomId);
-      if (room.controllerId !== client.id) return;
-      const action = msg.action;
-      if (!action || typeof action !== "object" || typeof action.kind !== "string") return;
-      const kind = action.kind;
-      const sim = room.sim;
-      if (kind === "escape") {
-        if (sim.shopOpen) sim.toggleShop(false);
-        else if (sim.skillTreeOpen) sim.toggleSkillTree(false);
-        else if (!sim.gameOver) sim.paused = !sim.paused;
-        return;
-      }
-      if (kind === "toggleShop") {
-        sim.toggleShop();
-        return;
-      }
-      if (kind === "closeShop") {
-        sim.toggleShop(false);
-        return;
-      }
-      if (kind === "toggleSkillTree") {
-        sim.toggleSkillTree();
-        return;
-      }
-      if (kind === "closeSkillTree") {
-        sim.toggleSkillTree(false);
-        return;
-      }
-      if (kind === "toggleStats") {
-        sim.statsPanelOpen = !sim.statsPanelOpen;
-        return;
-      }
-      if (kind === "closeStats") {
-        sim.statsPanelOpen = false;
-        return;
-      }
-      if (kind === "buyUpgrade" && typeof action.key === "string") {
-        sim.buyUpgrade(action.key);
-        return;
-      }
-      if (kind === "spendSkill" && typeof action.key === "string") {
-        sim.spendSkillPoint(action.key);
-      }
-      return;
-    }
-
-    if (msg.type === "room.takeControl") {
-      if (!client.roomId || !rooms.has(client.roomId)) return;
-      const room = rooms.get(client.roomId);
-      room.controllerId = client.id;
-      room.broadcastRoster();
-      return;
-    }
-
-    safeSend(ws, { type: "error", message: `Unknown message type: ${msg.type}` });
+    handleClientMessage(raw, {
+      ws,
+      client,
+      rooms,
+      getOrCreateRoom,
+      normClassType,
+      maxPeersPerRoom: MAX_PEERS_PER_ROOM,
+      makeDefaultInput,
+      sanitizeInput,
+      serializeState,
+      buildJoinKeyframeState,
+      safeSend
+    });
   });
 
   ws.on("close", () => {
-    if (!client.roomId || !rooms.has(client.roomId)) return;
-    const room = rooms.get(client.roomId);
-    room.removeClient(client.id);
-    if (room.isEmpty()) {
-      rooms.delete(room.id);
-    } else {
-      room.broadcastRoster();
-    }
+    handleClientClose(client, rooms);
   });
 });
 
-const tickMs = Math.floor(1000 / TICK_RATE);
-setInterval(() => {
-  const now = Date.now();
-  for (const room of rooms.values()) {
-    room.tick(now);
-    room.maybeBroadcastSnapshot(now);
-  }
-}, tickMs);
+startRoomSchedulers({
+  rooms,
+  tickRate: TICK_RATE,
+  snapshotRate: SNAPSHOT_RATE,
+  maxTicksPerLoop: MAX_TICKS_PER_LOOP,
+  maxSnapshotStepsPerLoop: MAX_SNAPSHOT_STEPS_PER_LOOP,
+  monotonicNowMs
+});
 
 console.log(`Authoritative network server listening on ws://localhost:${PORT}`);

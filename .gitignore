@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Logs and runtime outputs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment/local config
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
+# Performance artifacts: keep baseline files, ignore generated runs
+artifacts/perf/*
+!artifacts/perf/baseline.json
+!artifacts/perf/baseline_previous.json
+
+# Temporary local scratch files seen in this repo
+=500{print}
+CON

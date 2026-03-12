@@ -1,0 +1,54 @@
+{
+    "meta":  {
+                 "generatedAt":  "2026-03-12T17:34:32.9476492Z",
+                 "runCount":  3,
+                 "sourceRuns":  [
+                                    "new-baseline-run-1.json",
+                                    "new-baseline-run-2.json",
+                                    "new-baseline-run-3.json"
+                                ]
+             },
+    "avgTickMs":  35.526907306827908,
+    "p95TickMs":  36.4580078125,
+    "p95FrameGapMs":  36.333333333333336,
+    "snapshotCatchupEvents":  0,
+    "avgSnapshotBytes":  705.38321995464855,
+    "p95SnapshotBytes":  912.33333333333337,
+    "avgCorrectionPx":  111.56387051213788,
+    "maxCorrectionPx":  201.89613346673084,
+    "projectileOriginErrorPx_p95":  5.7140572883914365,
+    "projectileOriginSampleCount":  11.333333333333334,
+    "projectileSnapEvents":  0,
+    "clientJitterMs":  2.2596361565811125,
+    "clientFrameGapSpikes":  0,
+    "avgBufferDepth":  2.0129124953652204,
+    "p95BufferDepth":  3,
+    "mapReadyTimeMs":  3,
+    "unknownTileCollisionCount":  0,
+    "serverMetrics":  {
+                          "tickDurationMs":  {
+                                                 "avg":  0.062894024193924383,
+                                                 "p95":  0.14205600321292877
+                                             },
+                          "serializeDurationMs":  {
+                                                      "avg":  0.034908285185898821,
+                                                      "p95":  0.091389328241348267
+                                                  },
+                          "snapshotBroadcastDurationMs":  {
+                                                              "avg":  0.12158707321778824,
+                                                              "p95":  0.18246332804361978
+                                                          },
+                          "tickScheduleOverrunMs":  {
+                                                        "avg":  0.862453891658213,
+                                                        "p95":  1.282816705340603,
+                                                        "count":  223.33333333333334
+                                                    },
+                          "tickScheduleUnderrunMs":  {
+                                                         "avg":  0,
+                                                         "p95":  0,
+                                                         "count":  0
+                                                     },
+                          "droppedSnapshots":  0,
+                          "snapshotBroadcastCount":  146
+                      }
+}
