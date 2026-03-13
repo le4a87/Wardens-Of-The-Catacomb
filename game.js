@@ -67,9 +67,27 @@ let netSnapshotIntervalMeanMs = 33;
 let netSnapshotJitterMs = 0;
 let netLastSnapshotGapMs = 33;
 
+function syncIdleSoundState(game) {
+  const idleGameplayActive = !!(
+    game &&
+    !game.paused &&
+    !game.gameOver &&
+    !game.shopOpen &&
+    !game.skillTreeOpen &&
+    !game.statsPanelOpen
+  );
+  music.setIdleGameplayActive(idleGameplayActive);
+  if (!idleGameplayActive) music.resetIdleTimer();
+}
+
 function syncMusicForGame(game) {
+  syncIdleSoundState(game);
   if (!game) {
     music.playMenuMusic();
+    return;
+  }
+  if (game.gameOver) {
+    music.playDeathMusic();
     return;
   }
   if (game.networkEnabled) {
@@ -186,10 +204,13 @@ function applySnapshot(game, state, controller = false, ackSeq = 0) {
   });
   netPendingInputs = next.netPendingInputs;
   netLastAckSeq = next.netLastAckSeq;
+  if (game.gameOver && !game.deathTransition?.active && typeof game.triggerGameOver === "function") game.triggerGameOver();
   syncMusicForGame(game);
 }
 
 function startNetworkRenderLoop(game) {
+  let lastFrameAt = performance.now();
+
   const consumeSnapshotForRender = (targetServerTime, targetRecvTime) => {
     if (netSnapshotBuffer.length === 0) return null;
     // Keep buffer bounded and drop stale backlog to prevent catch-up bursts.
@@ -219,8 +240,10 @@ function startNetworkRenderLoop(game) {
     return chosen;
   };
 
-  const loop = () => {
+  const loop = (now) => {
     if (!currentGame || currentGame !== game) return;
+    const dt = Math.min((now - lastFrameAt) / 1000, 0.05);
+    lastFrameAt = now;
     handleNetworkUiActions(game, netClient, isNetworkController());
     const renderDelay = getRenderDelayMs();
     const targetRecvTime = performance.now() - renderDelay;
@@ -245,6 +268,7 @@ function startNetworkRenderLoop(game) {
         game.player.dirY = ay / alen;
       }
     }
+    if (typeof game.updateDeathTransition === "function") game.updateDeathTransition(dt);
     if (Array.isArray(game.map) && game.map.length > 0) game.revealAroundPlayer();
     prunePredictedProjectiles(netPredictedProjectiles);
     game.renderer.draw(game);
@@ -261,7 +285,8 @@ function startLocalGame() {
     classType: selectedClass,
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, game) => syncMusicForGame(game),
-    onFloorChanged: (_floor, game) => syncMusicForGame(game)
+    onFloorChanged: (_floor, game) => syncMusicForGame(game),
+    onGameOverChanged: (_gameOver, game) => syncMusicForGame(game)
   });
   syncMusicForGame(currentGame);
   currentGame.start();
@@ -281,7 +306,8 @@ function startNetworkGame() {
     classType: selectedClass,
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, nextGame) => syncMusicForGame(nextGame),
-    onFloorChanged: (_floor, nextGame) => syncMusicForGame(nextGame)
+    onFloorChanged: (_floor, nextGame) => syncMusicForGame(nextGame),
+    onGameOverChanged: (_gameOver, nextGame) => syncMusicForGame(nextGame)
   });
   game.networkEnabled = true;
   game.networkRole = "Connecting";
@@ -502,11 +528,19 @@ if (!canvas) {
 
 music.playMenuMusic();
 
+function monitorIdleSoundState() {
+  syncIdleSoundState(currentGame);
+  requestAnimationFrame(monitorIdleSoundState);
+}
+
+requestAnimationFrame(monitorIdleSoundState);
+
 if (!selector || !startButton || classButtons.length === 0) {
   currentGame = new Game(canvas, {
     classType: "archer",
     onPauseChanged: (_paused, game) => syncMusicForGame(game),
-    onFloorChanged: (_floor, game) => syncMusicForGame(game)
+    onFloorChanged: (_floor, game) => syncMusicForGame(game),
+    onGameOverChanged: (_gameOver, game) => syncMusicForGame(game)
   });
   syncMusicForGame(currentGame);
   currentGame.start();

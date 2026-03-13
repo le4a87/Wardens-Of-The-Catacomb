@@ -1,6 +1,8 @@
 import { vecLength, directionIndexFromVector } from "../utils.js";
 
 export function stepGame(game, dt, controls = {}) {
+  if (typeof game.updateDeathTransition === "function" && game.updateDeathTransition(dt)) return;
+
   const segmentRectHit = (x0, y0, x1, y1, left, top, right, bottom) => {
     // Liang-Barsky clipping against AABB.
     const dx = x1 - x0;
