@@ -125,6 +125,26 @@ export function spawnRatArcher(game, x, y) {
   };
 }
 
+export function spawnSkeletonWarrior(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.skeletonWarriorHpMin, game.config.enemy.skeletonWarriorHpMax);
+  return {
+    type: "skeleton_warrior",
+    x,
+    y,
+    size: 20,
+    speed: game.config.enemy.skeletonWarriorSpeed,
+    hp,
+    maxHp: hp,
+    hpBarTimer: 0,
+    damageMin: game.config.enemy.skeletonWarriorDamageMin,
+    damageMax: game.config.enemy.skeletonWarriorDamageMax,
+    attackCooldown: 0,
+    collapsed: false,
+    collapseTimer: 0,
+    reviveAtEnd: false
+  };
+}
+
 export function spawnNecromancer(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.necromancerHpMin, game.config.enemy.necromancerHpMax);
   return {
@@ -215,6 +235,7 @@ function isCoveredFromPlayer(game, x, y, self = null) {
   }
   for (const enemy of game.enemies || []) {
     if (!enemy || enemy === self || (enemy.hp || 0) <= 0) continue;
+    if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
     const radius = (Number.isFinite(enemy.size) ? enemy.size : 20) * 0.5;
     if (segmentDistanceToPoint(game.player.x, game.player.y, x, y, enemy.x, enemy.y) <= radius) return true;
   }
@@ -514,6 +535,42 @@ export function updateRatArcher(game, enemy, dt, speedScale) {
   }
 }
 
+export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
+  enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
+  if (enemy.collapsed) {
+    enemy.collapseTimer = Math.max(0, (enemy.collapseTimer || 0) - dt);
+    if (enemy.collapseTimer <= 0) {
+      if (enemy.reviveAtEnd) {
+        enemy.collapsed = false;
+        enemy.hp = 1;
+        enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+      } else {
+        enemy.hp = 0;
+      }
+    }
+    return;
+  }
+  const range = game.config.enemy.skeletonWarriorAttackRange || 42;
+  const dx = game.player.x - enemy.x;
+  const dy = game.player.y - enemy.y;
+  const dist = vecLength(dx, dy) || 1;
+  enemy.dirX = dx / dist;
+  enemy.dirY = dy / dist;
+  if (dist <= range && enemy.attackCooldown <= 0) {
+    enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+    if (game.player.hitCooldown <= 0) {
+      game.player.hitCooldown = 1.0;
+      const rawDamage = game.rollEnemyContactDamage(enemy);
+      const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+      const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
+      const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
+      game.applyPlayerDamage(damageTaken);
+    }
+    return;
+  }
+  game.moveEnemyTowardPlayer(enemy, speedScale, dt);
+}
+
 export function updateNecromancer(game, enemy, dt, speedScale) {
   const tile = game.config?.map?.tile || 32;
   const preferredRange = (game.config.enemy.necromancerPreferredRangeTiles || 5) * tile;
@@ -616,6 +673,8 @@ export function xpFromEnemy(game, enemy) {
       ? 10
       : enemy.type === "rat_archer"
       ? 10
+      : enemy.type === "skeleton_warrior"
+      ? 8
       : enemy.type === "armor"
       ? 24
       : enemy.type === "mimic"

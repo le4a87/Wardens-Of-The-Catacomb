@@ -6,6 +6,7 @@ import {
   updateGoblin as updateGoblinEntity,
   updateMimic as updateMimicEntity,
   updateRatArcher as updateRatArcherEntity,
+  updateSkeletonWarrior as updateSkeletonWarriorEntity,
   updateNecromancer as updateNecromancerEntity,
   xpFromEnemy as xpFromEnemyEntity,
   maybeSpawnDrop as maybeSpawnDropEntity,
@@ -63,6 +64,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   updateRatArcher(enemy, dt, speedScale) {
     updateRatArcherEntity(this, enemy, dt, speedScale);
+  }
+
+  updateSkeletonWarrior(enemy, dt, speedScale) {
+    updateSkeletonWarriorEntity(this, enemy, dt, speedScale);
   }
 
   updateNecromancer(enemy, dt, speedScale) {
