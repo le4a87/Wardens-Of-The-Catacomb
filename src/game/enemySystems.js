@@ -125,6 +125,26 @@ export function spawnRatArcher(game, x, y) {
   };
 }
 
+export function spawnSkeletonWarrior(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.skeletonWarriorHpMin, game.config.enemy.skeletonWarriorHpMax);
+  return {
+    type: "skeleton_warrior",
+    x,
+    y,
+    size: 20,
+    speed: game.config.enemy.skeletonWarriorSpeed,
+    hp,
+    maxHp: hp,
+    hpBarTimer: 0,
+    damageMin: game.config.enemy.skeletonWarriorDamageMin,
+    damageMax: game.config.enemy.skeletonWarriorDamageMax,
+    attackCooldown: 0,
+    collapsed: false,
+    collapseTimer: 0,
+    reviveAtEnd: false
+  };
+}
+
 function isProjectileThreatening(enemy, projectile, radius) {
   if (!enemy || !projectile) return false;
   const vx = Number.isFinite(projectile.vx) ? projectile.vx : 0;
@@ -160,6 +180,7 @@ function isCoveredFromPlayer(game, x, y, self = null) {
   }
   for (const enemy of game.enemies || []) {
     if (!enemy || enemy === self || enemy.type === "rat_archer" && enemy === self || (enemy.hp || 0) <= 0) continue;
+    if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
     const radius = (Number.isFinite(enemy.size) ? enemy.size : 20) * 0.5;
     if (segmentDistanceToPoint(game.player.x, game.player.y, x, y, enemy.x, enemy.y) <= radius) return true;
   }
@@ -308,6 +329,40 @@ export function updateRatArcher(game, enemy, dt, speedScale) {
   if (enemy.burstCooldownTimer <= 0 && enemy.shotIntervalTimer <= 0 && seesPlayer) {
     enemy.shotWindupTimer = game.config.enemy.ratArcherWindup || 0.4;
   }
+}
+
+export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
+  enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
+  if (enemy.collapsed) {
+    enemy.collapseTimer = Math.max(0, (enemy.collapseTimer || 0) - dt);
+    if (enemy.collapseTimer <= 0) {
+      if (enemy.reviveAtEnd) {
+        enemy.collapsed = false;
+        enemy.hp = 1;
+        enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+      } else {
+        enemy.hp = 0;
+      }
+    }
+    return;
+  }
+  const range = game.config.enemy.skeletonWarriorAttackRange || 42;
+  const dx = game.player.x - enemy.x;
+  const dy = game.player.y - enemy.y;
+  const dist = vecLength(dx, dy) || 1;
+  if (dist <= range && enemy.attackCooldown <= 0) {
+    enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+    if (game.player.hitCooldown <= 0) {
+      game.player.hitCooldown = 1.0;
+      const rawDamage = game.rollEnemyContactDamage(enemy);
+      const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+      const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
+      const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
+      game.applyPlayerDamage(damageTaken);
+    }
+    return;
+  }
+  game.moveEnemyTowardPlayer(enemy, speedScale, dt);
 }
 
 export function isGoldDrop(drop) {
@@ -463,7 +518,7 @@ export function updateMimic(game, enemy, dt, speedScale) {
 }
 
 export function xpFromEnemy(game, enemy) {
-  const baseXp = enemy.type === "armor" ? 24 : enemy.type === "mimic" ? 18 : enemy.type === "goblin" ? 12 + Math.floor(enemy.goldEaten * 0.6) : enemy.type === "rat_archer" ? 10 : 6;
+  const baseXp = enemy.type === "armor" ? 24 : enemy.type === "mimic" ? 18 : enemy.type === "goblin" ? 12 + Math.floor(enemy.goldEaten * 0.6) : enemy.type === "rat_archer" ? 10 : enemy.type === "skeleton_warrior" ? 8 : 6;
   const level = Number.isFinite(game?.level) ? Math.max(1, game.level) : 1;
   const floor = Number.isFinite(game?.floor) ? Math.max(1, game.floor) : 1;
   const ratio = level / floor;

@@ -17,6 +17,7 @@ import {
   spawnAnimatedArmor,
   spawnMimic,
   spawnRatArcher,
+  spawnSkeletonWarrior,
   applyEnemyDamage,
   randomEnemySpawnPoint
 } from "./world/spawnCombat.js";
@@ -98,6 +99,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   spawnRatArcher(x, y) {
     return spawnRatArcher(this, x, y);
+  }
+
+  spawnSkeletonWarrior(x, y) {
+    return spawnSkeletonWarrior(this, x, y);
   }
 
   applyEnemyDamage(enemy, amount, damageType = "physical") {

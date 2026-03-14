@@ -61,6 +61,8 @@ export function stepGame(game, dt, controls = {}) {
 
   const mx = Number.isFinite(controls.moveX) ? controls.moveX : 0;
   const my = Number.isFinite(controls.moveY) ? controls.moveY : 0;
+  game.player.lastX = game.player.x;
+  game.player.lastY = game.player.y;
   if (mx || my) {
     const len = vecLength(mx, my) || 1;
     game.moveWithCollision(game.player, (mx / len) * game.player.speed * dt, (my / len) * game.player.speed * dt);
@@ -137,6 +139,10 @@ export function stepGame(game, dt, controls = {}) {
   };
 
   const enemySpeedScale = game.getEnemySpeedScale();
+  const skeletonIgnoresArrow = (enemy) =>
+    enemy?.type === "skeleton_warrior" &&
+    !enemy.collapsed &&
+    Math.random() < (game.config.enemy.skeletonWarriorArrowIgnoreChance || 0.3);
   game.enemySpawnTimer -= dt;
   let spawnIterations = 0;
   while (game.enemySpawnTimer <= 0 && game.enemies.length < game.config.enemy.maxCount && spawnIterations < 6) {
@@ -146,13 +152,17 @@ export function stepGame(game, dt, controls = {}) {
       if (!point) continue;
       const activeGoblins = game.enemies.filter((enemy) => enemy.type === "goblin").length;
       const activeRatArchers = game.enemies.filter((enemy) => enemy.type === "rat_archer").length;
-      const ratArcherMinLevel = Number.isFinite(game.config.enemy.ratArcherMinLevel) ? game.config.enemy.ratArcherMinLevel : 1;
+      const skeletonMinFloor = Number.isFinite(game.config.enemy.skeletonWarriorMinFloor) ? game.config.enemy.skeletonWarriorMinFloor : 4;
+      const spawnSkeleton = game.floor >= skeletonMinFloor && Math.random() < (game.config.enemy.skeletonWarriorSpawnChance || 0.25);
+      const ratArcherMinFloor = Number.isFinite(game.config.enemy.ratArcherMinFloor) ? game.config.enemy.ratArcherMinFloor : 3;
       if (
-        game.level >= ratArcherMinLevel &&
+        game.floor >= ratArcherMinFloor &&
         activeRatArchers < game.config.enemy.maxActiveRatArchers &&
         Math.random() < game.config.enemy.ratArcherSpawnChance
       ) {
         game.enemies.push(game.spawnRatArcher(point.x, point.y));
+      } else if (spawnSkeleton) {
+        game.enemies.push(game.spawnSkeletonWarrior(point.x, point.y));
       } else if (activeGoblins < game.config.enemy.maxActiveGoblins && Math.random() < game.config.enemy.goblinSpawnChance) {
         game.enemies.push(game.spawnTreasureGoblin(point.x, point.y));
       } else {
@@ -187,6 +197,7 @@ export function stepGame(game, dt, controls = {}) {
     if (enemy.type === "goblin") game.updateGoblin(enemy, dt, enemySpeedScale);
     else if (enemy.type === "mimic") game.updateMimic(enemy, dt, enemySpeedScale);
     else if (enemy.type === "rat_archer") game.updateRatArcher(enemy, dt, enemySpeedScale);
+    else if (enemy.type === "skeleton_warrior") game.updateSkeletonWarrior(enemy, dt, enemySpeedScale);
     else game.moveEnemyTowardPlayer(enemy, enemySpeedScale, dt);
   }
   for (const br of game.breakables || []) {
@@ -194,6 +205,7 @@ export function stepGame(game, dt, controls = {}) {
     activeBreakables.push(br);
   }
   for (const enemy of activeEnemies) {
+    if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
     if (typeof game.separateEnemyFromPlayer === "function") game.separateEnemyFromPlayer(enemy);
   }
 
@@ -287,7 +299,9 @@ export function stepGame(game, dt, controls = {}) {
         continue;
       }
       for (const enemy of activeEnemies) {
+        if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
         if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
+          if (skeletonIgnoresArrow(enemy)) continue;
           const rawDamage = typeof game.rollWallTrapDamage === "function"
             ? game.rollWallTrapDamage()
             : game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
@@ -310,8 +324,13 @@ export function stepGame(game, dt, controls = {}) {
     }
     if (b.life <= 0) continue;
     for (const enemy of activeEnemies) {
+      if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
       if (b.hitTargets.has(enemy)) continue;
       if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
+        if (skeletonIgnoresArrow(enemy)) {
+          b.hitTargets.add(enemy);
+          continue;
+        }
         const dmgMult = Number.isFinite(b.damageMult) ? b.damageMult : 1;
         game.applyEnemyDamage(enemy, game.rollPrimaryDamage() * Math.max(0.01, dmgMult), "arrow");
         b.hitTargets.add(enemy);
@@ -337,7 +356,9 @@ export function stepGame(game, dt, controls = {}) {
       continue;
     }
     for (const enemy of activeEnemies) {
+      if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
       if (vecLength(arrow.x - enemy.x, arrow.y - enemy.y) < (enemy.size + arrow.size) * 0.5) {
+        if (skeletonIgnoresArrow(enemy)) continue;
         hit = true;
         break;
       }
@@ -355,6 +376,14 @@ export function stepGame(game, dt, controls = {}) {
       if (vecLength(zone.x - br.x, zone.y - br.y) < zone.radius + br.size * 0.32) br.hp = 0;
     }
     for (const enemy of activeEnemies) {
+      if (enemy.type === "skeleton_warrior" && enemy.collapsed) {
+        if (vecLength(zone.x - enemy.x, zone.y - enemy.y) < zone.radius + enemy.size * 0.35) {
+          enemy.reviveAtEnd = false;
+          enemy.collapseTimer = 0;
+          enemy.hp = 0;
+        }
+        continue;
+      }
       if (vecLength(zone.x - enemy.x, zone.y - enemy.y) < zone.radius + enemy.size * 0.35) {
         game.applyEnemyDamage(enemy, game.getFireArrowLingerDps() * dt, "fire");
       }
@@ -362,12 +391,16 @@ export function stepGame(game, dt, controls = {}) {
   }
 
   game.enemies = game.enemies.filter((enemy) => {
+    if (enemy.type === "skeleton_warrior" && enemy.collapsed && enemy.collapseTimer > 0) {
+      return true;
+    }
     if (enemy.hp <= 0) {
       game.triggerWarriorMomentumOnKill();
       if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
       else if (enemy.type === "armor") game.score += 40;
       else if (enemy.type === "mimic") game.score += 35;
       else if (enemy.type === "rat_archer") game.score += 16;
+      else if (enemy.type === "skeleton_warrior") game.score += 10;
       else game.score += 10;
       game.gainExperience(game.xpFromEnemy(enemy));
       if (enemy.type === "goblin") game.dropTreasureBag(enemy.x, enemy.y, enemy.goldEaten);
@@ -407,6 +440,24 @@ export function stepGame(game, dt, controls = {}) {
     game.score += 50;
   }
 
+  const boneSlowPct = game.config.enemy.skeletonWarriorBoneSlowPct || 0;
+  if (boneSlowPct > 0) {
+    const affectsEntity = (entity) => {
+      if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) return;
+      for (const enemy of game.enemies) {
+        if (enemy.type !== "skeleton_warrior" || !enemy.collapsed || enemy.collapseTimer <= 0) continue;
+        const slowRadius = (enemy.size || 20) * 0.6;
+        if (vecLength(entity.x - enemy.x, entity.y - enemy.y) <= slowRadius) {
+          entity.x = Number.isFinite(entity.lastX) ? entity.lastX + (entity.x - entity.lastX) * (1 - boneSlowPct) : entity.x;
+          entity.y = Number.isFinite(entity.lastY) ? entity.lastY + (entity.y - entity.lastY) * (1 - boneSlowPct) : entity.y;
+          break;
+        }
+      }
+    };
+    affectsEntity(game.player);
+    for (const enemy of game.enemies) affectsEntity(enemy);
+  }
+
   if (!game.door.open && game.hasKey && vecLength(game.player.x - game.door.x, game.player.y - game.door.y) < 28) {
     game.door.open = true;
     game.score += 100;
@@ -422,6 +473,7 @@ export function stepGame(game, dt, controls = {}) {
       ? game.getPlayerEnemyCollisionRadius()
       : (game.player.size * 0.5);
     for (const enemy of activeEnemies) {
+      if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
       if (vecLength(game.player.x - enemy.x, game.player.y - enemy.y) <= enemy.size * 0.5 + playerEnemyRadius) {
         game.player.hitCooldown = 1.0;
         const rawDamage = game.rollEnemyContactDamage(enemy);
