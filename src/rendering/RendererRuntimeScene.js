@@ -54,11 +54,16 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       if (stand.animated && stand.activated) continue;
       this.drawArmorStand(stand, stand.x - cameraX, stand.y - cameraY);
     }
+    for (const trap of game.wallTraps || []) {
+      if (!trap.spotted) continue;
+      this.drawWallTrap(trap, trap.x - cameraX, trap.y - cameraY);
+    }
     for (const br of game.breakables || []) this.drawBreakable(br, br.x - cameraX, br.y - cameraY);
 
     for (const enemy of game.enemies) {
       if (enemy.type === "goblin") this.drawTreasureGoblin(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "armor") this.drawAnimatedArmor(enemy, enemy.x - cameraX, enemy.y - cameraY);
+      else if (enemy.type === "rat_archer") this.drawRatArcher(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "mimic") {
         if (enemy.dormant) this.drawBreakable({ type: "box", size: enemy.size }, enemy.x - cameraX, enemy.y - cameraY);
         else this.drawMimic(enemy, enemy.x - cameraX, enemy.y - cameraY);
@@ -84,14 +89,19 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.gameOver) this.drawPausedOverlay(layout);
 
     if (game.gameOver) {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+      const progress = typeof game.getDeathTransitionProgress === "function" ? game.getDeathTransitionProgress() : 1;
+      const fadeAlpha = Math.min(1, progress / 0.45);
+      const titleAlpha = progress <= 0.16 ? 0 : Math.min(1, (progress - 0.16) / 0.2);
+      const subtitleAlpha = progress <= 0.34 ? 0 : Math.min(1, (progress - 0.34) / 0.14);
+      ctx.fillStyle = `rgba(0, 0, 0, ${fadeAlpha})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      ctx.fillStyle = "#f3f0e8";
-      ctx.font = "bold 52px Trebuchet MS";
       ctx.textAlign = "center";
-      ctx.fillText("Game Over", this.canvas.width / 2, this.canvas.height / 2 - 20);
-      ctx.font = "22px Trebuchet MS";
-      ctx.fillText("Press Esc for character select", this.canvas.width / 2, this.canvas.height / 2 + 24);
+      ctx.fillStyle = `rgba(243, 240, 232, ${titleAlpha})`;
+      ctx.font = "bold 64px Trebuchet MS";
+      ctx.fillText("GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 18);
+      ctx.fillStyle = `rgba(208, 203, 194, ${subtitleAlpha})`;
+      ctx.font = "20px Trebuchet MS";
+      ctx.fillText("Returning to the main menu...", this.canvas.width / 2, this.canvas.height / 2 + 28);
       ctx.textAlign = "left";
     }
   }
@@ -275,6 +285,42 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     ctx.fillRect(screenX - half * 0.72, bodyTop, half * 1.44, half * 1.15);
   }
 
+  drawWallTrap(trap, screenX, screenY) {
+    const ctx = this.ctx;
+    const dirX = Number.isFinite(trap.dirX) ? trap.dirX : 1;
+    const dirY = Number.isFinite(trap.dirY) ? trap.dirY : 0;
+    const perpX = -dirY;
+    const perpY = dirX;
+    const baseX = screenX - dirX * 10;
+    const baseY = screenY - dirY * 10;
+    const tipX = screenX + dirX * 9;
+    const tipY = screenY + dirY * 9;
+
+    ctx.fillStyle = "#4b1714";
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 8, baseY + perpY * 8);
+    ctx.lineTo(baseX - perpX * 8, baseY - perpY * 8);
+    ctx.lineTo(baseX - dirX * 4, baseY - dirY * 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#c43e34";
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 5, baseY + perpY * 5);
+    ctx.lineTo(baseX - perpX * 5, baseY - perpY * 5);
+    ctx.lineTo(tipX, tipY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "#ff9d82";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 3.4, baseY + perpY * 3.4);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(baseX - perpX * 3.4, baseY - perpY * 3.4);
+    ctx.stroke();
+  }
+
   drawTreasureGoblin(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const size = enemy.size;
@@ -298,6 +344,67 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       ctx.arc(screenX + half * 0.62 + offset, screenY + half * 0.2, Math.max(1.2, half * 0.09), 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  drawRatArcher(enemy, screenX, screenY) {
+    const ctx = this.ctx;
+    const half = enemy.size * 0.5;
+    const aimX = Number.isFinite(enemy.dirX) ? enemy.dirX : 1;
+    const aimY = Number.isFinite(enemy.dirY) ? enemy.dirY : 0;
+    const perpX = -aimY;
+    const perpY = aimX;
+    const windup = Math.max(0, Math.min(1, (enemy.shotWindupTimer || 0) / 0.4));
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.78, half * 0.95, half * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#6d4f2b";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.2, screenY + half * 0.38);
+    ctx.quadraticCurveTo(screenX + half * 0.95, screenY + half * 0.68, screenX + half * 1.25, screenY + half * 1.15);
+    ctx.stroke();
+
+    ctx.fillStyle = "#6f5132";
+    ctx.fillRect(screenX - half * 0.46, screenY - half * 0.04, half * 0.92, half * 0.88);
+
+    ctx.fillStyle = "#8a643f";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - half * 0.36, half * 0.48, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#4a2f1d";
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.62, screenY - half * 0.3);
+    ctx.lineTo(screenX, screenY - half * 0.92);
+    ctx.lineTo(screenX + half * 0.62, screenY - half * 0.3);
+    ctx.lineTo(screenX + half * 0.42, screenY + half * 0.28);
+    ctx.lineTo(screenX - half * 0.42, screenY + half * 0.28);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#e5b27d";
+    ctx.beginPath();
+    ctx.arc(screenX - half * 0.16, screenY - half * 0.34, half * 0.07, 0, Math.PI * 2);
+    ctx.arc(screenX + half * 0.16, screenY - half * 0.34, half * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+
+    const bowX = screenX + aimX * half * (0.72 + windup * 0.1);
+    const bowY = screenY - half * 0.08 + aimY * half * (0.72 + windup * 0.1);
+    ctx.strokeStyle = "#9e7f51";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(bowX + perpX * 6 - aimX * 2, bowY + perpY * 6 - aimY * 2);
+    ctx.quadraticCurveTo(bowX + aimX * (5 + windup * 4), bowY + aimY * (5 + windup * 4), bowX - perpX * 6 - aimX * 2, bowY - perpY * 6 - aimY * 2);
+    ctx.stroke();
+    ctx.strokeStyle = windup > 0.2 ? "#f2d4a7" : "#ceb992";
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(bowX + perpX * 6 - aimX * 2, bowY + perpY * 6 - aimY * 2);
+    ctx.lineTo(bowX - perpX * 6 - aimX * 2, bowY - perpY * 6 - aimY * 2);
+    ctx.stroke();
   }
 
   drawEnemyHealthBar(enemy, screenX, screenY) {

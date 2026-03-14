@@ -179,6 +179,13 @@ export function moveEnemyTowardPlayer(game, enemy, speedScale, dt) {
   const dy = game.player.y - enemy.y;
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
   const len = vecLength(dx, dy) || 1;
+  const playerRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
+    ? game.getPlayerEnemyCollisionRadius()
+    : ((game.config?.player?.enemyCollisionSize ?? game.player?.size ?? 0) * 0.5);
+  const minDistance = playerRadius + enemy.size * 0.5;
+  if (len <= minDistance) return;
+  const moveStep = Math.min(speedStep, len - minDistance);
+  if (!Number.isFinite(moveStep) || moveStep <= 0) return;
   const dirX = dx / len;
   const dirY = dy / len;
   const perpX = -dirY;
@@ -186,8 +193,8 @@ export function moveEnemyTowardPlayer(game, enemy, speedScale, dt) {
 
   const beforeX = enemy.x;
   const beforeY = enemy.y;
-  moveWithCollision(game, enemy, dirX * speedStep, dirY * speedStep);
-  const movedDirect = vecLength(enemy.x - beforeX, enemy.y - beforeY) > speedStep * 0.12;
+  moveWithCollision(game, enemy, dirX * moveStep, dirY * moveStep);
+  const movedDirect = vecLength(enemy.x - beforeX, enemy.y - beforeY) > moveStep * 0.12;
   if (movedDirect) return;
 
   // If direct path is blocked, probe around corners.
@@ -200,13 +207,40 @@ export function moveEnemyTowardPlayer(game, enemy, speedScale, dt) {
 
   for (const p of probes) {
     const plen = vecLength(p.x, p.y) || 1;
-    const sx = (p.x / plen) * speedStep;
-    const sy = (p.y / plen) * speedStep;
+    const sx = (p.x / plen) * moveStep;
+    const sy = (p.y / plen) * moveStep;
     const px = enemy.x;
     const py = enemy.y;
     moveWithCollision(game, enemy, sx, sy);
-    if (vecLength(enemy.x - px, enemy.y - py) > speedStep * 0.12) return;
+    if (vecLength(enemy.x - px, enemy.y - py) > moveStep * 0.12) return;
   }
+}
+
+export function separateEnemyFromPlayer(game, enemy) {
+  if (!game?.player || !enemy) return;
+  const playerRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
+    ? game.getPlayerEnemyCollisionRadius()
+    : ((game.config?.player?.enemyCollisionSize ?? game.player?.size ?? 0) * 0.5);
+  const enemyRadius = (Number.isFinite(enemy.size) ? enemy.size : 0) * 0.5;
+  const minDistance = playerRadius + enemyRadius;
+  let dx = enemy.x - game.player.x;
+  let dy = enemy.y - game.player.y;
+  let dist = vecLength(dx, dy);
+  if (dist >= minDistance) return;
+
+  if (dist < 0.001) {
+    dx = Number.isFinite(enemy.lastX) ? enemy.x - enemy.lastX : 0;
+    dy = Number.isFinite(enemy.lastY) ? enemy.y - enemy.lastY : 0;
+    dist = vecLength(dx, dy);
+    if (dist < 0.001) {
+      dx = game.player.dirX || 1;
+      dy = game.player.dirY || 0;
+      dist = vecLength(dx, dy) || 1;
+    }
+  }
+
+  const overlap = minDistance - dist;
+  moveWithCollision(game, enemy, (dx / dist) * overlap, (dy / dist) * overlap);
 }
 
 export function moveWithCollision(game, entity, dx, dy) {

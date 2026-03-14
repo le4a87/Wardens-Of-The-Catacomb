@@ -1,20 +1,20 @@
 export const TITLE_TRACK = {
   title: "Ward the Catacombs",
-  src: "./assets/Ward%20the%20Catacombs.mp3"
+  src: "./assets/music/Ward%20the%20Catacombs.mp3"
 };
 
 export const GAMEPLAY_TRACKS = [
   {
     title: "Evil Lair",
-    src: "./assets/Evil%20Lair.mp3"
+    src: "./assets/music/Evil%20Lair.mp3"
   },
   {
     title: "Hidden Danger",
-    src: "./assets/Hidden%20Danger.mp3"
+    src: "./assets/music/Hidden%20Danger.mp3"
   },
   {
     title: "The Crypt",
-    src: "./assets/The%20Crypt.mp3"
+    src: "./assets/music/The%20Crypt.mp3"
   }
 ];
 

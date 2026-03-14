@@ -1,6 +1,8 @@
 import { vecLength, directionIndexFromVector } from "../utils.js";
 
 export function stepGame(game, dt, controls = {}) {
+  if (typeof game.updateDeathTransition === "function" && game.updateDeathTransition(dt)) return;
+
   const segmentRectHit = (x0, y0, x1, y1, left, top, right, bottom) => {
     // Liang-Barsky clipping against AABB.
     const dx = x1 - x0;
@@ -66,6 +68,52 @@ export function stepGame(game, dt, controls = {}) {
   game.player.moving = !!(mx || my);
   game.revealAroundPlayer();
 
+  const trapCfg = game.config?.traps?.wall || {};
+  const moveLen = vecLength(mx, my) || 1;
+  const moveDirX = mx ? mx / moveLen : 0;
+  const moveDirY = my ? my / moveLen : 0;
+  const trapSightRange = (Number.isFinite(trapCfg.sightRangeTiles) ? trapCfg.sightRangeTiles : 5) * game.config.map.tile;
+  const trapDetectRange = (Number.isFinite(trapCfg.detectRangeTiles) ? trapCfg.detectRangeTiles : 10) * game.config.map.tile;
+  const trapDetectBaseChance = Number.isFinite(trapCfg.detectForwardChance) ? trapCfg.detectForwardChance : 0.3;
+  const playerTrapRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
+    ? game.getPlayerEnemyCollisionRadius()
+    : (game.player.size * 0.5);
+  const isPlayerInTrapLane = (trap) => {
+    if (!trap) return false;
+    const trapOriginX = trap.x + trap.dirX * game.config.map.tile * 0.5;
+    const trapOriginY = trap.y + trap.dirY * game.config.map.tile * 0.5;
+    const dx = game.player.x - trapOriginX;
+    const dy = game.player.y - trapOriginY;
+    const forward = dx * trap.dirX + dy * trap.dirY;
+    if (forward <= 0 || forward > trapSightRange) return false;
+    const side = Math.abs(dx * -trap.dirY + dy * trap.dirX);
+    if (side > playerTrapRadius + game.config.map.tile * 0.18) return false;
+    const samples = Math.max(1, Math.ceil(forward / Math.max(8, game.config.map.tile * 0.35)));
+    for (let i = 1; i < samples; i++) {
+      const t = i / samples;
+      const sx = trapOriginX + dx * t;
+      const sy = trapOriginY + dy * t;
+      if (game.isWallAt(sx, sy, false)) return false;
+    }
+    return true;
+  };
+  for (const trap of game.wallTraps || []) {
+    trap.cooldown = Math.max(0, (Number.isFinite(trap.cooldown) ? trap.cooldown : 0) - dt);
+    if (!trap.spotted && !trap.detectionChecked) {
+      if (vecLength(game.player.x - trap.x, game.player.y - trap.y) <= trapDetectRange) {
+        trap.detectionChecked = true;
+        const moveDot = (mx || my) ? moveDirX * trap.dirX + moveDirY * trap.dirY : -1;
+        const baseChance = trapDetectBaseChance * Math.max(0, Math.min(1, (moveDot + 1) * 0.5));
+        const bonusChance = typeof game.getTrapDetectionBonus === "function" ? game.getTrapDetectionBonus() : 0;
+        const spotChance = Math.max(0, Math.min(1, baseChance + Math.max(0, bonusChance)));
+        if (Math.random() < spotChance) trap.spotted = true;
+      }
+    }
+    if (trap.cooldown <= 0 && isPlayerInTrapLane(trap) && typeof game.fireWallTrap === "function") {
+      game.fireWallTrap(trap);
+    }
+  }
+
   if (controls.hasAim && Number.isFinite(controls.aimX) && Number.isFinite(controls.aimY)) {
     const aimDx = controls.aimX - game.player.x;
     const aimDy = controls.aimY - game.player.y;
@@ -97,7 +145,15 @@ export function stepGame(game, dt, controls = {}) {
       const point = game.randomEnemySpawnPoint();
       if (!point) continue;
       const activeGoblins = game.enemies.filter((enemy) => enemy.type === "goblin").length;
-      if (activeGoblins < game.config.enemy.maxActiveGoblins && Math.random() < game.config.enemy.goblinSpawnChance) {
+      const activeRatArchers = game.enemies.filter((enemy) => enemy.type === "rat_archer").length;
+      const ratArcherMinLevel = Number.isFinite(game.config.enemy.ratArcherMinLevel) ? game.config.enemy.ratArcherMinLevel : 1;
+      if (
+        game.level >= ratArcherMinLevel &&
+        activeRatArchers < game.config.enemy.maxActiveRatArchers &&
+        Math.random() < game.config.enemy.ratArcherSpawnChance
+      ) {
+        game.enemies.push(game.spawnRatArcher(point.x, point.y));
+      } else if (activeGoblins < game.config.enemy.maxActiveGoblins && Math.random() < game.config.enemy.goblinSpawnChance) {
         game.enemies.push(game.spawnTreasureGoblin(point.x, point.y));
       } else {
         game.enemies.push(game.spawnGhost(point.x, point.y));
@@ -130,11 +186,15 @@ export function stepGame(game, dt, controls = {}) {
     activeEnemies.push(enemy);
     if (enemy.type === "goblin") game.updateGoblin(enemy, dt, enemySpeedScale);
     else if (enemy.type === "mimic") game.updateMimic(enemy, dt, enemySpeedScale);
+    else if (enemy.type === "rat_archer") game.updateRatArcher(enemy, dt, enemySpeedScale);
     else game.moveEnemyTowardPlayer(enemy, enemySpeedScale, dt);
   }
   for (const br of game.breakables || []) {
     if (!isActive(br, 64)) continue;
     activeBreakables.push(br);
+  }
+  for (const enemy of activeEnemies) {
+    if (typeof game.separateEnemyFromPlayer === "function") game.separateEnemyFromPlayer(enemy);
   }
 
   for (const b of game.bullets) {
@@ -151,7 +211,7 @@ export function stepGame(game, dt, controls = {}) {
       if ((br.hp || 0) <= 0) continue;
       const half = (br.size || 20) * 0.5 + (b.size || 6) * 0.5;
       if (segmentRectHit(prevX, prevY, b.x, b.y, br.x - half, br.y - half, br.x + half, br.y + half)) {
-        br.hp = 0;
+        if (b.projectileType !== "trapArrow") br.hp = 0;
         b.life = 0;
         break;
       }
@@ -196,6 +256,48 @@ export function stepGame(game, dt, controls = {}) {
 
   for (const b of game.bullets) {
     if (b.life <= 0) continue;
+    if (b.projectileType === "ratArrow") {
+      if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerTrapRadius + b.size * 0.5) {
+        const rawDamage = game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
+        const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+        const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
+        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
+        game.applyPlayerDamage(damageTaken);
+        b.life = 0;
+      }
+      continue;
+    }
+    if (b.projectileType === "trapArrow") {
+      for (const br of activeBreakables) {
+        if (vecLength(b.x - br.x, b.y - br.y) < (br.size + b.size) * 0.45) {
+          b.life = 0;
+          break;
+        }
+      }
+      if (b.life <= 0) continue;
+      if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerTrapRadius + b.size * 0.5) {
+        const rawDamage = typeof game.rollWallTrapDamage === "function"
+          ? game.rollWallTrapDamage()
+          : game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
+        const scaledTrapDamage = rawDamage * game.getEnemyDamageScale();
+        const reducedByDefense = Math.max(1, Math.round(scaledTrapDamage - game.getDefenseFlatReduction()));
+        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
+        game.applyPlayerDamage(damageTaken);
+        b.life = 0;
+        continue;
+      }
+      for (const enemy of activeEnemies) {
+        if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
+          const rawDamage = typeof game.rollWallTrapDamage === "function"
+            ? game.rollWallTrapDamage()
+            : game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
+          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), "arrow");
+          b.life = 0;
+          break;
+        }
+      }
+      continue;
+    }
     if (!b.hitTargets) b.hitTargets = new Set();
     for (const br of activeBreakables) {
       if (b.hitTargets.has(br)) continue;
@@ -265,6 +367,7 @@ export function stepGame(game, dt, controls = {}) {
       if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
       else if (enemy.type === "armor") game.score += 40;
       else if (enemy.type === "mimic") game.score += 35;
+      else if (enemy.type === "rat_archer") game.score += 16;
       else game.score += 10;
       game.gainExperience(game.xpFromEnemy(enemy));
       if (enemy.type === "goblin") game.dropTreasureBag(enemy.x, enemy.y, enemy.goldEaten);
@@ -315,8 +418,11 @@ export function stepGame(game, dt, controls = {}) {
   }
 
   if (game.player.hitCooldown <= 0) {
+    const playerEnemyRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
+      ? game.getPlayerEnemyCollisionRadius()
+      : (game.player.size * 0.5);
     for (const enemy of activeEnemies) {
-      if (vecLength(game.player.x - enemy.x, game.player.y - enemy.y) < (enemy.size + game.player.size) * 0.5) {
+      if (vecLength(game.player.x - enemy.x, game.player.y - enemy.y) <= enemy.size * 0.5 + playerEnemyRadius) {
         game.player.hitCooldown = 1.0;
         const rawDamage = game.rollEnemyContactDamage(enemy);
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();

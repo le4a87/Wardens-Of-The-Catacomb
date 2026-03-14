@@ -107,12 +107,114 @@ export const runtimeBaseDifficultyMethods = {
     return Math.round(this.rollRange(min, max));
   },
 
+  getWallTrapResetTime() {
+    const cfg = this.config?.traps?.wall || {};
+    const min = Number.isFinite(cfg.resetMin) ? cfg.resetMin : 20;
+    const max = Number.isFinite(cfg.resetMax) ? cfg.resetMax : 60;
+    return this.rollRange(Math.min(min, max), Math.max(min, max));
+  },
+
+  getWallTrapDamageRange() {
+    return {
+      min: Number.isFinite(this.config.enemy?.armorDamageMin) ? this.config.enemy.armorDamageMin : 20,
+      max: Number.isFinite(this.config.enemy?.armorDamageMax) ? this.config.enemy.armorDamageMax : 32
+    };
+  },
+
+  rollWallTrapDamage() {
+    const range = this.getWallTrapDamageRange();
+    return this.rollRange(range.min, range.max);
+  },
+
+  placeWallTraps() {
+    const cfg = this.config?.traps?.wall;
+    if (!cfg || !Array.isArray(this.map) || this.map.length === 0) return;
+    const tile = this.config.map.tile;
+    const minCount = Number.isFinite(cfg.minCount) ? Math.max(0, Math.floor(cfg.minCount)) : 2;
+    const maxCount = Number.isFinite(cfg.maxCount) ? Math.max(minCount, Math.floor(cfg.maxCount)) : 8;
+    const sightTiles = Number.isFinite(cfg.sightRangeTiles) ? Math.max(1, Math.floor(cfg.sightRangeTiles)) : 5;
+    const initialArmDelay = Number.isFinite(cfg.initialArmDelay) ? Math.max(0, cfg.initialArmDelay) : 5;
+    const dirs = [
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 }
+    ];
+    const mapH = this.map.length;
+    const mapW = this.map[0].length;
+    const isWall = (tx, ty) => {
+      if (tx < 0 || ty < 0 || ty >= mapH || tx >= mapW) return true;
+      return this.map[ty][tx] === "#";
+    };
+    const candidates = [];
+
+    for (let y = 1; y < mapH - 1; y++) {
+      for (let x = 1; x < mapW - 1; x++) {
+        if (!isWall(x, y)) continue;
+        for (const dir of dirs) {
+          if (isWall(x + dir.x, y + dir.y)) continue;
+          if (!isWall(x - dir.x, y - dir.y)) continue;
+          let straightLane = true;
+          for (let step = 1; step <= sightTiles; step++) {
+            if (isWall(x + dir.x * step, y + dir.y * step)) {
+              straightLane = false;
+              break;
+            }
+          }
+          if (!straightLane) continue;
+          candidates.push({
+            x: x * tile + tile * 0.5,
+            y: y * tile + tile * 0.5,
+            tileX: x,
+            tileY: y,
+            dirX: dir.x,
+            dirY: dir.y,
+            size: 18
+          });
+        }
+      }
+    }
+
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const target = candidates.length <= minCount
+      ? candidates.length
+      : minCount + Math.floor(Math.random() * (Math.min(maxCount, candidates.length) - minCount + 1));
+    const chosen = [];
+    for (const candidate of candidates) {
+      if (chosen.length >= target) break;
+      if (chosen.some((trap) => vecLength(candidate.tileX - trap.tileX, candidate.tileY - trap.tileY) < 4)) continue;
+      chosen.push({
+        ...candidate,
+        spotted: false,
+        detectionChecked: false,
+        cooldown: initialArmDelay
+      });
+    }
+    this.wallTraps = chosen;
+  },
+
+  getMimicChestChance() {
+    const enemyCfg = this.config.enemy;
+    const minFloor = Number.isFinite(enemyCfg.mimicMinFloor) ? enemyCfg.mimicMinFloor : 2;
+    if ((Number.isFinite(this.floor) ? this.floor : 1) < minFloor) return 0;
+    const levelThreshold = Number.isFinite(enemyCfg.mimicChanceLevelThreshold) ? enemyCfg.mimicChanceLevelThreshold : 5;
+    if ((Number.isFinite(this.level) ? this.level : 1) >= levelThreshold) {
+      return Number.isFinite(enemyCfg.mimicChestChanceLevel5) ? enemyCfg.mimicChestChanceLevel5 : enemyCfg.mimicChestChance;
+    }
+    return Number.isFinite(enemyCfg.mimicChestChance) ? enemyCfg.mimicChestChance : 0.02;
+  },
+
   placeBreakables() {
     const cfg = this.config.breakables;
     if (!cfg) return;
     const tile = this.config.map.tile;
     const minDistTiles = Number.isFinite(cfg.minDistanceFromPlayerTiles) ? cfg.minDistanceFromPlayerTiles : 5;
     const minDist = minDistTiles * tile;
+    const mimicChance = this.getMimicChestChance();
     for (let y = 2; y < this.map.length - 2; y++) {
       for (let x = 2; x < this.map[0].length - 2; x++) {
         if (this.breakables.length >= cfg.maxCount) return;
@@ -124,7 +226,7 @@ export const runtimeBaseDifficultyMethods = {
         if (!this.pickup.taken && vecLength(wx - this.pickup.x, wy - this.pickup.y) < tile * 2.5) continue;
         if (Math.random() >= cfg.spawnChance) continue;
         const type = Math.random() < 0.55 ? "crate" : "box";
-        if (type === "box" && Math.random() < this.config.enemy.mimicChestChance) {
+        if (type === "box" && mimicChance > 0 && Math.random() < mimicChance) {
           this.enemies.push(this.spawnMimic(wx, wy));
           continue;
         }
