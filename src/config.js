@@ -150,6 +150,21 @@ export const CONFIG = {
     goldMin: 2,
     goldMax: 9
   },
+  traps: {
+    wall: {
+      minCount: 5,
+      maxCount: 12,
+      sightRangeTiles: 8,
+      detectRangeTiles: 12,
+      detectForwardChance: 0.5,
+      initialArmDelay: 5,
+      resetMin: 10,
+      resetMax: 30,
+      projectileSpeed: 520,
+      projectileLife: 1.6,
+      projectileSize: 10
+    }
+  },
   progression: {
     baseXpToLevel: 30,
     xpLevelScaling: 1.35,

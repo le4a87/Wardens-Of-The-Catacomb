@@ -107,6 +107,96 @@ export const runtimeBaseDifficultyMethods = {
     return Math.round(this.rollRange(min, max));
   },
 
+  getWallTrapResetTime() {
+    const cfg = this.config?.traps?.wall || {};
+    const min = Number.isFinite(cfg.resetMin) ? cfg.resetMin : 20;
+    const max = Number.isFinite(cfg.resetMax) ? cfg.resetMax : 60;
+    return this.rollRange(Math.min(min, max), Math.max(min, max));
+  },
+
+  getWallTrapDamageRange() {
+    return {
+      min: Number.isFinite(this.config.enemy?.armorDamageMin) ? this.config.enemy.armorDamageMin : 20,
+      max: Number.isFinite(this.config.enemy?.armorDamageMax) ? this.config.enemy.armorDamageMax : 32
+    };
+  },
+
+  rollWallTrapDamage() {
+    const range = this.getWallTrapDamageRange();
+    return this.rollRange(range.min, range.max);
+  },
+
+  placeWallTraps() {
+    const cfg = this.config?.traps?.wall;
+    if (!cfg || !Array.isArray(this.map) || this.map.length === 0) return;
+    const tile = this.config.map.tile;
+    const minCount = Number.isFinite(cfg.minCount) ? Math.max(0, Math.floor(cfg.minCount)) : 2;
+    const maxCount = Number.isFinite(cfg.maxCount) ? Math.max(minCount, Math.floor(cfg.maxCount)) : 8;
+    const sightTiles = Number.isFinite(cfg.sightRangeTiles) ? Math.max(1, Math.floor(cfg.sightRangeTiles)) : 5;
+    const initialArmDelay = Number.isFinite(cfg.initialArmDelay) ? Math.max(0, cfg.initialArmDelay) : 5;
+    const dirs = [
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 }
+    ];
+    const mapH = this.map.length;
+    const mapW = this.map[0].length;
+    const isWall = (tx, ty) => {
+      if (tx < 0 || ty < 0 || ty >= mapH || tx >= mapW) return true;
+      return this.map[ty][tx] === "#";
+    };
+    const candidates = [];
+
+    for (let y = 1; y < mapH - 1; y++) {
+      for (let x = 1; x < mapW - 1; x++) {
+        if (!isWall(x, y)) continue;
+        for (const dir of dirs) {
+          if (isWall(x + dir.x, y + dir.y)) continue;
+          if (!isWall(x - dir.x, y - dir.y)) continue;
+          let straightLane = true;
+          for (let step = 1; step <= sightTiles; step++) {
+            if (isWall(x + dir.x * step, y + dir.y * step)) {
+              straightLane = false;
+              break;
+            }
+          }
+          if (!straightLane) continue;
+          candidates.push({
+            x: x * tile + tile * 0.5,
+            y: y * tile + tile * 0.5,
+            tileX: x,
+            tileY: y,
+            dirX: dir.x,
+            dirY: dir.y,
+            size: 18
+          });
+        }
+      }
+    }
+
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const target = candidates.length <= minCount
+      ? candidates.length
+      : minCount + Math.floor(Math.random() * (Math.min(maxCount, candidates.length) - minCount + 1));
+    const chosen = [];
+    for (const candidate of candidates) {
+      if (chosen.length >= target) break;
+      if (chosen.some((trap) => vecLength(candidate.tileX - trap.tileX, candidate.tileY - trap.tileY) < 4)) continue;
+      chosen.push({
+        ...candidate,
+        spotted: false,
+        detectionChecked: false,
+        cooldown: initialArmDelay
+      });
+    }
+    this.wallTraps = chosen;
+  },
+
   getMimicChestChance() {
     const enemyCfg = this.config.enemy;
     const minFloor = Number.isFinite(enemyCfg.mimicMinFloor) ? enemyCfg.mimicMinFloor : 2;

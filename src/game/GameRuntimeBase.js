@@ -59,6 +59,7 @@ export class GameRuntimeBase {
     this.enemies = [];
     this.armorStands = [];
     this.breakables = [];
+    this.wallTraps = [];
     this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
     this.explored = [];
     this.navDistance = [];
@@ -213,6 +214,7 @@ export class GameRuntimeBase {
     this.enemies = [];
     this.armorStands = [];
     this.breakables = [];
+    this.wallTraps = [];
     this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
@@ -224,6 +226,7 @@ export class GameRuntimeBase {
     this.pickup = { x: 0, y: 0, taken: false };
     this.parseMap();
     this.placeArmorStands();
+    this.placeWallTraps();
     this.placeBreakables();
   }
 
@@ -265,6 +268,10 @@ export class GameRuntimeBase {
       ? this.config.player.enemyCollisionSize
       : this.player.size;
     return Math.max(0, size) * 0.5;
+  }
+
+  getTrapDetectionBonus() {
+    return 0;
   }
 
   getActiveBounds(padTiles = 8) {

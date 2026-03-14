@@ -54,6 +54,10 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       if (stand.animated && stand.activated) continue;
       this.drawArmorStand(stand, stand.x - cameraX, stand.y - cameraY);
     }
+    for (const trap of game.wallTraps || []) {
+      if (!trap.spotted) continue;
+      this.drawWallTrap(trap, trap.x - cameraX, trap.y - cameraY);
+    }
     for (const br of game.breakables || []) this.drawBreakable(br, br.x - cameraX, br.y - cameraY);
 
     for (const enemy of game.enemies) {
@@ -278,6 +282,42 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
 
     ctx.fillStyle = "rgba(120, 208, 255, 0.45)";
     ctx.fillRect(screenX - half * 0.72, bodyTop, half * 1.44, half * 1.15);
+  }
+
+  drawWallTrap(trap, screenX, screenY) {
+    const ctx = this.ctx;
+    const dirX = Number.isFinite(trap.dirX) ? trap.dirX : 1;
+    const dirY = Number.isFinite(trap.dirY) ? trap.dirY : 0;
+    const perpX = -dirY;
+    const perpY = dirX;
+    const baseX = screenX - dirX * 10;
+    const baseY = screenY - dirY * 10;
+    const tipX = screenX + dirX * 9;
+    const tipY = screenY + dirY * 9;
+
+    ctx.fillStyle = "#4b1714";
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 8, baseY + perpY * 8);
+    ctx.lineTo(baseX - perpX * 8, baseY - perpY * 8);
+    ctx.lineTo(baseX - dirX * 4, baseY - dirY * 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#c43e34";
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 5, baseY + perpY * 5);
+    ctx.lineTo(baseX - perpX * 5, baseY - perpY * 5);
+    ctx.lineTo(tipX, tipY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "#ff9d82";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 3.4, baseY + perpY * 3.4);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(baseX - perpX * 3.4, baseY - perpY * 3.4);
+    ctx.stroke();
   }
 
   drawTreasureGoblin(enemy, screenX, screenY) {
