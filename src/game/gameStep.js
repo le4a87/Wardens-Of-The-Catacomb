@@ -145,7 +145,15 @@ export function stepGame(game, dt, controls = {}) {
       const point = game.randomEnemySpawnPoint();
       if (!point) continue;
       const activeGoblins = game.enemies.filter((enemy) => enemy.type === "goblin").length;
-      if (activeGoblins < game.config.enemy.maxActiveGoblins && Math.random() < game.config.enemy.goblinSpawnChance) {
+      const activeRatArchers = game.enemies.filter((enemy) => enemy.type === "rat_archer").length;
+      const ratArcherMinLevel = Number.isFinite(game.config.enemy.ratArcherMinLevel) ? game.config.enemy.ratArcherMinLevel : 1;
+      if (
+        game.level >= ratArcherMinLevel &&
+        activeRatArchers < game.config.enemy.maxActiveRatArchers &&
+        Math.random() < game.config.enemy.ratArcherSpawnChance
+      ) {
+        game.enemies.push(game.spawnRatArcher(point.x, point.y));
+      } else if (activeGoblins < game.config.enemy.maxActiveGoblins && Math.random() < game.config.enemy.goblinSpawnChance) {
         game.enemies.push(game.spawnTreasureGoblin(point.x, point.y));
       } else {
         game.enemies.push(game.spawnGhost(point.x, point.y));
@@ -178,6 +186,7 @@ export function stepGame(game, dt, controls = {}) {
     activeEnemies.push(enemy);
     if (enemy.type === "goblin") game.updateGoblin(enemy, dt, enemySpeedScale);
     else if (enemy.type === "mimic") game.updateMimic(enemy, dt, enemySpeedScale);
+    else if (enemy.type === "rat_archer") game.updateRatArcher(enemy, dt, enemySpeedScale);
     else game.moveEnemyTowardPlayer(enemy, enemySpeedScale, dt);
   }
   for (const br of game.breakables || []) {
@@ -247,6 +256,17 @@ export function stepGame(game, dt, controls = {}) {
 
   for (const b of game.bullets) {
     if (b.life <= 0) continue;
+    if (b.projectileType === "ratArrow") {
+      if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerTrapRadius + b.size * 0.5) {
+        const rawDamage = game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
+        const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+        const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
+        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
+        game.applyPlayerDamage(damageTaken);
+        b.life = 0;
+      }
+      continue;
+    }
     if (b.projectileType === "trapArrow") {
       for (const br of activeBreakables) {
         if (vecLength(b.x - br.x, b.y - br.y) < (br.size + b.size) * 0.45) {
@@ -347,6 +367,7 @@ export function stepGame(game, dt, controls = {}) {
       if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
       else if (enemy.type === "armor") game.score += 40;
       else if (enemy.type === "mimic") game.score += 35;
+      else if (enemy.type === "rat_archer") game.score += 16;
       else game.score += 10;
       game.gainExperience(game.xpFromEnemy(enemy));
       if (enemy.type === "goblin") game.dropTreasureBag(enemy.x, enemy.y, enemy.goldEaten);
