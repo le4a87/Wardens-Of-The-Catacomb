@@ -203,11 +203,11 @@ export class MusicController {
     if (reset) this.deathAudio.currentTime = 0;
   }
 
-  playCurrentTrack({ reset = false } = {}) {
+  playCurrentTrack({ reset = false, volume = 1 } = {}) {
     if (!this.currentTrack || this.muted) return;
     const audio = this.currentTrack.audio;
     if (reset) audio.currentTime = 0;
-    audio.volume = 1;
+    audio.volume = Math.max(0, Math.min(1, volume));
     const playAttempt = audio.play();
     if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
   }
@@ -229,7 +229,7 @@ export class MusicController {
     this.fadeRaf = requestAnimationFrame(step);
   }
 
-  transitionToTrack(track, { reset = true, immediate = false } = {}) {
+  transitionToTrack(track, { reset = true, immediate = false, fadeInMs = 0 } = {}) {
     if (!track) return;
     this.stopDeathMusic();
     const previousTrack = this.currentTrack;
@@ -255,6 +255,17 @@ export class MusicController {
         previousAudio.volume = 1;
       }
       this.currentTrack = track;
+      if (fadeInMs > 0 && !this.muted) {
+        if (reset) nextAudio.currentTime = 0;
+        nextAudio.volume = 0;
+        const playAttempt = nextAudio.play();
+        if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
+        const token = this.transitionToken;
+        this.fadeAudio(nextAudio, 0, 1, fadeInMs, token, () => {
+          nextAudio.volume = 1;
+        });
+        return;
+      }
       nextAudio.volume = 1;
       this.playCurrentTrack({ reset });
       return;
@@ -282,13 +293,14 @@ export class MusicController {
     });
   }
 
-  playMenuMusic() {
+  playMenuMusic({ fadeInMs = 0 } = {}) {
     this.stopDeathMusic();
     this.currentMode = "menu";
     this.currentFloor = null;
     this.transitionToTrack(this.resolveTrack(TITLE_TRACK), {
       reset: false,
-      immediate: !this.currentTrack
+      immediate: !this.currentTrack,
+      fadeInMs
     });
   }
 

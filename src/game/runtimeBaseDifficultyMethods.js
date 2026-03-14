@@ -107,12 +107,24 @@ export const runtimeBaseDifficultyMethods = {
     return Math.round(this.rollRange(min, max));
   },
 
+  getMimicChestChance() {
+    const enemyCfg = this.config.enemy;
+    const minFloor = Number.isFinite(enemyCfg.mimicMinFloor) ? enemyCfg.mimicMinFloor : 2;
+    if ((Number.isFinite(this.floor) ? this.floor : 1) < minFloor) return 0;
+    const levelThreshold = Number.isFinite(enemyCfg.mimicChanceLevelThreshold) ? enemyCfg.mimicChanceLevelThreshold : 5;
+    if ((Number.isFinite(this.level) ? this.level : 1) >= levelThreshold) {
+      return Number.isFinite(enemyCfg.mimicChestChanceLevel5) ? enemyCfg.mimicChestChanceLevel5 : enemyCfg.mimicChestChance;
+    }
+    return Number.isFinite(enemyCfg.mimicChestChance) ? enemyCfg.mimicChestChance : 0.02;
+  },
+
   placeBreakables() {
     const cfg = this.config.breakables;
     if (!cfg) return;
     const tile = this.config.map.tile;
     const minDistTiles = Number.isFinite(cfg.minDistanceFromPlayerTiles) ? cfg.minDistanceFromPlayerTiles : 5;
     const minDist = minDistTiles * tile;
+    const mimicChance = this.getMimicChestChance();
     for (let y = 2; y < this.map.length - 2; y++) {
       for (let x = 2; x < this.map[0].length - 2; x++) {
         if (this.breakables.length >= cfg.maxCount) return;
@@ -124,7 +136,7 @@ export const runtimeBaseDifficultyMethods = {
         if (!this.pickup.taken && vecLength(wx - this.pickup.x, wy - this.pickup.y) < tile * 2.5) continue;
         if (Math.random() >= cfg.spawnChance) continue;
         const type = Math.random() < 0.55 ? "crate" : "box";
-        if (type === "box" && Math.random() < this.config.enemy.mimicChestChance) {
+        if (type === "box" && mimicChance > 0 && Math.random() < mimicChance) {
           this.enemies.push(this.spawnMimic(wx, wy));
           continue;
         }

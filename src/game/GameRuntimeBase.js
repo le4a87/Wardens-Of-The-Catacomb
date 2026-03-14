@@ -260,6 +260,13 @@ export class GameRuntimeBase {
     return base * this.getMoveSpeedMultiplier() * this.getWarriorMomentumMultiplier();
   }
 
+  getPlayerEnemyCollisionRadius() {
+    const size = Number.isFinite(this.config.player.enemyCollisionSize)
+      ? this.config.player.enemyCollisionSize
+      : this.player.size;
+    return Math.max(0, size) * 0.5;
+  }
+
   getActiveBounds(padTiles = 8) {
     const cam = this.getCamera();
     const tile = this.config.map.tile;
