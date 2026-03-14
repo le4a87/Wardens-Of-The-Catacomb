@@ -151,6 +151,13 @@ export function drawSkillTreeMenu(renderer, game, layout) {
   const nextRageCd = game.getWarriorRageCooldown(nextRagePoints);
   const curRageBase = game.getWarriorRageBaseDamageBonus(rageSkill.points);
   const nextRageBase = game.getWarriorRageBaseDamageBonus(nextRagePoints);
+  const executeSkill = game.skills.warriorExecute;
+  const canSpendExecute = game.skillPoints > 0 && executeSkill.points < executeSkill.maxPoints;
+  const nextExecutePoints = Math.min(executeSkill.maxPoints, executeSkill.points + 1);
+  const curExecuteChance = game.getWarriorExecuteChance(executeSkill.points);
+  const nextExecuteChance = game.getWarriorExecuteChance(nextExecutePoints);
+  const curExecuteThreshold = game.getWarriorExecuteThreshold(executeSkill.points);
+  const nextExecuteThreshold = game.getWarriorExecuteThreshold(nextExecutePoints);
 
   ctx.fillStyle = "rgba(4, 7, 11, 0.78)";
   ctx.fillRect(0, 0, layout.playW, renderer.canvas.height);
@@ -179,7 +186,7 @@ export function drawSkillTreeMenu(renderer, game, layout) {
   const contentTop = menuY + 50;
   const contentBottom = menuY + menuH - 8;
   const visibleH = contentBottom - contentTop;
-  const contentHeight = !game.classSpec.usesRanged ? 636 : 582;
+  const contentHeight = !game.classSpec.usesRanged ? 836 : 582;
   const scrollMax = Math.max(0, contentHeight - visibleH);
   const scroll = Math.max(0, Math.min(scrollMax, game.uiScroll?.skillTree || 0));
   game.uiScroll.skillTree = scroll;
@@ -283,14 +290,56 @@ export function drawSkillTreeMenu(renderer, game, layout) {
     ctx.font = "bold 14px Trebuchet MS";
     ctx.fillText("Spend 1 SP", rageSpendRect.x + 20, rageSpendRect.y + 22);
 
+    const executeCard = { x: menuX + 22, y: rageCard.y + rageCard.h + 12, w: menuW - 44, h: 188 };
+    ctx.fillStyle = "rgba(46, 16, 16, 0.95)";
+    ctx.fillRect(executeCard.x, executeCard.y, executeCard.w, executeCard.h);
+    ctx.strokeStyle = "rgba(232, 93, 93, 0.78)";
+    ctx.strokeRect(executeCard.x, executeCard.y, executeCard.w, executeCard.h);
+
+    ctx.fillStyle = "#f8ecec";
+    ctx.font = "bold 18px Trebuchet MS";
+    ctx.fillText("Execute", executeCard.x + 14, executeCard.y + 28);
+    ctx.font = "14px Trebuchet MS";
+    ctx.fillStyle = "#efc8c8";
+    ctx.fillText(`Points: ${executeSkill.points}/${executeSkill.maxPoints}`, executeCard.x + 14, executeCard.y + 50);
+    ctx.fillText(`Chance: ${(curExecuteChance * 100).toFixed(1)}%`, executeCard.x + 215, executeCard.y + 50);
+
+    ctx.fillStyle = "#ffd9d9";
+    ctx.fillText(`Threshold: ${(curExecuteThreshold * 100).toFixed(1)}% HP`, executeCard.x + 14, executeCard.y + 78);
+    ctx.fillStyle = "#f2bcbc";
+    ctx.fillText("Melee hits can instantly kill weakened non-boss enemies.", executeCard.x + 14, executeCard.y + 106);
+    ctx.fillText("Triggers after a hit drops them below the threshold.", executeCard.x + 14, executeCard.y + 126);
+
+    if (executeSkill.points >= executeSkill.maxPoints) {
+      ctx.fillStyle = "#c5a5a5";
+      ctx.fillText("Next Point: MAXED", executeCard.x + 14, executeCard.y + 152);
+    } else {
+      ctx.fillStyle = "#9ee0ad";
+      ctx.fillText(
+        `Next: +${((nextExecuteChance - curExecuteChance) * 100).toFixed(2)}% chance, +${((nextExecuteThreshold - curExecuteThreshold) * 100).toFixed(2)}% HP`,
+        executeCard.x + 14,
+        executeCard.y + 152
+      );
+    }
+
+    const executeSpendRect = { x: executeCard.x + executeCard.w - 142, y: executeCard.y + executeCard.h - 50, w: 124, h: 34 };
+    game.uiRects.skillWarriorExecuteNode = executeSpendRect;
+    ctx.fillStyle = canSpendExecute ? "rgba(112, 160, 98, 0.95)" : "rgba(80, 76, 90, 0.95)";
+    ctx.fillRect(executeSpendRect.x, executeSpendRect.y, executeSpendRect.w, executeSpendRect.h);
+    ctx.strokeStyle = "rgba(232, 226, 211, 0.58)";
+    ctx.strokeRect(executeSpendRect.x, executeSpendRect.y, executeSpendRect.w, executeSpendRect.h);
+    ctx.fillStyle = "#f3efe3";
+    ctx.font = "bold 14px Trebuchet MS";
+    ctx.fillText("Spend 1 SP", executeSpendRect.x + 20, executeSpendRect.y + 22);
+
     ctx.fillStyle = "rgba(22, 22, 30, 0.92)";
-    ctx.fillRect(menuX + 22, rageCard.y + rageCard.h + 12, menuW - 44, 86);
+    ctx.fillRect(menuX + 22, executeCard.y + executeCard.h + 12, menuW - 44, 86);
     ctx.strokeStyle = "rgba(133, 139, 164, 0.45)";
-    ctx.strokeRect(menuX + 22, rageCard.y + rageCard.h + 12, menuW - 44, 86);
+    ctx.strokeRect(menuX + 22, executeCard.y + executeCard.h + 12, menuW - 44, 86);
     ctx.fillStyle = "#b9c3d8";
     ctx.font = "13px Trebuchet MS";
-    ctx.fillText("Ranger skills (Fire Arrow, Piercing Strike, Multiarrow)", menuX + 36, rageCard.y + rageCard.h + 44);
-    ctx.fillText("are unavailable for Warrior.", menuX + 36, rageCard.y + rageCard.h + 64);
+    ctx.fillText("Ranger skills (Fire Arrow, Piercing Strike, Multiarrow)", menuX + 36, executeCard.y + executeCard.h + 44);
+    ctx.fillText("are unavailable for Warrior.", menuX + 36, executeCard.y + executeCard.h + 64);
     ctx.restore();
     return;
   }

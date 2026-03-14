@@ -175,6 +175,26 @@ export const runtimeCombatStatsMethods = {
     return Math.floor(Math.max(0, safe) * 0.5);
   },
 
+  getWarriorExecuteChance(points = this.skills.warriorExecute.points) {
+    if (this.classSpec.usesRanged) return 0;
+    const p = Number.isFinite(points) ? Math.max(0, points) : 0;
+    if (p <= 0) return 0;
+    const maxPoints = Number.isFinite(this.skills?.warriorExecute?.maxPoints) ? this.skills.warriorExecute.maxPoints : 8;
+    const span = Math.max(1, maxPoints - 1);
+    const norm = span > 0 ? Math.log1p(1.2 * (p - 1)) / Math.log1p(1.2 * span) : 1;
+    return 0.10 + 0.20 * Math.max(0, Math.min(1, norm));
+  },
+
+  getWarriorExecuteThreshold(points = this.skills.warriorExecute.points) {
+    if (this.classSpec.usesRanged) return 0;
+    const p = Number.isFinite(points) ? Math.max(0, points) : 0;
+    if (p <= 0) return 0;
+    const maxPoints = Number.isFinite(this.skills?.warriorExecute?.maxPoints) ? this.skills.warriorExecute.maxPoints : 8;
+    const span = Math.max(1, maxPoints - 1);
+    const norm = span > 0 ? Math.log1p(1.2 * (p - 1)) / Math.log1p(1.2 * span) : 1;
+    return 0.05 + 0.15 * Math.max(0, Math.min(1, norm));
+  },
+
   isWarriorRageUnlocked() {
     return !this.classSpec.usesRanged && (this.skills?.warriorRage?.points || 0) > 0;
   },
@@ -206,7 +226,7 @@ export const runtimeCombatStatsMethods = {
     if (!this.classSpec.usesRanged && (skillKey === "fireArrow" || skillKey === "piercingStrike" || skillKey === "multiarrow")) {
       return false;
     }
-    if (this.classSpec.usesRanged && (skillKey === "warriorMomentum" || skillKey === "warriorRage")) {
+    if (this.classSpec.usesRanged && (skillKey === "warriorMomentum" || skillKey === "warriorRage" || skillKey === "warriorExecute")) {
       return false;
     }
     skill.points += 1;
@@ -225,6 +245,9 @@ export const runtimeCombatStatsMethods = {
     }
     if (skillKey === "warriorRage") {
       this.spawnFloatingText(this.player.x, this.player.y - 26, "Rage improved", "#ff8a8a", 0.85, 14);
+    }
+    if (skillKey === "warriorExecute") {
+      this.spawnFloatingText(this.player.x, this.player.y - 26, "Execute improved", "#ff6d6d", 0.85, 14);
     }
     return true;
   }

@@ -77,7 +77,8 @@ export class GameRuntimeBase {
       piercingStrike: { key: "piercingStrike", label: "Piercing Strike", points: 0, maxPoints: 8 },
       multiarrow: { key: "multiarrow", label: "Multiarrow", points: 0, maxPoints: 8 },
       warriorMomentum: { key: "warriorMomentum", label: "Frenzy", points: 0, maxPoints: 8 },
-      warriorRage: { key: "warriorRage", label: "Rage", points: 0, maxPoints: 8 }
+      warriorRage: { key: "warriorRage", label: "Rage", points: 0, maxPoints: 8 },
+      warriorExecute: { key: "warriorExecute", label: "Execute", points: 0, maxPoints: 8 }
     };
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;

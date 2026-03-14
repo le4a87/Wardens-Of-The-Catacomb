@@ -28,6 +28,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.skillMultiarrowNode = null;
     game.uiRects.skillWarriorMomentumNode = null;
     game.uiRects.skillWarriorRageNode = null;
+    game.uiRects.skillWarriorExecuteNode = null;
     game.uiRects.statsButton = null;
     game.uiRects.statsClose = null;
 
