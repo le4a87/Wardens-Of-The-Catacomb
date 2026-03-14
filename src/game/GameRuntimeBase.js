@@ -72,7 +72,8 @@ export class GameRuntimeBase {
       piercingStrike: { key: "piercingStrike", label: "Piercing Strike", points: 0, maxPoints: 8 },
       multiarrow: { key: "multiarrow", label: "Multiarrow", points: 0, maxPoints: 8 },
       warriorMomentum: { key: "warriorMomentum", label: "Frenzy", points: 0, maxPoints: 8 },
-      warriorRage: { key: "warriorRage", label: "Rage", points: 0, maxPoints: 8 }
+      warriorRage: { key: "warriorRage", label: "Rage", points: 0, maxPoints: 8 },
+      warriorExecute: { key: "warriorExecute", label: "Execute", points: 0, maxPoints: 8 }
     };
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
@@ -477,6 +478,26 @@ export class GameRuntimeBase {
     return Math.floor(Math.max(0, safe) * 0.5);
   }
 
+  getWarriorExecuteChance(points = this.skills.warriorExecute.points) {
+    if (this.classSpec.usesRanged) return 0;
+    const p = Number.isFinite(points) ? Math.max(0, points) : 0;
+    if (p <= 0) return 0;
+    const maxPoints = Number.isFinite(this.skills?.warriorExecute?.maxPoints) ? this.skills.warriorExecute.maxPoints : 8;
+    const span = Math.max(1, maxPoints - 1);
+    const norm = span > 0 ? Math.log1p(1.2 * (p - 1)) / Math.log1p(1.2 * span) : 1;
+    return 0.10 + 0.20 * Math.max(0, Math.min(1, norm));
+  }
+
+  getWarriorExecuteThreshold(points = this.skills.warriorExecute.points) {
+    if (this.classSpec.usesRanged) return 0;
+    const p = Number.isFinite(points) ? Math.max(0, points) : 0;
+    if (p <= 0) return 0;
+    const maxPoints = Number.isFinite(this.skills?.warriorExecute?.maxPoints) ? this.skills.warriorExecute.maxPoints : 8;
+    const span = Math.max(1, maxPoints - 1);
+    const norm = span > 0 ? Math.log1p(1.2 * (p - 1)) / Math.log1p(1.2 * span) : 1;
+    return 0.05 + 0.15 * Math.max(0, Math.min(1, norm));
+  }
+
   isWarriorRageUnlocked() {
     return !this.classSpec.usesRanged && (this.skills?.warriorRage?.points || 0) > 0;
   }
@@ -503,10 +524,11 @@ export class GameRuntimeBase {
   isPlayerAtDoor() {
     if (!this.door.open) return false;
     const tileHalf = this.config.map.tile / 2;
-    const left = this.door.x - tileHalf;
-    const right = this.door.x + tileHalf;
-    const top = this.door.y - tileHalf;
-    const bottom = this.door.y + tileHalf;
+    const entryPadding = Math.max(10, tileHalf * 0.75);
+    const left = this.door.x - tileHalf - entryPadding;
+    const right = this.door.x + tileHalf + entryPadding;
+    const top = this.door.y - tileHalf - entryPadding;
+    const bottom = this.door.y + tileHalf + entryPadding;
     const px = this.player.x;
     const py = this.player.y;
     const pr = this.player.size * 0.5;
@@ -514,8 +536,8 @@ export class GameRuntimeBase {
     const closestY = Math.max(top, Math.min(py, bottom));
     const dx = px - closestX;
     const dy = py - closestY;
-    // Slight padding makes "touching the door" feel reliable.
-    return dx * dx + dy * dy <= (pr + 4) * (pr + 4);
+    // Use a generous overlap so walking into the open doorway reliably advances the floor.
+    return dx * dx + dy * dy <= (pr + 2) * (pr + 2);
   }
 
   spendSkillPoint(skillKey) {
@@ -526,7 +548,7 @@ export class GameRuntimeBase {
     if (!this.classSpec.usesRanged && (skillKey === "fireArrow" || skillKey === "piercingStrike" || skillKey === "multiarrow")) {
       return false;
     }
-    if (this.classSpec.usesRanged && (skillKey === "warriorMomentum" || skillKey === "warriorRage")) {
+    if (this.classSpec.usesRanged && (skillKey === "warriorMomentum" || skillKey === "warriorRage" || skillKey === "warriorExecute")) {
       return false;
     }
     skill.points += 1;
@@ -545,6 +567,9 @@ export class GameRuntimeBase {
     }
     if (skillKey === "warriorRage") {
       this.spawnFloatingText(this.player.x, this.player.y - 26, "Rage improved", "#ff8a8a", 0.85, 14);
+    }
+    if (skillKey === "warriorExecute") {
+      this.spawnFloatingText(this.player.x, this.player.y - 26, "Execute improved", "#ff6d6d", 0.85, 14);
     }
     return true;
   }

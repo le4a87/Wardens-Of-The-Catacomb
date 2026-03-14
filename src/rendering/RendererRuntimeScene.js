@@ -27,6 +27,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.skillMultiarrowNode = null;
     game.uiRects.skillWarriorMomentumNode = null;
     game.uiRects.skillWarriorRageNode = null;
+    game.uiRects.skillWarriorExecuteNode = null;
     game.uiRects.statsButton = null;
     game.uiRects.statsClose = null;
 
@@ -228,14 +229,16 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
         }
 
         if (tile === "D") {
-          const frameX = px + 5;
+          const frameX = px + 4;
           const frameY = py + 3;
-          const frameW = tileSize - 10;
+          const frameW = tileSize - 8;
           const frameH = tileSize - 6;
-          ctx.fillStyle = "#3b2b1d";
+          ctx.fillStyle = "#2a2f37";
           ctx.fillRect(frameX, frameY, frameW, frameH);
-          ctx.fillStyle = "#6b4a2e";
-          ctx.fillRect(frameX + 2, frameY + 2, frameW - 4, frameH - 4);
+          ctx.fillStyle = "#515b68";
+          ctx.fillRect(frameX + 1, frameY + 1, frameW - 2, frameH - 2);
+          ctx.fillStyle = "#171c23";
+          ctx.fillRect(frameX + 3, frameY + 3, frameW - 6, frameH - 6);
           if (game.door.open) {
             const glow = ctx.createRadialGradient(px + tileSize / 2, py + tileSize / 2, 2, px + tileSize / 2, py + tileSize / 2, tileSize * 0.72);
             glow.addColorStop(0, "rgba(132, 255, 188, 0.7)");
@@ -244,18 +247,37 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
             ctx.beginPath();
             ctx.arc(px + tileSize / 2, py + tileSize / 2, tileSize * 0.72, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = "#4f9f6f";
-            ctx.fillRect(frameX + 4, frameY + 4, frameW - 8, frameH - 8);
           } else {
-            ctx.fillStyle = "#8f5a39";
-            ctx.fillRect(frameX + 4, frameY + 4, frameW - 8, frameH - 8);
-            ctx.strokeStyle = "#b47a4c";
-            ctx.lineWidth = 1;
+            const latchX = px + tileSize * 0.5;
+            const latchY = py + tileSize * 0.58;
+            ctx.fillStyle = "#6c7683";
+            ctx.fillRect(latchX - 3, latchY - 6, 6, 10);
             ctx.beginPath();
-            ctx.moveTo(frameX + 7, frameY + 7);
-            ctx.lineTo(frameX + frameW - 7, frameY + frameH - 7);
-            ctx.moveTo(frameX + frameW - 7, frameY + 7);
-            ctx.lineTo(frameX + 7, frameY + frameH - 7);
+            ctx.arc(latchX, latchY - 6, 4, Math.PI, 0);
+            ctx.fill();
+            ctx.fillStyle = "#12161b";
+            ctx.beginPath();
+            ctx.arc(latchX, latchY - 2, 1.6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(latchX - 1, latchY - 2, 2, 5);
+          }
+
+          ctx.strokeStyle = game.door.open ? "#7fc69b" : "#8893a1";
+          ctx.lineWidth = 2;
+          const leftBar = frameX + 7;
+          const rightBar = frameX + frameW - 7;
+          for (let bx = leftBar; bx <= rightBar; bx += 6) {
+            ctx.beginPath();
+            ctx.moveTo(bx, frameY + 4);
+            ctx.lineTo(bx, frameY + frameH - 4);
+            ctx.stroke();
+          }
+          const topBar = frameY + 7;
+          const bottomBar = frameY + frameH - 7;
+          for (let by = topBar; by <= bottomBar; by += 6) {
+            ctx.beginPath();
+            ctx.moveTo(frameX + 4, by);
+            ctx.lineTo(frameX + frameW - 4, by);
             ctx.stroke();
           }
         }

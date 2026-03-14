@@ -458,7 +458,7 @@ export function stepGame(game, dt, controls = {}) {
     for (const enemy of game.enemies) affectsEntity(enemy);
   }
 
-  if (!game.door.open && game.hasKey && vecLength(game.player.x - game.door.x, game.player.y - game.door.y) < 28) {
+  if (!game.door.open && game.hasKey && vecLength(game.player.x - game.door.x, game.player.y - game.door.y) < game.config.map.tile * 1.1) {
     game.door.open = true;
     game.score += 100;
   }

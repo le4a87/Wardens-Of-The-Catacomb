@@ -106,6 +106,10 @@ export function handleNetworkUiActions(game, netClient, isController) {
       netClient.sendAction({ kind: "spendSkill", key: "warriorRage" });
       continue;
     }
+    if (hit(click.x, click.y, game.uiRects.skillWarriorExecuteNode)) {
+      netClient.sendAction({ kind: "spendSkill", key: "warriorExecute" });
+      continue;
+    }
     if (hit(click.x, click.y, game.uiRects.returnMenuButton)) {
       if (typeof game.onReturnToMenu === "function") game.onReturnToMenu();
     }
