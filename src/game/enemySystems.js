@@ -94,6 +94,277 @@ export function spawnMimic(game, x, y) {
   };
 }
 
+export function spawnRatArcher(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.ratArcherHpMin, game.config.enemy.ratArcherHpMax);
+  return {
+    type: "rat_archer",
+    x,
+    y,
+    size: 20,
+    speed: game.config.enemy.ratArcherSpeed,
+    hp,
+    maxHp: hp,
+    hpBarTimer: 0,
+    damageMin: game.config.enemy.ratArcherContactDamageMin,
+    damageMax: game.config.enemy.ratArcherContactDamageMax,
+    rangedDamageMin: game.config.enemy.ratArcherDamageMin,
+    rangedDamageMax: game.config.enemy.ratArcherDamageMax,
+    dirX: 1,
+    dirY: 0,
+    shotWindupTimer: 0,
+    shotIntervalTimer: 0,
+    burstCooldownTimer: 0,
+    dodgeCooldownTimer: 0,
+    dodgeTimer: 0,
+    dodgeVx: 0,
+    dodgeVy: 0,
+    shotsRemaining: game.config.enemy.ratArcherBurstShots,
+    coverTargetX: x,
+    coverTargetY: y,
+    repositionTimer: 0
+  };
+}
+
+export function spawnSkeletonWarrior(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.skeletonWarriorHpMin, game.config.enemy.skeletonWarriorHpMax);
+  return {
+    type: "skeleton_warrior",
+    x,
+    y,
+    size: 20,
+    speed: game.config.enemy.skeletonWarriorSpeed,
+    hp,
+    maxHp: hp,
+    hpBarTimer: 0,
+    damageMin: game.config.enemy.skeletonWarriorDamageMin,
+    damageMax: game.config.enemy.skeletonWarriorDamageMax,
+    attackCooldown: 0,
+    collapsed: false,
+    collapseTimer: 0,
+    reviveAtEnd: false
+  };
+}
+
+function isProjectileThreatening(enemy, projectile, radius) {
+  if (!enemy || !projectile) return false;
+  const vx = Number.isFinite(projectile.vx) ? projectile.vx : 0;
+  const vy = Number.isFinite(projectile.vy) ? projectile.vy : 0;
+  const speedSq = vx * vx + vy * vy;
+  if (speedSq <= 1) return false;
+  const dx = enemy.x - projectile.x;
+  const dy = enemy.y - projectile.y;
+  const t = (dx * vx + dy * vy) / speedSq;
+  if (t < 0 || t > 0.45) return false;
+  const closestX = projectile.x + vx * t;
+  const closestY = projectile.y + vy * t;
+  return vecLength(enemy.x - closestX, enemy.y - closestY) <= radius;
+}
+
+function segmentDistanceToPoint(x0, y0, x1, y1, px, py) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq <= 0.0001) return vecLength(px - x0, py - y0);
+  const t = Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / lenSq));
+  const cx = x0 + dx * t;
+  const cy = y0 + dy * t;
+  return vecLength(px - cx, py - cy);
+}
+
+function isCoveredFromPlayer(game, x, y, self = null) {
+  if (!hasLineOfSight(game, game.player.x, game.player.y, x, y)) return true;
+  for (const br of game.breakables || []) {
+    if ((br.hp || 0) <= 0) continue;
+    const radius = (Number.isFinite(br.size) ? br.size : 20) * 0.5;
+    if (segmentDistanceToPoint(game.player.x, game.player.y, x, y, br.x, br.y) <= radius) return true;
+  }
+  for (const enemy of game.enemies || []) {
+    if (!enemy || enemy === self || enemy.type === "rat_archer" && enemy === self || (enemy.hp || 0) <= 0) continue;
+    if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+    const radius = (Number.isFinite(enemy.size) ? enemy.size : 20) * 0.5;
+    if (segmentDistanceToPoint(game.player.x, game.player.y, x, y, enemy.x, enemy.y) <= radius) return true;
+  }
+  return false;
+}
+
+function findRatCoverTarget(game, enemy, minPlayerDist) {
+  const tile = game.config?.map?.tile || 32;
+  const radiusTiles = Math.max(2, Math.floor(game.config.enemy.ratArcherCoverSearchRadiusTiles || 6));
+  const originTx = Math.floor(enemy.x / tile);
+  const originTy = Math.floor(enemy.y / tile);
+  const candidates = [];
+  for (let oy = -radiusTiles; oy <= radiusTiles; oy++) {
+    for (let ox = -radiusTiles; ox <= radiusTiles; ox++) {
+      const tx = originTx + ox;
+      const ty = originTy + oy;
+      if (!game.isWalkableTile(tx, ty)) continue;
+      const x = tx * tile + tile * 0.5;
+      const y = ty * tile + tile * 0.5;
+      if (vecLength(game.player.x - x, game.player.y - y) < minPlayerDist) continue;
+      if (!isCoveredFromPlayer(game, x, y, enemy)) continue;
+      candidates.push({ x, y });
+    }
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+export function updateRatArcher(game, enemy, dt, speedScale) {
+  const tile = game.config?.map?.tile || 32;
+  const preferredRange = (game.config.enemy.ratArcherPreferredRangeTiles || 7) * tile;
+  const retreatRange = (game.config.enemy.ratArcherRetreatRangeTiles || 5) * tile;
+  const dodgeRadius = (game.config.enemy.ratArcherDodgeRadiusTiles || 2) * tile;
+  const toPlayerX = game.player.x - enemy.x;
+  const toPlayerY = game.player.y - enemy.y;
+  const playerDist = vecLength(toPlayerX, toPlayerY) || 1;
+  const seesPlayer = hasLineOfSight(game, enemy.x, enemy.y, game.player.x, game.player.y);
+  enemy.dirX = toPlayerX / playerDist;
+  enemy.dirY = toPlayerY / playerDist;
+  const prevWindupTimer = Number.isFinite(enemy.shotWindupTimer) ? enemy.shotWindupTimer : 0;
+  enemy.shotWindupTimer = Math.max(0, prevWindupTimer - dt);
+  enemy.shotIntervalTimer = Math.max(0, (enemy.shotIntervalTimer || 0) - dt);
+  enemy.burstCooldownTimer = Math.max(0, (enemy.burstCooldownTimer || 0) - dt);
+  enemy.repositionTimer = Math.max(0, (enemy.repositionTimer || 0) - dt);
+  enemy.dodgeCooldownTimer = Math.max(0, (enemy.dodgeCooldownTimer || 0) - dt);
+  enemy.dodgeTimer = Math.max(0, (enemy.dodgeTimer || 0) - dt);
+
+  if ((enemy.dodgeTimer || 0) > 0) {
+    game.moveWithCollision(enemy, (enemy.dodgeVx || 0) * dt, (enemy.dodgeVy || 0) * dt);
+    return;
+  }
+
+  for (const bullet of game.bullets) {
+    if (bullet.projectileType === "trapArrow" || bullet.projectileType === "ratArrow") continue;
+    if (!isProjectileThreatening(enemy, bullet, dodgeRadius)) continue;
+    if ((enemy.dodgeCooldownTimer || 0) > 0) break;
+    const sidestepChoices = [
+      { x: -(bullet.vy || 0), y: bullet.vx || 0 },
+      { x: bullet.vy || 0, y: -(bullet.vx || 0) }
+    ];
+    const dodgeDistance = (game.config.enemy.ratArcherDodgeDistanceTiles || 1.1) * tile;
+    const dodgeDuration = Math.max(0.04, game.config.enemy.ratArcherDodgeDuration || 0.12);
+    let dodged = false;
+    for (const choice of sidestepChoices) {
+      const sidestepLen = vecLength(choice.x, choice.y) || 1;
+      enemy.dodgeVx = (choice.x / sidestepLen) * (dodgeDistance / dodgeDuration);
+      enemy.dodgeVy = (choice.y / sidestepLen) * (dodgeDistance / dodgeDuration);
+      enemy.dodgeTimer = dodgeDuration;
+      dodged = true;
+      break;
+    }
+    if (!dodged) break;
+    enemy.dodgeCooldownTimer = game.config.enemy.ratArcherDodgeCooldown || 2.5;
+    enemy.coverTargetX = enemy.x;
+    enemy.coverTargetY = enemy.y;
+    return;
+  }
+
+  if (prevWindupTimer > 0) {
+    if (enemy.shotWindupTimer <= 0.0001) {
+      const count = Math.max(1, Math.floor(game.config.enemy.ratArcherSpreadCount || 3));
+      const spreadDeg = game.config.enemy.ratArcherSpreadDeg || 20;
+      const spreadRad = (spreadDeg * Math.PI) / 180;
+      const baseAngle = Math.atan2(enemy.dirY || 0, enemy.dirX || 1);
+      const speed = game.config.enemy.ratArcherProjectileSpeed || 360;
+      const damageMin = game.config.enemy.ratArcherDamageMin;
+      const damageMax = game.config.enemy.ratArcherDamageMax;
+      for (let i = 0; i < count; i++) {
+        const t = count <= 1 ? 0 : i / (count - 1);
+        const offset = count <= 1 ? 0 : (t - 0.5) * spreadRad;
+        const angle = baseAngle + offset;
+        game.bullets.push({
+          x: enemy.x + Math.cos(angle) * 9,
+          y: enemy.y + Math.sin(angle) * 9,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          angle,
+          life: game.config.enemy.ratArcherProjectileLife || 1.3,
+          size: 6,
+          projectileType: "ratArrow",
+          damageMin,
+          damageMax
+        });
+      }
+      enemy.shotWindupTimer = 0;
+      enemy.shotsRemaining = Math.max(0, (enemy.shotsRemaining || 0) - 1);
+      if (enemy.shotsRemaining <= 0) {
+        enemy.shotsRemaining = game.config.enemy.ratArcherBurstShots || 3;
+        enemy.burstCooldownTimer = game.config.enemy.ratArcherBurstCooldown || 5;
+      } else {
+        enemy.shotIntervalTimer = game.config.enemy.ratArcherShotInterval || 1.5;
+      }
+      const cover = findRatCoverTarget(game, enemy, retreatRange);
+      if (cover) {
+        enemy.coverTargetX = cover.x;
+        enemy.coverTargetY = cover.y;
+        enemy.repositionTimer = 1.2;
+      }
+      return;
+    }
+    return;
+  }
+
+  if (playerDist < retreatRange) {
+    game.moveWithCollision(enemy, (-toPlayerX / playerDist) * enemy.speed * speedScale * dt, (-toPlayerY / playerDist) * enemy.speed * speedScale * dt);
+    return;
+  }
+
+  if (enemy.repositionTimer > 0 || enemy.burstCooldownTimer > 0 || enemy.shotIntervalTimer > 0) {
+    const cx = Number.isFinite(enemy.coverTargetX) ? enemy.coverTargetX : enemy.x;
+    const cy = Number.isFinite(enemy.coverTargetY) ? enemy.coverTargetY : enemy.y;
+    const dx = cx - enemy.x;
+    const dy = cy - enemy.y;
+    const len = vecLength(dx, dy);
+    if (len > 6) {
+      game.moveWithCollision(enemy, (dx / len) * enemy.speed * speedScale * dt, (dy / len) * enemy.speed * speedScale * dt);
+      return;
+    }
+  }
+
+  if (playerDist > preferredRange || !seesPlayer) {
+    game.moveEnemyTowardPlayer(enemy, speedScale, dt);
+    return;
+  }
+
+  if (enemy.burstCooldownTimer <= 0 && enemy.shotIntervalTimer <= 0 && seesPlayer) {
+    enemy.shotWindupTimer = game.config.enemy.ratArcherWindup || 0.4;
+  }
+}
+
+export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
+  enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
+  if (enemy.collapsed) {
+    enemy.collapseTimer = Math.max(0, (enemy.collapseTimer || 0) - dt);
+    if (enemy.collapseTimer <= 0) {
+      if (enemy.reviveAtEnd) {
+        enemy.collapsed = false;
+        enemy.hp = 1;
+        enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+      } else {
+        enemy.hp = 0;
+      }
+    }
+    return;
+  }
+  const range = game.config.enemy.skeletonWarriorAttackRange || 42;
+  const dx = game.player.x - enemy.x;
+  const dy = game.player.y - enemy.y;
+  const dist = vecLength(dx, dy) || 1;
+  if (dist <= range && enemy.attackCooldown <= 0) {
+    enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+    if (game.player.hitCooldown <= 0) {
+      game.player.hitCooldown = 1.0;
+      const rawDamage = game.rollEnemyContactDamage(enemy);
+      const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+      const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
+      const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
+      game.applyPlayerDamage(damageTaken);
+    }
+    return;
+  }
+  game.moveEnemyTowardPlayer(enemy, speedScale, dt);
+}
+
 export function isGoldDrop(drop) {
   return drop.type === "gold" || drop.type === "gold_bag";
 }
@@ -247,7 +518,7 @@ export function updateMimic(game, enemy, dt, speedScale) {
 }
 
 export function xpFromEnemy(game, enemy) {
-  const baseXp = enemy.type === "armor" ? 24 : enemy.type === "mimic" ? 18 : enemy.type === "goblin" ? 12 + Math.floor(enemy.goldEaten * 0.6) : 6;
+  const baseXp = enemy.type === "armor" ? 24 : enemy.type === "mimic" ? 18 : enemy.type === "goblin" ? 12 + Math.floor(enemy.goldEaten * 0.6) : enemy.type === "rat_archer" ? 10 : enemy.type === "skeleton_warrior" ? 8 : 6;
   const level = Number.isFinite(game?.level) ? Math.max(1, game.level) : 1;
   const floor = Number.isFinite(game?.floor) ? Math.max(1, game.floor) : 1;
   const ratio = level / floor;

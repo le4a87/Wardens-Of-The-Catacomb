@@ -15,6 +15,8 @@ import { predictProjectileSpawn, prunePredictedProjectiles } from "./src/net/pro
 import { canRunPredictedCollision, collectInput, handleNetworkUiActions, predictFromInput, setSelectedClass, shouldSendNetworkInput, updateNetworkRole } from "./src/net/sessionInteraction.js";
 
 const canvas = document.getElementById("game");
+const layout = document.querySelector(".layout");
+const menuPanel = document.querySelector(".panel");
 const selector = document.getElementById("character-select");
 const classButtons = Array.from(document.querySelectorAll("[data-class-option]"));
 const startButton = document.getElementById("start-game");
@@ -27,6 +29,8 @@ const networkStatus = document.getElementById("network-status");
 const networkTakeControl = document.getElementById("network-take-control");
 const networkLeave = document.getElementById("network-leave");
 const music = new MusicController();
+const splashLogo = new Image();
+const SPLASH_FADE_MS = 1800;
 let selectedClass = "archer";
 let currentGame = null;
 let netClient = null;
@@ -66,10 +70,50 @@ let netLastSnapshotRecvAtMs = 0;
 let netSnapshotIntervalMeanMs = 33;
 let netSnapshotJitterMs = 0;
 let netLastSnapshotGapMs = 33;
+let splashActive = true;
+let splashDismissed = false;
+let splashRaf = 0;
+let splashStartedAt = 0;
+let splashReady = false;
+
+splashLogo.addEventListener("load", () => {
+  splashReady = true;
+});
+splashLogo.addEventListener("error", () => {
+  splashReady = false;
+});
+splashLogo.src = "./assets/images/logo.png";
+if (splashLogo.complete && splashLogo.naturalWidth > 0 && splashLogo.naturalHeight > 0) {
+  splashReady = true;
+}
+
+function syncIdleSoundState(game) {
+  if (splashActive) {
+    music.setIdleGameplayActive(false);
+    music.resetIdleTimer();
+    return;
+  }
+  const idleGameplayActive = !!(
+    game &&
+    !game.paused &&
+    !game.gameOver &&
+    !game.shopOpen &&
+    !game.skillTreeOpen &&
+    !game.statsPanelOpen
+  );
+  music.setIdleGameplayActive(idleGameplayActive);
+  if (!idleGameplayActive) music.resetIdleTimer();
+}
 
 function syncMusicForGame(game) {
+  if (splashActive) return;
+  syncIdleSoundState(game);
   if (!game) {
     music.playMenuMusic();
+    return;
+  }
+  if (game.gameOver) {
+    music.playDeathMusic();
     return;
   }
   if (game.networkEnabled) {
@@ -162,8 +206,119 @@ function cleanupCurrentGame() {
 function returnToMenu() {
   stopNetworkSession();
   cleanupCurrentGame();
+  if (layout) layout.classList.remove("is-splash");
+  if (menuPanel) menuPanel.hidden = false;
   if (selector) selector.hidden = false;
   music.playMenuMusic();
+}
+
+function clearSplashRender() {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawSplash(now) {
+  if (!canvas || !splashActive) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const elapsed = Math.max(0, now - splashStartedAt);
+  const fade = Math.max(0, Math.min(1, elapsed / SPLASH_FADE_MS));
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.clearRect(0, 0, width, height);
+
+  const bg = ctx.createLinearGradient(0, 0, width, height);
+  bg.addColorStop(0, "#090d14");
+  bg.addColorStop(0.52, "#111827");
+  bg.addColorStop(1, "#1b1410");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.globalAlpha = 0.18 * fade;
+  ctx.fillStyle = "#d2a15f";
+  ctx.beginPath();
+  ctx.arc(width * 0.5, height * 0.5, Math.min(width, height) * 0.32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  if (splashReady && splashLogo.naturalWidth > 0 && splashLogo.naturalHeight > 0) {
+    const maxWidth = width * 0.68;
+    const maxHeight = height * 0.42;
+    const scale = Math.min(maxWidth / splashLogo.naturalWidth, maxHeight / splashLogo.naturalHeight);
+    const drawWidth = splashLogo.naturalWidth * scale;
+    const drawHeight = splashLogo.naturalHeight * scale;
+    const drawX = (width - drawWidth) * 0.5;
+    const drawY = height * 0.23;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
+    ctx.shadowBlur = 28;
+    ctx.drawImage(splashLogo, drawX, drawY, drawWidth, drawHeight);
+    ctx.restore();
+  }
+
+  const promptAlpha = fade >= 0.92 ? 0.92 : fade * 0.65;
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.fillStyle = `rgba(244, 236, 222, ${0.82 * fade})`;
+  ctx.font = "600 18px Trebuchet MS, Segoe UI, sans-serif";
+  ctx.fillText("Wardens Of The Catacomb", width * 0.5, height * 0.74);
+  ctx.fillStyle = `rgba(216, 203, 182, ${promptAlpha})`;
+  ctx.font = "15px Trebuchet MS, Segoe UI, sans-serif";
+  ctx.fillText("Press any key to continue", width * 0.5, height * 0.82);
+  ctx.restore();
+
+  splashRaf = requestAnimationFrame(drawSplash);
+}
+
+function dismissSplash() {
+  if (!splashActive || splashDismissed) return;
+  splashDismissed = true;
+  splashActive = false;
+  window.removeEventListener("keydown", handleSplashKeydown);
+  if (layout) layout.classList.remove("is-splash");
+  if (splashRaf) {
+    cancelAnimationFrame(splashRaf);
+    splashRaf = 0;
+  }
+  clearSplashRender();
+  if (selector && !currentGame) {
+    if (menuPanel) menuPanel.hidden = false;
+    selector.hidden = false;
+    music.playMenuMusic();
+    return;
+  }
+  if (!selector && !startButton && classButtons.length === 0 && !currentGame) {
+    currentGame = new Game(canvas, {
+      classType: "archer",
+      onPauseChanged: (_paused, game) => syncMusicForGame(game),
+      onFloorChanged: (_floor, game) => syncMusicForGame(game),
+      onGameOverChanged: (_gameOver, game) => syncMusicForGame(game)
+    });
+    syncMusicForGame(currentGame);
+    currentGame.start();
+  }
+}
+
+function handleSplashKeydown(event) {
+  if (!splashActive) return;
+  if (!event || event.repeat) return;
+  dismissSplash();
+}
+
+function startSplashScreen() {
+  splashStartedAt = performance.now();
+  if (layout) layout.classList.add("is-splash");
+  if (menuPanel) menuPanel.hidden = true;
+  if (selector) selector.hidden = true;
+  if (networkSession) networkSession.hidden = true;
+  music.playMenuMusic({ fadeInMs: SPLASH_FADE_MS });
+  splashRaf = requestAnimationFrame(drawSplash);
+  window.addEventListener("keydown", handleSplashKeydown);
 }
 
 function isNetworkController() {
@@ -186,10 +341,13 @@ function applySnapshot(game, state, controller = false, ackSeq = 0) {
   });
   netPendingInputs = next.netPendingInputs;
   netLastAckSeq = next.netLastAckSeq;
+  if (game.gameOver && !game.deathTransition?.active && typeof game.triggerGameOver === "function") game.triggerGameOver();
   syncMusicForGame(game);
 }
 
 function startNetworkRenderLoop(game) {
+  let lastFrameAt = performance.now();
+
   const consumeSnapshotForRender = (targetServerTime, targetRecvTime) => {
     if (netSnapshotBuffer.length === 0) return null;
     // Keep buffer bounded and drop stale backlog to prevent catch-up bursts.
@@ -219,8 +377,10 @@ function startNetworkRenderLoop(game) {
     return chosen;
   };
 
-  const loop = () => {
+  const loop = (now) => {
     if (!currentGame || currentGame !== game) return;
+    const dt = Math.min((now - lastFrameAt) / 1000, 0.05);
+    lastFrameAt = now;
     handleNetworkUiActions(game, netClient, isNetworkController());
     const renderDelay = getRenderDelayMs();
     const targetRecvTime = performance.now() - renderDelay;
@@ -245,6 +405,7 @@ function startNetworkRenderLoop(game) {
         game.player.dirY = ay / alen;
       }
     }
+    if (typeof game.updateDeathTransition === "function") game.updateDeathTransition(dt);
     if (Array.isArray(game.map) && game.map.length > 0) game.revealAroundPlayer();
     prunePredictedProjectiles(netPredictedProjectiles);
     game.renderer.draw(game);
@@ -261,7 +422,8 @@ function startLocalGame() {
     classType: selectedClass,
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, game) => syncMusicForGame(game),
-    onFloorChanged: (_floor, game) => syncMusicForGame(game)
+    onFloorChanged: (_floor, game) => syncMusicForGame(game),
+    onGameOverChanged: (_gameOver, game) => syncMusicForGame(game)
   });
   syncMusicForGame(currentGame);
   currentGame.start();
@@ -281,7 +443,8 @@ function startNetworkGame() {
     classType: selectedClass,
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, nextGame) => syncMusicForGame(nextGame),
-    onFloorChanged: (_floor, nextGame) => syncMusicForGame(nextGame)
+    onFloorChanged: (_floor, nextGame) => syncMusicForGame(nextGame),
+    onGameOverChanged: (_gameOver, nextGame) => syncMusicForGame(nextGame)
   });
   game.networkEnabled = true;
   game.networkRole = "Connecting";
@@ -500,17 +663,14 @@ if (!canvas) {
   throw new Error("Game canvas not found.");
 }
 
-music.playMenuMusic();
+function monitorIdleSoundState() {
+  syncIdleSoundState(currentGame);
+  requestAnimationFrame(monitorIdleSoundState);
+}
 
-if (!selector || !startButton || classButtons.length === 0) {
-  currentGame = new Game(canvas, {
-    classType: "archer",
-    onPauseChanged: (_paused, game) => syncMusicForGame(game),
-    onFloorChanged: (_floor, game) => syncMusicForGame(game)
-  });
-  syncMusicForGame(currentGame);
-  currentGame.start();
-} else {
+requestAnimationFrame(monitorIdleSoundState);
+
+if (selector && startButton && classButtons.length > 0) {
   selectedClass = setSelectedClass("archer", classButtons);
   for (const button of classButtons) {
     button.addEventListener("click", () => {
@@ -526,3 +686,5 @@ if (!selector || !startButton || classButtons.length === 0) {
   }
   if (networkLeave) networkLeave.addEventListener("click", returnToMenu);
 }
+
+startSplashScreen();

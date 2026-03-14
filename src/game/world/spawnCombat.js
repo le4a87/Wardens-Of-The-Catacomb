@@ -3,7 +3,9 @@ import {
   spawnGhost as spawnGhostEntity,
   spawnTreasureGoblin as spawnTreasureGoblinEntity,
   spawnAnimatedArmor as spawnAnimatedArmorEntity,
-  spawnMimic as spawnMimicEntity
+  spawnMimic as spawnMimicEntity,
+  spawnRatArcher as spawnRatArcherEntity,
+  spawnSkeletonWarrior as spawnSkeletonWarriorEntity
 } from "../enemySystems.js";
 import { isWalkableTile } from "./navigationCollision.js";
 
@@ -62,8 +64,24 @@ export function spawnMimic(game, x, y) {
   return spawnMimicEntity(game, x, y);
 }
 
+export function spawnRatArcher(game, x, y) {
+  return spawnRatArcherEntity(game, x, y);
+}
+
+export function spawnSkeletonWarrior(game, x, y) {
+  return spawnSkeletonWarriorEntity(game, x, y);
+}
+
 export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
   if (!Number.isFinite(amount) || amount <= 0) return;
+  if (enemy?.type === "skeleton_warrior" && enemy.collapsed) {
+    if (damageType === "fire" || damageType === "melee") {
+      enemy.reviveAtEnd = false;
+      enemy.collapseTimer = 0;
+      enemy.hp = 0;
+    }
+    return;
+  }
   let adjusted = amount;
   if (enemy?.type === "mimic") {
     if (damageType === "arrow") adjusted *= game.config.enemy.mimicArrowResistance;
@@ -86,6 +104,18 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
   if (effective >= 1 || (enemy.damageTextTimer || 0) <= 0) {
     game.spawnFloatingText(enemy.x, enemy.y - enemy.size * 0.65, `-${Math.max(1, Math.round(effective))}`, "#e85c5c");
     enemy.damageTextTimer = 0.14;
+  }
+  if (enemy?.type === "skeleton_warrior" && enemy.hp <= 0) {
+    if (damageType === "fire") {
+      enemy.reviveAtEnd = false;
+      enemy.collapseTimer = 0;
+      enemy.hp = 0;
+      return;
+    }
+    enemy.collapsed = true;
+    enemy.collapseTimer = game.config.enemy.skeletonWarriorBonePileLife || 5;
+    enemy.reviveAtEnd = Math.random() < (game.config.enemy.skeletonWarriorReviveChance || 0.1);
+    enemy.hp = 1;
   }
 }
 

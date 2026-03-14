@@ -33,7 +33,8 @@ function serializeBullet(room, b, domain = "bullet", prefix = "b") {
     vy: b.vy,
     angle: b.angle,
     life: b.life,
-    size: b.size
+    size: b.size,
+    projectileType: typeof b.projectileType === "string" ? b.projectileType : "bullet"
   };
 }
 
@@ -44,9 +45,14 @@ function serializeEnemy(room, e) {
     x: e.x,
     y: e.y,
     size: e.size,
+    dirX: e.dirX,
+    dirY: e.dirY,
     hp: e.hp,
     maxHp: e.maxHp,
     hpBarTimer: e.hpBarTimer || 0,
+    shotWindupTimer: e.shotWindupTimer || 0,
+    collapsed: !!e.collapsed,
+    collapseTimer: e.collapseTimer || 0,
     goldEaten: e.goldEaten || 0,
     damageMin: e.damageMin,
     damageMax: e.damageMax
@@ -73,6 +79,19 @@ function serializeBreakable(room, b) {
     y: b.y,
     size: b.size,
     hp: b.hp
+  };
+}
+
+function serializeWallTrap(room, trap) {
+  return {
+    id: getStableId(room, "wallTrap", "wt", trap),
+    x: trap.x,
+    y: trap.y,
+    size: trap.size,
+    dirX: trap.dirX,
+    dirY: trap.dirY,
+    spotted: !!trap.spotted,
+    cooldown: trap.cooldown || 0
   };
 }
 
@@ -137,6 +156,7 @@ export function serializeState(room) {
   const activeEnemies = sim.enemies.filter((e) => isInsideBounds(e, activeBounds, 72));
   const activeDrops = sim.drops.filter((d) => isInsideBounds(d, activeBounds, 64));
   const activeBreakables = (sim.breakables || []).filter((b) => isInsideBounds(b, activeBounds, 72));
+  const activeWallTraps = (sim.wallTraps || []).filter((t) => isInsideBounds(t, activeBounds, 72));
   const activeBullets = sim.bullets.filter((b) => isInsideBounds(b, activeBounds, 160));
   const activeFireArrows = sim.fireArrows.filter((a) => isInsideBounds(a, activeBounds, 180));
   const activeFireZones = sim.fireZones.filter((z) => isInsideBounds(z, activeBounds, (Number.isFinite(z.radius) ? z.radius : 0) + 42));
@@ -151,6 +171,7 @@ export function serializeState(room) {
     enemies: activeEnemies.map((e) => serializeEnemy(room, e)),
     drops: activeDrops.map((d) => serializeDrop(room, d)),
     breakables: activeBreakables.map((b) => serializeBreakable(room, b)),
+    wallTraps: activeWallTraps.map((t) => serializeWallTrap(room, t)),
     bullets: activeBullets.map((b) => serializeBullet(room, b, "bullet", "b")),
     fireArrows: activeFireArrows.map((a) => serializeBullet(room, a, "fireArrow", "fa")),
     fireZones: activeFireZones.map((z) => ({ id: getStableId(room, "fireZone", "fz", z), x: z.x, y: z.y, radius: z.radius, life: z.life })),

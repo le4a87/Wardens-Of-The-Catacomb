@@ -7,7 +7,8 @@ import {
   updateNavigationField,
   getPathDirectionToPlayer,
   moveEnemyTowardPlayer,
-  moveWithCollision
+  moveWithCollision,
+  separateEnemyFromPlayer
 } from "./world/navigationCollision.js";
 import {
   placeArmorStands,
@@ -15,6 +16,8 @@ import {
   spawnTreasureGoblin,
   spawnAnimatedArmor,
   spawnMimic,
+  spawnRatArcher,
+  spawnSkeletonWarrior,
   applyEnemyDamage,
   randomEnemySpawnPoint
 } from "./world/spawnCombat.js";
@@ -70,6 +73,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
     moveWithCollision(this, entity, dx, dy);
   }
 
+  separateEnemyFromPlayer(enemy) {
+    separateEnemyFromPlayer(this, enemy);
+  }
+
   placeArmorStands() {
     placeArmorStands(this);
   }
@@ -88,6 +95,14 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   spawnMimic(x, y) {
     return spawnMimic(this, x, y);
+  }
+
+  spawnRatArcher(x, y) {
+    return spawnRatArcher(this, x, y);
+  }
+
+  spawnSkeletonWarrior(x, y) {
+    return spawnSkeletonWarrior(this, x, y);
   }
 
   applyEnemyDamage(enemy, amount, damageType = "physical") {
