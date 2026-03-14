@@ -1,6 +1,8 @@
 import { vecLength, directionIndexFromVector } from "../utils.js";
 
 export function stepGame(game, dt, controls = {}) {
+  if (typeof game.updateDeathTransition === "function" && game.updateDeathTransition(dt)) return;
+
   const segmentRectHit = (x0, y0, x1, y1, left, top, right, bottom) => {
     // Liang-Barsky clipping against AABB.
     const dx = x1 - x0;
@@ -135,6 +137,9 @@ export function stepGame(game, dt, controls = {}) {
   for (const br of game.breakables || []) {
     if (!isActive(br, 64)) continue;
     activeBreakables.push(br);
+  }
+  for (const enemy of activeEnemies) {
+    if (typeof game.separateEnemyFromPlayer === "function") game.separateEnemyFromPlayer(enemy);
   }
 
   for (const b of game.bullets) {
@@ -315,8 +320,11 @@ export function stepGame(game, dt, controls = {}) {
   }
 
   if (game.player.hitCooldown <= 0) {
+    const playerEnemyRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
+      ? game.getPlayerEnemyCollisionRadius()
+      : (game.player.size * 0.5);
     for (const enemy of activeEnemies) {
-      if (vecLength(game.player.x - enemy.x, game.player.y - enemy.y) < (enemy.size + game.player.size) * 0.5) {
+      if (vecLength(game.player.x - enemy.x, game.player.y - enemy.y) <= enemy.size * 0.5 + playerEnemyRadius) {
         game.player.hitCooldown = 1.0;
         const rawDamage = game.rollEnemyContactDamage(enemy);
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
