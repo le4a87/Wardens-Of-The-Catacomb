@@ -29,6 +29,22 @@ export function stepGame(game, dt, controls = {}) {
       t0 <= t1
     );
   };
+  const beamHasLineOfSight = (x0, y0, x1, y1) => {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const dist = vecLength(dx, dy);
+    if (dist <= 1) return true;
+    const tile = game.config?.map?.tile || 32;
+    const step = Math.max(8, tile * 0.35);
+    const steps = Math.max(1, Math.ceil(dist / step));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const sx = x0 + dx * t;
+      const sy = y0 + dy * t;
+      if (game.isWallAt(sx, sy, false)) return false;
+    }
+    return true;
+  };
   if (controls.processUi !== false && typeof game.handleUiClicks === "function") {
     game.handleUiClicks();
   }
@@ -40,6 +56,7 @@ export function stepGame(game, dt, controls = {}) {
   game.player.speed = game.getPlayerMoveSpeed();
   game.player.fireCooldown = Math.max(0, game.player.fireCooldown - dt);
   game.player.fireArrowCooldown = Math.max(0, game.player.fireArrowCooldown - dt);
+  game.player.deathBoltCooldown = Math.max(0, (Number.isFinite(game.player.deathBoltCooldown) ? game.player.deathBoltCooldown : 0) - dt);
   game.player.hitCooldown = Math.max(0, game.player.hitCooldown - dt);
   game.player.hpBarTimer = Math.max(0, game.player.hpBarTimer - dt);
   game.warriorMomentumTimer = Math.max(0, game.warriorMomentumTimer - dt);
@@ -129,8 +146,141 @@ export function stepGame(game, dt, controls = {}) {
     }
   }
 
-  if (controls.firePrimaryQueued) game.fire(game.player.dirX, game.player.dirY);
-  if (controls.firePrimaryHeld && controls.hasAim) game.fire(game.player.dirX, game.player.dirY);
+  if (game.isNecromancerClass && game.isNecromancerClass()) {
+    const beam = game.necromancerBeam || (game.necromancerBeam = {
+      active: false,
+      targetId: null,
+      targetX: 0,
+      targetY: 0,
+      progress: 0,
+      healTickTimer: 0,
+      targetEnemy: null
+    });
+    const beamRange = (game.config.necromancer?.controlRangeTiles || 10) * game.config.map.tile;
+    const beamWidth = Number.isFinite(game.config.necromancer?.beamWidth) ? game.config.necromancer.beamWidth : 11;
+    const held = !!controls.firePrimaryHeld && !!controls.hasAim;
+    if (!beam.failLatch) beam.failLatch = false;
+    beam.active = held;
+    beam.targetId = null;
+    beam.targetEnemy = null;
+    beam.targetX = controls.aimX;
+    beam.targetY = controls.aimY;
+    if (held) {
+      const aimLen = vecLength(controls.aimX - game.player.x, controls.aimY - game.player.y);
+      const hitBreakable = (() => {
+        let best = null;
+        let bestDist = Number.POSITIVE_INFINITY;
+        for (const br of game.breakables || []) {
+          if (!br || (br.hp || 0) <= 0) continue;
+          const beamDist = vecLength(br.x - game.player.x, br.y - game.player.y);
+          if (beamDist > beamRange) continue;
+          if (!beamHasLineOfSight(game.player.x, game.player.y, br.x, br.y)) continue;
+          const lineDist = Math.abs((controls.aimY - game.player.y) * br.x - (controls.aimX - game.player.x) * br.y + controls.aimX * game.player.y - controls.aimY * game.player.x) /
+            Math.max(1, aimLen);
+          if (lineDist > beamWidth + (br.size || 20) * 0.35) continue;
+          const distToAim = vecLength(br.x - controls.aimX, br.y - controls.aimY);
+          if (distToAim < bestDist) {
+            best = br;
+            bestDist = distToAim;
+          }
+        }
+        return best;
+      })();
+      if (hitBreakable) {
+        beam.targetX = hitBreakable.x;
+        beam.targetY = hitBreakable.y;
+        beam.progress = 0;
+        beam.healTickTimer = 0;
+        hitBreakable.hp = 0;
+        beam.failLatch = false;
+      }
+      const invalidTarget = (() => {
+        let best = null;
+        let bestDist = Number.POSITIVE_INFINITY;
+        for (const enemy of game.enemies) {
+          if (!enemy || (enemy.hp || 0) <= 0) continue;
+          if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+          const beamDist = vecLength(enemy.x - game.player.x, enemy.y - game.player.y);
+          if (beamDist > beamRange) continue;
+          if (!beamHasLineOfSight(game.player.x, game.player.y, enemy.x, enemy.y)) continue;
+          const lineDist = Math.abs((controls.aimY - game.player.y) * enemy.x - (controls.aimX - game.player.x) * enemy.y + controls.aimX * game.player.y - controls.aimY * game.player.x) /
+            Math.max(1, aimLen);
+          if (lineDist > beamWidth) continue;
+          const distToAim = vecLength(enemy.x - controls.aimX, enemy.y - controls.aimY);
+          if (distToAim < bestDist) {
+            best = enemy;
+            bestDist = distToAim;
+          }
+        }
+        return best;
+      })();
+      if (!hitBreakable && invalidTarget && (!game.isUndeadEnemy(invalidTarget) || (!game.isControlledUndead(invalidTarget) && !game.canControlMoreUndead()))) {
+        beam.active = false;
+        beam.progress = 0;
+        beam.healTickTimer = 0;
+        if (!beam.failLatch) {
+          game.spawnFloatingText(controls.aimX, controls.aimY - 10, "Fail!", "#ef5b5b", 0.7, 15);
+          beam.failLatch = true;
+        }
+      } else {
+        beam.failLatch = false;
+      }
+    } else {
+      beam.failLatch = false;
+    }
+    if (beam.active) {
+      let bestTarget = null;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (const enemy of game.enemies) {
+        if (!game.isUndeadEnemy(enemy) || (enemy.hp || 0) <= 0) continue;
+        if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+        const beamDist = vecLength(enemy.x - game.player.x, enemy.y - game.player.y);
+        if (beamDist > beamRange) continue;
+        if (!beamHasLineOfSight(game.player.x, game.player.y, enemy.x, enemy.y)) continue;
+        const lineDist = Math.abs((controls.aimY - game.player.y) * enemy.x - (controls.aimX - game.player.x) * enemy.y + controls.aimX * game.player.y - controls.aimY * game.player.x) /
+          Math.max(1, vecLength(controls.aimX - game.player.x, controls.aimY - game.player.y));
+        if (lineDist > beamWidth) continue;
+        const distToAim = vecLength(enemy.x - controls.aimX, enemy.y - controls.aimY);
+        if (distToAim < bestDist) {
+          bestDist = distToAim;
+          bestTarget = enemy;
+        }
+      }
+      if (bestTarget) {
+        beam.targetId = bestTarget.id || null;
+        beam.targetEnemy = bestTarget;
+        beam.targetX = bestTarget.x;
+        beam.targetY = bestTarget.y;
+        if (game.isControlledUndead(bestTarget)) {
+          beam.progress = 0;
+          beam.healTickTimer = (beam.healTickTimer || 0) + dt;
+          const healPeriod = game.config.necromancer?.healTickSeconds || 0.2;
+          while (beam.healTickTimer >= healPeriod) {
+            beam.healTickTimer -= healPeriod;
+            game.healControlledUndead(bestTarget, game.getNecroticBeamHealAmount());
+          }
+        } else {
+          beam.healTickTimer = 0;
+          beam.progress += dt;
+          if (beam.progress >= game.getNecromancerCharmDuration()) {
+            if (game.markUndeadAsControlled(bestTarget)) {
+              beam.progress = 0;
+              game.spawnFloatingText(bestTarget.x, bestTarget.y - bestTarget.size * 0.7, "Charmed", "#8eb8ff", 0.9, 14);
+            }
+          }
+        }
+      } else {
+        beam.progress = 0;
+        beam.healTickTimer = 0;
+      }
+    } else {
+      beam.progress = 0;
+      beam.healTickTimer = 0;
+    }
+  } else {
+    if (controls.firePrimaryQueued) game.fire(game.player.dirX, game.player.dirY);
+    if (controls.firePrimaryHeld && controls.hasAim) game.fire(game.player.dirX, game.player.dirY);
+  }
   if (controls.fireAltQueued) game.fireFireArrow(game.player.dirX, game.player.dirY);
 
   const activeBounds = game.getActiveBounds ? game.getActiveBounds(8) : null;
@@ -206,6 +356,7 @@ export function stepGame(game, dt, controls = {}) {
     enemy.lastY = enemy.y;
     enemy.hpBarTimer = Math.max(0, (enemy.hpBarTimer || 0) - dt);
     enemy.damageTextTimer = Math.max(0, (enemy.damageTextTimer || 0) - dt);
+    enemy.damageBuffTimer = Math.max(0, (enemy.damageBuffTimer || 0) - dt);
     if (!isActive(enemy, 72)) continue;
     activeEnemies.push(enemy);
     if (enemy.type === "goblin") game.updateGoblin(enemy, dt, enemySpeedScale);
@@ -213,6 +364,7 @@ export function stepGame(game, dt, controls = {}) {
     else if (enemy.type === "rat_archer") game.updateRatArcher(enemy, dt, enemySpeedScale);
     else if (enemy.type === "skeleton_warrior") game.updateSkeletonWarrior(enemy, dt, enemySpeedScale);
     else if (enemy.type === "necromancer") game.updateNecromancer(enemy, dt, enemySpeedScale);
+    else if (typeof game.updateGenericEnemy === "function") game.updateGenericEnemy(enemy, dt, enemySpeedScale);
     else game.moveEnemyTowardPlayer(enemy, enemySpeedScale, dt);
   }
   for (const br of game.breakables || []) {
@@ -220,6 +372,7 @@ export function stepGame(game, dt, controls = {}) {
     activeBreakables.push(br);
   }
   for (const enemy of activeEnemies) {
+    if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
     if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
     if (typeof game.separateEnemyFromPlayer === "function") game.separateEnemyFromPlayer(enemy);
   }
@@ -270,6 +423,12 @@ export function stepGame(game, dt, controls = {}) {
   for (const z of game.fireZones) z.life -= dt;
   for (const s of game.meleeSwings) s.life -= dt;
 
+  for (const bullet of game.bullets) {
+    if (bullet.projectileType === "deathBolt" && bullet.life > 0 && game.isWallAt(bullet.x, bullet.y, false)) {
+      game.triggerDeathBoltExplosion(bullet.x, bullet.y);
+      bullet.life = 0;
+    }
+  }
   game.bullets = game.bullets.filter((b) => !game.isWallAt(b.x, b.y, false) && b.life > 0);
   for (const arrow of game.fireArrows) {
     if (arrow.life <= 0 || game.isWallAt(arrow.x, arrow.y, false)) {
@@ -285,12 +444,48 @@ export function stepGame(game, dt, controls = {}) {
   for (const b of game.bullets) {
     if (b.life <= 0) continue;
     if (b.projectileType === "ratArrow") {
+      let ratArrowHit = false;
+      for (const enemy of activeEnemies) {
+        if (!game.isEnemyFriendlyToPlayer || !game.isEnemyFriendlyToPlayer(enemy)) continue;
+        if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+        if (vecLength(b.x - enemy.x, b.y - enemy.y) <= (enemy.size + b.size) * 0.5) {
+          const rawDamage = game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
+          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), "arrow");
+          b.life = 0;
+          ratArrowHit = true;
+          break;
+        }
+      }
+      if (ratArrowHit) continue;
       if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerEnemyRadius + b.size * 0.5) {
         const rawDamage = game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
         const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
         const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
         game.applyPlayerDamage(damageTaken);
+        b.life = 0;
+      }
+      continue;
+    }
+    if (b.projectileType === "deathBolt") {
+      let hit = false;
+      for (const br of activeBreakables) {
+        if (vecLength(b.x - br.x, b.y - br.y) < (br.size + b.size) * 0.45) {
+          br.hp = 0;
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) {
+        for (const enemy of activeEnemies) {
+          if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      if (hit) {
+        game.triggerDeathBoltExplosion(b.x, b.y);
         b.life = 0;
       }
       continue;
@@ -330,6 +525,17 @@ export function stepGame(game, dt, controls = {}) {
     }
     if (!b.hitTargets) b.hitTargets = new Set();
     if (b.faction === "enemy") {
+      for (const enemy of activeEnemies) {
+        if (!game.isEnemyFriendlyToPlayer || !game.isEnemyFriendlyToPlayer(enemy)) continue;
+        if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+        if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
+          const rawDamage = Number.isFinite(b.damage) ? b.damage : game.config.enemy.necromancerProjectileDamage || 16;
+          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), b.damageType || "necrotic");
+          b.life = 0;
+          break;
+        }
+      }
+      if (b.life <= 0) continue;
       if (vecLength(b.x - game.player.x, b.y - game.player.y) < (game.player.size + b.size) * 0.5) {
         const rawDamage = Number.isFinite(b.damage) ? b.damage : game.config.enemy.necromancerProjectileDamage || 16;
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
@@ -351,6 +557,7 @@ export function stepGame(game, dt, controls = {}) {
     }
     if (b.life <= 0) continue;
     for (const enemy of activeEnemies) {
+      if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
       if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
       if (b.hitTargets.has(enemy)) continue;
       if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
@@ -383,6 +590,7 @@ export function stepGame(game, dt, controls = {}) {
       continue;
     }
     for (const enemy of activeEnemies) {
+      if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
       if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
       if (vecLength(arrow.x - enemy.x, arrow.y - enemy.y) < (enemy.size + arrow.size) * 0.5) {
         if (skeletonIgnoresArrow(enemy)) continue;
@@ -399,10 +607,20 @@ export function stepGame(game, dt, controls = {}) {
 
   for (const zone of game.fireZones) {
     if (!isActive(zone, zone.radius || 0)) continue;
+    if (zone.zoneType === "deathBolt") {
+      zone.pulseTimer = Math.max(-4, (Number.isFinite(zone.pulseTimer) ? zone.pulseTimer : (game.config.deathBolt?.pulseInterval || 1)) - dt);
+      while (zone.life > 0 && zone.pulseTimer <= 0) {
+        if (typeof game.applyDeathBoltPulse === "function") game.applyDeathBoltPulse(zone.x, zone.y);
+        zone.pulseTimer += game.config.deathBolt?.pulseInterval || 1;
+      }
+      continue;
+    }
+    if (zone.zoneType && zone.zoneType !== "fire") continue;
     for (const br of activeBreakables) {
       if (vecLength(zone.x - br.x, zone.y - br.y) < zone.radius + br.size * 0.32) br.hp = 0;
     }
     for (const enemy of activeEnemies) {
+      if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
       if (enemy.type === "skeleton_warrior" && enemy.collapsed) {
         if (vecLength(zone.x - enemy.x, zone.y - enemy.y) < zone.radius + enemy.size * 0.35) {
           enemy.reviveAtEnd = false;
@@ -417,12 +635,72 @@ export function stepGame(game, dt, controls = {}) {
     }
   }
 
+  for (const enemy of activeEnemies) {
+    enemy.contactAttackCooldown = Math.max(0, (enemy.contactAttackCooldown || 0) - dt);
+  }
+  for (let i = 0; i < activeEnemies.length; i++) {
+    const a = activeEnemies[i];
+    if ((a.hp || 0) <= 0 || (a.type === "skeleton_warrior" && a.collapsed)) continue;
+    for (let j = i + 1; j < activeEnemies.length; j++) {
+      const b = activeEnemies[j];
+      if ((b.hp || 0) <= 0 || (b.type === "skeleton_warrior" && b.collapsed)) continue;
+      const aFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(a);
+      const bFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(b);
+      if (aFriendly === bFriendly) continue;
+      if ((aFriendly && game.necromancerBeam?.active && game.necromancerBeam.targetEnemy === b) || (bFriendly && game.necromancerBeam?.active && game.necromancerBeam.targetEnemy === a)) {
+        continue;
+      }
+      const minDist = (a.size || 20) * 0.5 + (b.size || 20) * 0.5 + 6;
+      if (vecLength(a.x - b.x, a.y - b.y) > minDist) continue;
+      const friendly = aFriendly ? a : b;
+      const hostile = aFriendly ? b : a;
+      if ((friendly.contactAttackCooldown || 0) <= 0) {
+        game.applyEnemyDamage(hostile, game.rollEnemyContactDamage(friendly) * game.getEnemyDamageScale(), "physical");
+        friendly.contactAttackCooldown = 0.55;
+      }
+      if ((hostile.contactAttackCooldown || 0) <= 0) {
+        game.applyEnemyDamage(friendly, game.rollEnemyContactDamage(hostile) * game.getEnemyDamageScale(), "physical");
+        hostile.contactAttackCooldown = 0.55;
+      }
+    }
+  }
+
+  const friendlyEnemies = activeEnemies.filter((enemy) => game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy) && (enemy.hp || 0) > 0);
+  for (let i = 0; i < friendlyEnemies.length; i++) {
+    const a = friendlyEnemies[i];
+    for (let j = i + 1; j < friendlyEnemies.length; j++) {
+      const b = friendlyEnemies[j];
+      const minDist = (a.size || 20) * 0.45 + (b.size || 20) * 0.45 + 8;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = vecLength(dx, dy) || 0.001;
+      if (dist >= minDist) continue;
+      const push = (minDist - dist) * 0.5;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      game.moveWithCollision(a, -nx * push, -ny * push);
+      game.moveWithCollision(b, nx * push, ny * push);
+    }
+  }
+
+  const maxPetDistance = game.config.map.tile * 30;
+  for (const enemy of game.enemies) {
+    if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) continue;
+    if ((enemy.hp || 0) <= 0) continue;
+    if (vecLength(enemy.x - game.player.x, enemy.y - game.player.y) > maxPetDistance) {
+      enemy.hp = 0;
+    }
+  }
+
   let removeBossSummons = false;
   game.enemies = game.enemies.filter((enemy) => {
     if (enemy.type === "skeleton_warrior" && enemy.collapsed && enemy.collapseTimer > 0) {
       return true;
     }
     if (enemy.hp <= 0) {
+      const wasFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy);
+      if (wasFriendly && typeof game.triggerExplodingDeath === "function") game.triggerExplodingDeath(enemy);
+      if (wasFriendly) return false;
       game.triggerWarriorMomentumOnKill();
       if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
       else if (enemy.type === "armor") game.score += 40;
@@ -505,6 +783,7 @@ export function stepGame(game, dt, controls = {}) {
 
   if (game.player.hitCooldown <= 0) {
     for (const enemy of activeEnemies) {
+      if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
       if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
       if (vecLength(game.player.x - enemy.x, game.player.y - enemy.y) <= enemy.size * 0.5 + playerEnemyRadius) {
         game.player.hitCooldown = 1.0;

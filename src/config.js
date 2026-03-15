@@ -21,6 +21,7 @@ export const CONFIG = {
       key: "fighter",
       label: "Castle Warrior",
       usesRanged: false,
+      combatStyle: "warrior",
       baseLifeLeech: 0.02,
       baseMaxHealth: 125,
       baseDefenseFlat: 2.5,
@@ -35,6 +36,24 @@ export const CONFIG = {
       passiveRegenPct: 0.02,
       levelHpGain: 10,
       levelWeaponDamagePct: 0.05
+    },
+    necromancer: {
+      key: "necromancer",
+      label: "Reformed Necromancer",
+      usesRanged: true,
+      combatStyle: "necromancer",
+      baseLifeLeech: 0,
+      baseMaxHealth: 88,
+      baseDefenseFlat: 0,
+      baseMoveSpeed: 148,
+      baseAttackCooldown: 0.08,
+      minAttackCooldown: 0.08,
+      primaryDamageMin: 0,
+      primaryDamageMax: 0,
+      projectileSpeed: 0,
+      passiveRegenPct: 0.01,
+      levelHpGain: 7,
+      levelWeaponDamagePct: 0.03
     }
   },
   map: {
@@ -241,6 +260,32 @@ export const CONFIG = {
     blastRadiusPerLevel: 2.6,
     lingerDuration: 1.0,
     lingerDps: 3.6
+  },
+  necromancer: {
+    controlRangeTiles: 10,
+    charmDuration: 2.0,
+    minCharmDuration: 0.5,
+    beamWidth: 11,
+    healTickSeconds: 0.2,
+    healAmount: 3,
+    healSelfCost: 1,
+    baseControlCap: 2,
+    followDistanceTiles: 2.2,
+    leashDistanceTiles: 4.5,
+    aggroRangeTiles: 6.5,
+    petBuffPerRank: 0.15
+  },
+  deathBolt: {
+    cooldown: 10,
+    hpCostPct: 0.05,
+    speed: 165,
+    life: 1.6,
+    impactRadiusTiles: 2,
+    visualLife: 5,
+    pulseInterval: 1
+  },
+  explodingDeath: {
+    radiusTiles: 3
   },
   warriorRage: {
     duration: 10,

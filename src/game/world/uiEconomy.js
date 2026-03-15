@@ -176,6 +176,18 @@ export function handleUiClicks(game) {
       game.spendSkillPoint("warriorExecute");
       continue;
     }
+    if (pointInRect(game, click.x, click.y, game.uiRects.skillUndeadMasteryNode)) {
+      game.spendSkillPoint("undeadMastery");
+      continue;
+    }
+    if (pointInRect(game, click.x, click.y, game.uiRects.skillDeathBoltNode)) {
+      game.spendSkillPoint("deathBolt");
+      continue;
+    }
+    if (pointInRect(game, click.x, click.y, game.uiRects.skillExplodingDeathNode)) {
+      game.spendSkillPoint("explodingDeath");
+      continue;
+    }
     const itemRects = game.uiRects.shopItems || [];
     for (const item of itemRects) {
       if (pointInRect(game, click.x, click.y, item.rect)) {

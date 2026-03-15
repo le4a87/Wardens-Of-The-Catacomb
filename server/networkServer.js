@@ -38,7 +38,7 @@ function clamp(v, lo, hi) {
 
 
 function normClassType(value) {
-  return value === "fighter" || value === "warrior" ? "fighter" : "archer";
+  return value === "fighter" || value === "warrior" ? "fighter" : value === "necromancer" ? "necromancer" : "archer";
 }
 
 function makeDefaultInput() {

@@ -5,8 +5,14 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
   const panelH = 118;
   const outpace = game.getEnemyOutpacingStatus();
   const goblinCount = game.enemies.filter((enemy) => enemy.type === "goblin").length;
-  const fireCdText = !game.classSpec.usesRanged
+  const fireCdText = game.isWarriorClass && game.isWarriorClass()
     ? "N/A"
+    : game.isNecromancerClass && game.isNecromancerClass()
+    ? game.player.deathBoltCooldown > 0
+      ? game.player.deathBoltCooldown.toFixed(1) + "s"
+      : game.skills.deathBolt.points > 0
+      ? "Ready"
+      : "Locked"
     : !game.isFireArrowUnlocked()
     ? "Locked"
     : game.player.fireArrowCooldown > 0
@@ -126,19 +132,26 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
   row("Class", game.classSpec.label);
   row(
     "Range/Reach",
-    game.classSpec.usesRanged
+    game.isWarriorClass && game.isWarriorClass()
+      ? `${(game.classSpec.meleeRange || 42).toFixed(0)} melee`
+      : game.isNecromancerClass && game.isNecromancerClass()
+      ? `${((game.config.necromancer?.controlRangeTiles || 10) * game.config.map.tile).toFixed(0)} beam`
+      : game.classSpec.usesRanged
       ? `${(game.getProjectileSpeed ? game.getProjectileSpeed() : game.config.player.projectileSpeed).toFixed(0)} arrow`
       : `${(game.classSpec.meleeRange || 42).toFixed(0)} melee`
   );
-  row("Fire Arrow", game.classSpec.usesRanged ? `${game.isFireArrowUnlocked() ? `Lv ${game.skills.fireArrow.points}` : "Locked"}` : "N/A");
-  row("Fire AoE Radius", game.classSpec.usesRanged ? `${game.isFireArrowUnlocked() ? game.getFireArrowBlastRadius().toFixed(1) : "-"}` : "N/A");
-  row("Pierce Chance", game.classSpec.usesRanged ? `${(game.getPiercingChance() * 100).toFixed(1)}%` : "N/A");
-  row("Multiarrow", game.classSpec.usesRanged ? `${game.getMultiarrowCount()} (${game.getMultiarrowSpreadDeg().toFixed(1)}deg)` : "N/A");
-  row("Frenzy Skill", game.classSpec.usesRanged ? "N/A" : `Lv ${game.skills.warriorMomentum.points} (+${(game.getWarriorMomentumMoveBonus() * 100).toFixed(0)}%)`);
-  row("Frenzy", game.classSpec.usesRanged ? "N/A" : game.warriorMomentumTimer > 0 ? `${game.warriorMomentumTimer.toFixed(1)}s` : "Idle");
-  row("Rage Skill", game.classSpec.usesRanged ? "N/A" : `Lv ${game.skills.warriorRage.points} (CD ${game.getWarriorRageCooldown().toFixed(1)}s)`);
-  row("Rage", game.classSpec.usesRanged ? "N/A" : game.warriorRageActiveTimer > 0 ? `Active ${game.warriorRageActiveTimer.toFixed(1)}s` : game.warriorRageCooldownTimer > 0 ? `Cooldown ${game.warriorRageCooldownTimer.toFixed(1)}s` : "Ready");
-  row("Rage Dmg Bonus", game.classSpec.usesRanged ? "N/A" : `+${game.getWarriorRageBaseDamageBonus().toFixed(2)} base`);
+  row("Fire Arrow", game.isArcherClass && game.isArcherClass() ? `${game.isFireArrowUnlocked() ? `Lv ${game.skills.fireArrow.points}` : "Locked"}` : "N/A");
+  row("Fire AoE Radius", game.isArcherClass && game.isArcherClass() ? `${game.isFireArrowUnlocked() ? game.getFireArrowBlastRadius().toFixed(1) : "-"}` : "N/A");
+  row("Pierce Chance", game.isArcherClass && game.isArcherClass() ? `${(game.getPiercingChance() * 100).toFixed(1)}%` : "N/A");
+  row("Multiarrow", game.isArcherClass && game.isArcherClass() ? `${game.getMultiarrowCount()} (${game.getMultiarrowSpreadDeg().toFixed(1)}deg)` : "N/A");
+  row("Frenzy Skill", game.isWarriorClass && game.isWarriorClass() ? `Lv ${game.skills.warriorMomentum.points} (+${(game.getWarriorMomentumMoveBonus() * 100).toFixed(0)}%)` : "N/A");
+  row("Frenzy", game.isWarriorClass && game.isWarriorClass() ? game.warriorMomentumTimer > 0 ? `${game.warriorMomentumTimer.toFixed(1)}s` : "Idle" : "N/A");
+  row("Rage Skill", game.isWarriorClass && game.isWarriorClass() ? `Lv ${game.skills.warriorRage.points} (CD ${game.getWarriorRageCooldown().toFixed(1)}s)` : "N/A");
+  row("Rage", game.isWarriorClass && game.isWarriorClass() ? game.warriorRageActiveTimer > 0 ? `Active ${game.warriorRageActiveTimer.toFixed(1)}s` : game.warriorRageCooldownTimer > 0 ? `Cooldown ${game.warriorRageCooldownTimer.toFixed(1)}s` : "Ready" : "N/A");
+  row("Rage Dmg Bonus", game.isWarriorClass && game.isWarriorClass() ? `+${game.getWarriorRageBaseDamageBonus().toFixed(2)} base` : "N/A");
+  row("Control Mastery", game.isNecromancerClass && game.isNecromancerClass() ? `Lv ${game.skills.undeadMastery.points} (${game.getControlledUndeadCount()}/${game.getNecromancerControlCap()}, ${game.getNecromancerCharmDuration().toFixed(2)}s)` : "N/A");
+  row("Death Bolt", game.isNecromancerClass && game.isNecromancerClass() ? `Lv ${game.skills.deathBolt.points} (${game.getDeathBoltBaseDamage().toFixed(1)} dmg, +${((game.getDeathBoltPetDamageMultiplier() - 1) * 100).toFixed(0)}% pet dmg)` : "N/A");
+  row("Augment Death", game.isNecromancerClass && game.isNecromancerClass() ? `Lv ${game.skills.explodingDeath.points} (+${((game.getControlledUndeadBoost() - 1) * 100).toFixed(0)}%, ${game.skills.explodingDeath.points >= 3 ? `${game.getDeathExplosionDamage().toFixed(1)} dmg` : "inactive"})` : "N/A");
   row("Key", `${game.hasKey ? "Yes" : "No"}`);
   row("Enemy Speed", `x${game.getEnemySpeedScale().toFixed(2)}`);
   row("Enemy Damage", `x${game.getEnemyDamageScale().toFixed(2)}`);
