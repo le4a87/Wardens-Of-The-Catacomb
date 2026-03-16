@@ -202,6 +202,67 @@ export const runtimeSceneDrawMethods = {
     }
   },
 
+  drawRatArcher(enemy, screenX, screenY) {
+    const ctx = this.ctx;
+    const half = enemy.size * 0.5;
+    const aimX = Number.isFinite(enemy.dirX) ? enemy.dirX : 1;
+    const aimY = Number.isFinite(enemy.dirY) ? enemy.dirY : 0;
+    const perpX = -aimY;
+    const perpY = aimX;
+    const windup = Math.max(0, Math.min(1, (enemy.shotWindupTimer || 0) / 0.4));
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.78, half * 0.95, half * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#6d4f2b";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.2, screenY + half * 0.38);
+    ctx.quadraticCurveTo(screenX + half * 0.95, screenY + half * 0.68, screenX + half * 1.25, screenY + half * 1.15);
+    ctx.stroke();
+
+    ctx.fillStyle = "#6f5132";
+    ctx.fillRect(screenX - half * 0.46, screenY - half * 0.04, half * 0.92, half * 0.88);
+
+    ctx.fillStyle = "#8a643f";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - half * 0.36, half * 0.48, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#4a2f1d";
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.62, screenY - half * 0.3);
+    ctx.lineTo(screenX, screenY - half * 0.92);
+    ctx.lineTo(screenX + half * 0.62, screenY - half * 0.3);
+    ctx.lineTo(screenX + half * 0.42, screenY + half * 0.28);
+    ctx.lineTo(screenX - half * 0.42, screenY + half * 0.28);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#e5b27d";
+    ctx.beginPath();
+    ctx.arc(screenX - half * 0.16, screenY - half * 0.34, half * 0.07, 0, Math.PI * 2);
+    ctx.arc(screenX + half * 0.16, screenY - half * 0.34, half * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+
+    const bowX = screenX + aimX * half * (0.72 + windup * 0.1);
+    const bowY = screenY - half * 0.08 + aimY * half * (0.72 + windup * 0.1);
+    ctx.strokeStyle = "#9e7f51";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(bowX + perpX * 6 - aimX * 2, bowY + perpY * 6 - aimY * 2);
+    ctx.quadraticCurveTo(bowX + aimX * (5 + windup * 4), bowY + aimY * (5 + windup * 4), bowX - perpX * 6 - aimX * 2, bowY - perpY * 6 - aimY * 2);
+    ctx.stroke();
+    ctx.strokeStyle = windup > 0.2 ? "#f2d4a7" : "#ceb992";
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(bowX + perpX * 6 - aimX * 2, bowY + perpY * 6 - aimY * 2);
+    ctx.lineTo(bowX - perpX * 6 - aimX * 2, bowY - perpY * 6 - aimY * 2);
+    ctx.stroke();
+  },
+
   drawEnemyHealthBar(enemy, screenX, screenY) {
     if ((enemy.hpBarTimer || 0) <= 0) return;
     if (typeof enemy.maxHp !== "number" || enemy.maxHp <= 0) return;

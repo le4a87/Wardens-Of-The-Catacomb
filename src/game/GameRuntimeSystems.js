@@ -5,6 +5,7 @@ import {
   applyGoblinGrowth as applyGoblinGrowthEntity,
   updateGoblin as updateGoblinEntity,
   updateMimic as updateMimicEntity,
+  updateRatArcher as updateRatArcherEntity,
   updateNecromancer as updateNecromancerEntity,
   xpFromEnemy as xpFromEnemyEntity,
   maybeSpawnDrop as maybeSpawnDropEntity,
@@ -58,6 +59,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   updateMimic(enemy, dt, speedScale) {
     updateMimicEntity(this, enemy, dt, speedScale);
+  }
+
+  updateRatArcher(enemy, dt, speedScale) {
+    updateRatArcherEntity(this, enemy, dt, speedScale);
   }
 
   updateNecromancer(enemy, dt, speedScale) {

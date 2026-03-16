@@ -202,7 +202,7 @@ class Room {
     for (let i = preBulletCount; i < this.sim.bullets.length; i++) {
       const bullet = this.sim.bullets[i];
       if (!bullet || typeof bullet !== "object") continue;
-      if (bullet.projectileType === "trapArrow") continue;
+      if (bullet.projectileType === "trapArrow" || bullet.projectileType === "ratArrow") continue;
       bullet.spawnSeq = taggedSeq;
       bullet.ownerId = ownerId;
     }

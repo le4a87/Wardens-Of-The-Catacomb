@@ -4,6 +4,7 @@ import {
   spawnTreasureGoblin as spawnTreasureGoblinEntity,
   spawnAnimatedArmor as spawnAnimatedArmorEntity,
   spawnMimic as spawnMimicEntity,
+  spawnRatArcher as spawnRatArcherEntity,
   spawnNecromancer as spawnNecromancerEntity,
   spawnSkeleton as spawnSkeletonEntity
 } from "../enemySystems.js";
@@ -62,6 +63,10 @@ export function spawnAnimatedArmor(game, x, y) {
 
 export function spawnMimic(game, x, y) {
   return spawnMimicEntity(game, x, y);
+}
+
+export function spawnRatArcher(game, x, y) {
+  return spawnRatArcherEntity(game, x, y);
 }
 
 export function spawnNecromancer(game, x, y) {

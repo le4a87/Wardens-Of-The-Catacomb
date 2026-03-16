@@ -49,9 +49,12 @@ function serializeEnemy(room, e) {
     x: e.x,
     y: e.y,
     size: e.size,
+    dirX: e.dirX,
+    dirY: e.dirY,
     hp: e.hp,
     maxHp: e.maxHp,
     hpBarTimer: e.hpBarTimer || 0,
+    shotWindupTimer: e.shotWindupTimer || 0,
     goldEaten: e.goldEaten || 0,
     damageMin: e.damageMin,
     damageMax: e.damageMax
