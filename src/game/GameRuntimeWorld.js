@@ -16,6 +16,7 @@ import {
   spawnTreasureGoblin,
   spawnAnimatedArmor,
   spawnMimic,
+  spawnRatArcher,
   spawnNecromancer,
   spawnSkeleton,
   applyEnemyDamage,
