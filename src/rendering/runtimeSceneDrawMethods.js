@@ -155,14 +155,18 @@ export const runtimeSceneDrawMethods = {
     }
   },
 
-  drawGhost(screenX, screenY, size) {
+  drawGhost(enemyOrScreenX, maybeScreenX, maybeScreenY, maybeSize) {
     const ctx = this.ctx;
+    const enemy = typeof enemyOrScreenX === "object" && enemyOrScreenX !== null ? enemyOrScreenX : null;
+    const screenX = enemy ? maybeScreenX : enemyOrScreenX;
+    const screenY = enemy ? maybeScreenY : maybeScreenX;
+    const size = enemy ? maybeSize : maybeScreenY;
     const half = size / 2;
     const headRadius = half * 0.58;
     const bodyTop = screenY - size * 0.12;
     const bodyBottom = screenY + half;
 
-    ctx.fillStyle = "#d8f2ff";
+    ctx.fillStyle = enemy?.isControlledUndead ? "#9eb8ff" : "#d8f2ff";
     ctx.beginPath();
     ctx.arc(screenX, screenY - size * 0.2, headRadius, Math.PI, 0);
     ctx.lineTo(screenX + half * 0.82, bodyBottom - 4);
@@ -174,7 +178,7 @@ export const runtimeSceneDrawMethods = {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "rgba(120, 208, 255, 0.45)";
+    ctx.fillStyle = enemy?.isControlledUndead ? "rgba(120, 144, 255, 0.45)" : "rgba(120, 208, 255, 0.45)";
     ctx.fillRect(screenX - half * 0.72, bodyTop, half * 1.44, half * 1.15);
   },
 

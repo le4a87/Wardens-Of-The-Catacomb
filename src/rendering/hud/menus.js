@@ -158,6 +158,12 @@ export function drawSkillTreeMenu(renderer, game, layout) {
   const nextExecuteChance = game.getWarriorExecuteChance(nextExecutePoints);
   const curExecuteThreshold = game.getWarriorExecuteThreshold(executeSkill.points);
   const nextExecuteThreshold = game.getWarriorExecuteThreshold(nextExecutePoints);
+  const undeadMasterySkill = game.skills.undeadMastery;
+  const deathBoltSkill = game.skills.deathBolt;
+  const explodingDeathSkill = game.skills.explodingDeath;
+  const canSpendUndeadMastery = game.skillPoints > 0 && undeadMasterySkill.points < undeadMasterySkill.maxPoints;
+  const canSpendDeathBolt = game.skillPoints > 0 && deathBoltSkill.points < deathBoltSkill.maxPoints;
+  const canSpendExplodingDeath = game.skillPoints > 0 && explodingDeathSkill.points < explodingDeathSkill.maxPoints;
 
   ctx.fillStyle = "rgba(4, 7, 11, 0.78)";
   ctx.fillRect(0, 0, layout.playW, renderer.canvas.height);
@@ -186,7 +192,7 @@ export function drawSkillTreeMenu(renderer, game, layout) {
   const contentTop = menuY + 50;
   const contentBottom = menuY + menuH - 8;
   const visibleH = contentBottom - contentTop;
-  const contentHeight = !game.classSpec.usesRanged ? 836 : 582;
+  const contentHeight = game.isNecromancerClass && game.isNecromancerClass() ? 676 : !game.classSpec.usesRanged ? 836 : 582;
   const scrollMax = Math.max(0, contentHeight - visibleH);
   const scroll = Math.max(0, Math.min(scrollMax, game.uiScroll?.skillTree || 0));
   game.uiScroll.skillTree = scroll;
@@ -198,6 +204,89 @@ export function drawSkillTreeMenu(renderer, game, layout) {
   ctx.beginPath();
   ctx.rect(menuX + 8, contentTop, menuW - 16, visibleH);
   ctx.clip();
+
+  if (game.isNecromancerClass && game.isNecromancerClass()) {
+    const masteryCard = { x: menuX + 22, y: sy(menuY + 58), w: menuW - 44, h: 196 };
+    ctx.fillStyle = "rgba(18, 28, 45, 0.95)";
+    ctx.fillRect(masteryCard.x, masteryCard.y, masteryCard.w, masteryCard.h);
+    ctx.strokeStyle = "rgba(124, 177, 255, 0.82)";
+    ctx.strokeRect(masteryCard.x, masteryCard.y, masteryCard.w, masteryCard.h);
+    ctx.fillStyle = "#eef4ff";
+    ctx.font = "bold 18px Trebuchet MS";
+    ctx.fillText("Control Mastery", masteryCard.x + 14, masteryCard.y + 28);
+    ctx.font = "14px Trebuchet MS";
+    ctx.fillStyle = "#cad8f7";
+    ctx.fillText(`Points: ${undeadMasterySkill.points}/${undeadMasterySkill.maxPoints}`, masteryCard.x + 14, masteryCard.y + 50);
+    ctx.fillText(`Control Cap: ${game.getNecromancerControlCap()}`, masteryCard.x + 220, masteryCard.y + 50);
+    ctx.fillStyle = "#d9e6ff";
+    ctx.fillText(`Charm Time: ${game.getNecromancerCharmDuration().toFixed(2)}s`, masteryCard.x + 14, masteryCard.y + 82);
+    ctx.fillText(`Controlled Undead: ${game.getControlledUndeadCount()}/${game.getNecromancerControlCap()}`, masteryCard.x + 14, masteryCard.y + 104);
+    ctx.fillStyle = "#adc1ea";
+    ctx.fillText("Adds +1 control cap per rank and smoothly lowers charm time to 0.5s.", masteryCard.x + 14, masteryCard.y + 132);
+    const masterySpendRect = { x: masteryCard.x + masteryCard.w - 142, y: masteryCard.y + masteryCard.h - 48, w: 124, h: 34 };
+    game.uiRects.skillUndeadMasteryNode = masterySpendRect;
+    ctx.fillStyle = canSpendUndeadMastery ? "rgba(96, 145, 206, 0.95)" : "rgba(80, 76, 90, 0.95)";
+    ctx.fillRect(masterySpendRect.x, masterySpendRect.y, masterySpendRect.w, masterySpendRect.h);
+    ctx.strokeStyle = "rgba(232, 226, 211, 0.58)";
+    ctx.strokeRect(masterySpendRect.x, masterySpendRect.y, masterySpendRect.w, masterySpendRect.h);
+    ctx.fillStyle = "#f3efe3";
+    ctx.font = "bold 14px Trebuchet MS";
+    ctx.fillText("Spend 1 SP", masterySpendRect.x + 20, masterySpendRect.y + 22);
+
+    const boltCard = { x: menuX + 22, y: masteryCard.y + masteryCard.h + 12, w: menuW - 44, h: 192 };
+    ctx.fillStyle = "rgba(18, 38, 28, 0.95)";
+    ctx.fillRect(boltCard.x, boltCard.y, boltCard.w, boltCard.h);
+    ctx.strokeStyle = "rgba(116, 214, 158, 0.82)";
+    ctx.strokeRect(boltCard.x, boltCard.y, boltCard.w, boltCard.h);
+    ctx.fillStyle = "#edf8ef";
+    ctx.font = "bold 18px Trebuchet MS";
+    ctx.fillText("Death Bolt", boltCard.x + 14, boltCard.y + 28);
+    ctx.font = "14px Trebuchet MS";
+    ctx.fillStyle = "#c8efd8";
+    ctx.fillText(`Points: ${deathBoltSkill.points}/${deathBoltSkill.maxPoints}`, boltCard.x + 14, boltCard.y + 50);
+    ctx.fillText(`Cooldown: ${(game.config.deathBolt?.cooldown || 10).toFixed(1)}s`, boltCard.x + 220, boltCard.y + 50);
+    ctx.fillStyle = "#dff8e9";
+    ctx.fillText(`Damage: ${game.getDeathBoltBaseDamage().toFixed(1)} | Heal: ${game.getDeathBoltHealAmount().toFixed(1)}`, boltCard.x + 14, boltCard.y + 80);
+    ctx.fillText(`Cost: ${((game.config.deathBolt?.hpCostPct || 0.05) * 100).toFixed(0)}% HP | Radius: ${game.getDeathBoltRadius().toFixed(0)}`, boltCard.x + 14, boltCard.y + 102);
+    ctx.fillStyle = "#bce6ca";
+    ctx.fillText("Blast pulses on impact and every second for 5s. Pet damage buff starts at +25% on rank 5.", boltCard.x + 14, boltCard.y + 130);
+    const boltSpendRect = { x: boltCard.x + boltCard.w - 142, y: boltCard.y + boltCard.h - 48, w: 124, h: 34 };
+    game.uiRects.skillDeathBoltNode = boltSpendRect;
+    ctx.fillStyle = canSpendDeathBolt ? "rgba(88, 164, 120, 0.95)" : "rgba(80, 76, 90, 0.95)";
+    ctx.fillRect(boltSpendRect.x, boltSpendRect.y, boltSpendRect.w, boltSpendRect.h);
+    ctx.strokeStyle = "rgba(232, 226, 211, 0.58)";
+    ctx.strokeRect(boltSpendRect.x, boltSpendRect.y, boltSpendRect.w, boltSpendRect.h);
+    ctx.fillStyle = "#f3efe3";
+    ctx.font = "bold 14px Trebuchet MS";
+    ctx.fillText("Spend 1 SP", boltSpendRect.x + 20, boltSpendRect.y + 22);
+
+    const explodeCard = { x: menuX + 22, y: boltCard.y + boltCard.h + 12, w: menuW - 44, h: 156 };
+    ctx.fillStyle = "rgba(22, 28, 38, 0.95)";
+    ctx.fillRect(explodeCard.x, explodeCard.y, explodeCard.w, explodeCard.h);
+    ctx.strokeStyle = "rgba(151, 210, 255, 0.8)";
+    ctx.strokeRect(explodeCard.x, explodeCard.y, explodeCard.w, explodeCard.h);
+    ctx.fillStyle = "#eef6ff";
+    ctx.font = "bold 18px Trebuchet MS";
+    ctx.fillText("Augment Death", explodeCard.x + 14, explodeCard.y + 28);
+    ctx.font = "14px Trebuchet MS";
+    ctx.fillStyle = "#d7e8fb";
+    ctx.fillText(`Points: ${explodingDeathSkill.points}/${explodingDeathSkill.maxPoints}`, explodeCard.x + 14, explodeCard.y + 50);
+    ctx.fillText(`Damage: ${game.getDeathExplosionDamage().toFixed(1)}`, explodeCard.x + 220, explodeCard.y + 50);
+    ctx.fillText(`Pet Boost: +${((game.getControlledUndeadBoost() - 1) * 100).toFixed(0)}%`, explodeCard.x + 14, explodeCard.y + 80);
+    ctx.fillStyle = "#bdd8ee";
+    ctx.fillText("Pets gain stat boosts from rank 1. At rank 3, they also explode on death.", explodeCard.x + 14, explodeCard.y + 106);
+    const explodeSpendRect = { x: explodeCard.x + explodeCard.w - 142, y: explodeCard.y + explodeCard.h - 48, w: 124, h: 34 };
+    game.uiRects.skillExplodingDeathNode = explodeSpendRect;
+    ctx.fillStyle = canSpendExplodingDeath ? "rgba(97, 150, 202, 0.95)" : "rgba(80, 76, 90, 0.95)";
+    ctx.fillRect(explodeSpendRect.x, explodeSpendRect.y, explodeSpendRect.w, explodeSpendRect.h);
+    ctx.strokeStyle = "rgba(232, 226, 211, 0.58)";
+    ctx.strokeRect(explodeSpendRect.x, explodeSpendRect.y, explodeSpendRect.w, explodeSpendRect.h);
+    ctx.fillStyle = "#f3efe3";
+    ctx.font = "bold 14px Trebuchet MS";
+    ctx.fillText("Spend 1 SP", explodeSpendRect.x + 20, explodeSpendRect.y + 22);
+    ctx.restore();
+    return;
+  }
 
   if (!game.classSpec.usesRanged) {
     const card = { x: menuX + 22, y: sy(menuY + 58), w: menuW - 44, h: 208 };

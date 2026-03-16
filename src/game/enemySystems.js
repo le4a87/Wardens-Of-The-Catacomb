@@ -17,19 +17,58 @@ function hasLineOfSight(game, x0, y0, x1, y1) {
   return true;
 }
 
+function isFriendlyToPlayer(game, enemy) {
+  return typeof game?.isEnemyFriendlyToPlayer === "function" ? game.isEnemyFriendlyToPlayer(enemy) : !!enemy?.isControlledUndead;
+}
+
+function isHostilePair(game, source, target) {
+  if (!source || !target || source === target) return false;
+  return isFriendlyToPlayer(game, source) !== isFriendlyToPlayer(game, target);
+}
+
+function isActiveCharmTarget(game, enemy) {
+  return !!enemy && !!game?.necromancerBeam?.active && game.necromancerBeam.targetEnemy === enemy;
+}
+
+function getPriorityTarget(game, enemy, maxRange = Infinity) {
+  if (!enemy) return game.player;
+  const sourceFriendly = isFriendlyToPlayer(game, enemy);
+  let best = sourceFriendly ? null : game.player;
+  let bestDist = sourceFriendly ? Number.POSITIVE_INFINITY : vecLength(game.player.x - enemy.x, game.player.y - enemy.y);
+  for (const other of game.enemies || []) {
+    if (!other || !isHostilePair(game, enemy, other) || (other.hp || 0) <= 0) continue;
+    if (sourceFriendly && other.type === "mimic" && other.dormant) continue;
+    if (sourceFriendly && isActiveCharmTarget(game, other)) continue;
+    if (other.type === "skeleton_warrior" && other.collapsed) continue;
+    const dist = vecLength(other.x - enemy.x, other.y - enemy.y);
+    if (dist > maxRange) continue;
+    if (dist < bestDist) {
+      best = other;
+      bestDist = dist;
+    }
+  }
+  return best || game.player;
+}
+
 export function spawnGhost(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.ghostHpMin, game.config.enemy.ghostHpMax);
+  const speed = 85 + Math.random() * 35;
   return {
     type: "ghost",
     x,
     y,
     size: 20,
-    speed: 85 + Math.random() * 35,
+    speed,
     hp,
     maxHp: hp,
+    baseMaxHp: hp,
+    baseSpeed: speed,
     hpBarTimer: 0,
     damageMin: game.config.enemy.ghostDamageMin,
-    damageMax: game.config.enemy.ghostDamageMax
+    damageMax: game.config.enemy.ghostDamageMax,
+    baseDamageMin: game.config.enemy.ghostDamageMin,
+    baseDamageMax: game.config.enemy.ghostDamageMax,
+    contactAttackCooldown: 0
   };
 }
 
@@ -135,10 +174,15 @@ export function spawnSkeletonWarrior(game, x, y) {
     speed: game.config.enemy.skeletonWarriorSpeed,
     hp,
     maxHp: hp,
+    baseMaxHp: hp,
+    baseSpeed: game.config.enemy.skeletonWarriorSpeed,
     hpBarTimer: 0,
     damageMin: game.config.enemy.skeletonWarriorDamageMin,
     damageMax: game.config.enemy.skeletonWarriorDamageMax,
+    baseDamageMin: game.config.enemy.skeletonWarriorDamageMin,
+    baseDamageMax: game.config.enemy.skeletonWarriorDamageMax,
     attackCooldown: 0,
+    contactAttackCooldown: 0,
     collapsed: false,
     collapseTimer: 0,
     reviveAtEnd: false
@@ -297,9 +341,13 @@ export function applyGoblinGrowth(game, goblin, goldAmount) {
 }
 
 export function updateGoblin(game, enemy, dt, speedScale) {
+  if (isFriendlyToPlayer(game, enemy) && typeof game.getPlayerMoveSpeed === "function") {
+    enemy.speed = Math.max(Number.isFinite(enemy.speed) ? enemy.speed : 0, game.getPlayerMoveSpeed() * 1.1);
+  }
   const isStrong = enemy.goldEaten >= game.config.enemy.goblinStrongGoldThreshold;
-  const toPlayerX = game.player.x - enemy.x;
-  const toPlayerY = game.player.y - enemy.y;
+  const threat = getPriorityTarget(game, enemy, game.config.enemy.goblinFearRadius * 1.3);
+  const toPlayerX = threat.x - enemy.x;
+  const toPlayerY = threat.y - enemy.y;
   const playerDist = vecLength(toPlayerX, toPlayerY) || 1;
   const awayPlayerX = -toPlayerX / playerDist;
   const awayPlayerY = -toPlayerY / playerDist;
@@ -348,15 +396,19 @@ export function updateGoblin(game, enemy, dt, speedScale) {
 }
 
 export function updateMimic(game, enemy, dt, speedScale) {
+  if (isFriendlyToPlayer(game, enemy) && typeof game.getPlayerMoveSpeed === "function") {
+    enemy.speed = Math.max(Number.isFinite(enemy.speed) ? enemy.speed : 0, game.getPlayerMoveSpeed() * 1.1);
+  }
   const tile = game.config?.map?.tile || 32;
   const wakeRadius = (game.config.enemy.mimicWakeRadiusTiles || 3) * tile;
   const tongueRange = (game.config.enemy.mimicTongueRangeTiles || 2) * tile;
   const tongueCooldownMax = game.config.enemy.mimicTongueCooldown || 1.35;
   const tongueWindup = game.config.enemy.mimicTongueWindup || 0.18;
-  const toPlayerX = game.player.x - enemy.x;
-  const toPlayerY = game.player.y - enemy.y;
+  const target = getPriorityTarget(game, enemy, wakeRadius * 2.2);
+  const toPlayerX = target.x - enemy.x;
+  const toPlayerY = target.y - enemy.y;
   const playerDist = vecLength(toPlayerX, toPlayerY) || 1;
-  const seesPlayer = hasLineOfSight(game, enemy.x, enemy.y, game.player.x, game.player.y);
+  const seesPlayer = hasLineOfSight(game, enemy.x, enemy.y, target.x, target.y);
 
   enemy.tongueCooldown = Math.max(0, (enemy.tongueCooldown || 0) - dt);
   enemy.tongueTimer = Math.max(0, (enemy.tongueTimer || 0) - dt);
@@ -396,13 +448,15 @@ export function updateMimic(game, enemy, dt, speedScale) {
     enemy.tongueCooldown = tongueCooldownMax;
     enemy.tongueTimer = tongueWindup;
     enemy.tongueLength = Math.min(tongueRange, playerDist);
-    if (game.player.hitCooldown <= 0) {
+    if (target === game.player && game.player.hitCooldown <= 0) {
       game.player.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);
       const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
       const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
       const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
       game.applyPlayerDamage(damageTaken);
+    } else if (target !== game.player) {
+      game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical");
     }
     return;
   }
@@ -417,14 +471,18 @@ export function updateMimic(game, enemy, dt, speedScale) {
 }
 
 export function updateRatArcher(game, enemy, dt, speedScale) {
+  if (isFriendlyToPlayer(game, enemy) && typeof game.getPlayerMoveSpeed === "function") {
+    enemy.speed = Math.max(Number.isFinite(enemy.speed) ? enemy.speed : 0, game.getPlayerMoveSpeed() * 1.1);
+  }
   const tile = game.config?.map?.tile || 32;
   const preferredRange = (game.config.enemy.ratArcherPreferredRangeTiles || 7) * tile;
   const retreatRange = (game.config.enemy.ratArcherRetreatRangeTiles || 5) * tile;
   const dodgeRadius = (game.config.enemy.ratArcherDodgeRadiusTiles || 2) * tile;
-  const toPlayerX = game.player.x - enemy.x;
-  const toPlayerY = game.player.y - enemy.y;
+  const target = getPriorityTarget(game, enemy, preferredRange * 1.8);
+  const toPlayerX = target.x - enemy.x;
+  const toPlayerY = target.y - enemy.y;
   const playerDist = vecLength(toPlayerX, toPlayerY) || 1;
-  const seesPlayer = hasLineOfSight(game, enemy.x, enemy.y, game.player.x, game.player.y);
+  const seesPlayer = hasLineOfSight(game, enemy.x, enemy.y, target.x, target.y);
   enemy.dirX = toPlayerX / playerDist;
   enemy.dirY = toPlayerY / playerDist;
   const prevWindupTimer = Number.isFinite(enemy.shotWindupTimer) ? enemy.shotWindupTimer : 0;
@@ -526,7 +584,8 @@ export function updateRatArcher(game, enemy, dt, speedScale) {
   }
 
   if (playerDist > preferredRange || !seesPlayer) {
-    game.moveEnemyTowardPlayer(enemy, speedScale, dt);
+    if (typeof game.moveEnemyTowardTarget === "function") game.moveEnemyTowardTarget(enemy, target, speedScale, dt, 6);
+    else game.moveEnemyTowardPlayer(enemy, speedScale, dt);
     return;
   }
 
@@ -536,6 +595,9 @@ export function updateRatArcher(game, enemy, dt, speedScale) {
 }
 
 export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
+  if (isFriendlyToPlayer(game, enemy) && typeof game.getPlayerMoveSpeed === "function") {
+    enemy.speed = Math.max(Number.isFinite(enemy.speed) ? enemy.speed : 0, game.getPlayerMoveSpeed() * 1.1);
+  }
   enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
   if (enemy.collapsed) {
     enemy.collapseTimer = Math.max(0, (enemy.collapseTimer || 0) - dt);
@@ -551,24 +613,28 @@ export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
     return;
   }
   const range = game.config.enemy.skeletonWarriorAttackRange || 42;
-  const dx = game.player.x - enemy.x;
-  const dy = game.player.y - enemy.y;
+  const target = getPriorityTarget(game, enemy, range * 4);
+  const dx = target.x - enemy.x;
+  const dy = target.y - enemy.y;
   const dist = vecLength(dx, dy) || 1;
   enemy.dirX = dx / dist;
   enemy.dirY = dy / dist;
   if (dist <= range && enemy.attackCooldown <= 0) {
     enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
-    if (game.player.hitCooldown <= 0) {
+    if (target === game.player && game.player.hitCooldown <= 0) {
       game.player.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);
       const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
       const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
       const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
       game.applyPlayerDamage(damageTaken);
+    } else if (target !== game.player) {
+      game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical");
     }
     return;
   }
-  game.moveEnemyTowardPlayer(enemy, speedScale, dt);
+  if (typeof game.moveEnemyTowardTarget === "function") game.moveEnemyTowardTarget(enemy, target, speedScale, dt, 6);
+  else game.moveEnemyTowardPlayer(enemy, speedScale, dt);
 }
 
 export function updateNecromancer(game, enemy, dt, speedScale) {

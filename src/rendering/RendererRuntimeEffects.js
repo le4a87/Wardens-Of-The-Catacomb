@@ -7,6 +7,29 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
       this.drawMeleeSwing(swing, cameraX, cameraY, game.player);
     }
 
+    if (game.necromancerBeam?.active) {
+      const beam = game.necromancerBeam;
+      const sx = game.player.x - cameraX;
+      const sy = game.player.y - cameraY - 8;
+      const tx = (Number.isFinite(beam.targetX) ? beam.targetX : game.player.x) - cameraX;
+      const ty = (Number.isFinite(beam.targetY) ? beam.targetY : game.player.y) - cameraY;
+      const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+      grad.addColorStop(0, "rgba(112, 255, 170, 0.2)");
+      grad.addColorStop(0.5, "rgba(121, 255, 141, 0.85)");
+      grad.addColorStop(1, "rgba(185, 255, 218, 0.35)");
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      if (beam.progress > 0) {
+        ctx.fillStyle = "rgba(158, 255, 186, 0.95)";
+        ctx.fillRect(tx - 12, ty - 20, 24 * Math.max(0, Math.min(1, beam.progress / (game.config.necromancer?.charmDuration || 2))), 4);
+      }
+    }
+
     for (const b of game.bullets) {
       if (b.kind === "necroticBolt") {
         this.drawNecroticBolt(b, cameraX, cameraY, game.time);
@@ -15,18 +38,30 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
       const x = b.x - cameraX;
       const y = b.y - cameraY;
       const isTrapArrow = b.projectileType === "trapArrow";
+      const isDeathBolt = b.projectileType === "deathBolt";
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(b.angle);
-      ctx.fillStyle = isTrapArrow ? "#d66e57" : "#d9c27f";
-      ctx.fillRect(-7, -1.3, 11, 2.6);
-      ctx.fillStyle = isTrapArrow ? "#ffb9a7" : "#e5e2dc";
-      ctx.beginPath();
-      ctx.moveTo(5, 0);
-      ctx.lineTo(1, -3);
-      ctx.lineTo(1, 3);
-      ctx.closePath();
-      ctx.fill();
+      if (isDeathBolt) {
+        const orb = ctx.createRadialGradient(0, 0, 1, 0, 0, 10);
+        orb.addColorStop(0, "rgba(203, 255, 205, 0.95)");
+        orb.addColorStop(0.45, "rgba(91, 230, 151, 0.9)");
+        orb.addColorStop(1, "rgba(31, 94, 58, 0.2)");
+        ctx.fillStyle = orb;
+        ctx.beginPath();
+        ctx.arc(0, 0, 9, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = isTrapArrow ? "#d66e57" : "#d9c27f";
+        ctx.fillRect(-7, -1.3, 11, 2.6);
+        ctx.fillStyle = isTrapArrow ? "#ffb9a7" : "#e5e2dc";
+        ctx.beginPath();
+        ctx.moveTo(5, 0);
+        ctx.lineTo(1, -3);
+        ctx.lineTo(1, 3);
+        ctx.closePath();
+        ctx.fill();
+      }
       if (isTrapArrow) {
         ctx.fillStyle = "#791d15";
         ctx.beginPath();
@@ -161,6 +196,18 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     const ctx = this.ctx;
     const x = zone.x - cameraX;
     const y = zone.y - cameraY;
+    if (zone.zoneType === "deathBolt" || zone.zoneType === "deathBurst") {
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / (this.config.deathBolt?.visualLife || 0.35)));
+      const outer = ctx.createRadialGradient(x, y, 2, x, y, zone.radius);
+      outer.addColorStop(0, `rgba(190, 255, 210, ${0.38 * lifeFrac})`);
+      outer.addColorStop(0.5, `rgba(93, 220, 154, ${0.26 * lifeFrac})`);
+      outer.addColorStop(1, `rgba(32, 76, 54, ${0.06 * lifeFrac})`);
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(x, y, zone.radius, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
     const lifeFrac = Math.max(0, Math.min(1, zone.life / this.config.fireArrow.lingerDuration));
     const pulse = 0.88 + Math.sin((time * 10 + zone.x * 0.02 + zone.y * 0.015)) * 0.09;
     const coreR = zone.radius * 0.42 * pulse;
@@ -250,7 +297,10 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     const drawY = playerScreenY - renderSize * 0.56;
     let tintColor = null;
     let tintAlpha = 0;
-    if (!game.classSpec?.usesRanged) {
+    if (game.isNecromancerClass && game.isNecromancerClass()) {
+      tintColor = "#a6a8ad";
+      tintAlpha = 0.5;
+    } else if (!game.classSpec?.usesRanged) {
       if ((game.warriorRageActiveTimer || 0) > 0) {
         tintColor = "#ff2a2a";
         tintAlpha = 0.5;
@@ -263,7 +313,9 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     const baseCd = game.getPlayerFireCooldown ? game.getPlayerFireCooldown() : this.config.player.baseFireCooldown;
     const firePulse = baseCd > 0 ? Math.max(0, Math.min(1, p.fireCooldown / baseCd)) : 0;
     const walkPhase = movingVisual ? p._renderAnimPhase * 0.1 : 0;
-    if (game.classSpec && !game.classSpec.usesRanged) {
+    if (game.isNecromancerClass && game.isNecromancerClass()) {
+      this.drawPlayerNecromancerRig(p, playerScreenX, playerScreenY, walkPhase, firePulse);
+    } else if (game.classSpec && !game.classSpec.usesRanged) {
       this.drawPlayerFighterRig(p, playerScreenX, playerScreenY, walkPhase, firePulse);
     } else {
       this.drawPlayerAimingRig(p, playerScreenX, playerScreenY, walkPhase, firePulse);
@@ -356,6 +408,48 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     ctx.moveTo(crossX + px * 4.2, crossY + py * 4.2);
     ctx.lineTo(crossX - px * 4.2, crossY - py * 4.2);
     ctx.stroke();
+  }
+
+  drawPlayerNecromancerRig(player, screenX, screenY, walkPhase = 0, firePulse = 0) {
+    const ctx = this.ctx;
+    const aimAngle = Math.atan2(player.dirY || 0, player.dirX || 1);
+    const ax = Math.cos(aimAngle);
+    const ay = Math.sin(aimAngle);
+    const px = -ay;
+    const py = ax;
+    const chestX = screenX;
+    const chestY = screenY - 8 + Math.sin(walkPhase * Math.PI * 2) * 0.75;
+    const recoil = Math.max(0, Math.min(1, firePulse));
+    const rearHandX = chestX + ax * (5 - recoil * 2) - px * 2;
+    const rearHandY = chestY + ay * (5 - recoil * 2) - py * 2;
+    const frontHandX = chestX + ax * 10 + px * 1.5;
+    const frontHandY = chestY + ay * 10 + py * 1.5;
+    const staffBaseX = chestX - ax * 10;
+    const staffBaseY = chestY - ay * 10;
+    const staffTipX = chestX + ax * 20;
+    const staffTipY = chestY + ay * 20;
+
+    ctx.strokeStyle = "#6f737b";
+    ctx.lineWidth = 3.8;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(chestX - px * 3.6, chestY - py * 3.6);
+    ctx.lineTo(rearHandX, rearHandY);
+    ctx.moveTo(chestX + px * 3.6, chestY + py * 3.6);
+    ctx.lineTo(frontHandX, frontHandY);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#111317";
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(staffBaseX, staffBaseY);
+    ctx.lineTo(staffTipX, staffTipY);
+    ctx.stroke();
+
+    ctx.fillStyle = "#23262b";
+    ctx.beginPath();
+    ctx.arc(staffTipX, staffTipY, 3.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   drawPlayerHealthBar(game, cameraX, cameraY) {

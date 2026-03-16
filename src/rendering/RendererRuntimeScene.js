@@ -29,6 +29,9 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.skillWarriorMomentumNode = null;
     game.uiRects.skillWarriorRageNode = null;
     game.uiRects.skillWarriorExecuteNode = null;
+    game.uiRects.skillUndeadMasteryNode = null;
+    game.uiRects.skillDeathBoltNode = null;
+    game.uiRects.skillExplodingDeathNode = null;
     game.uiRects.statsButton = null;
     game.uiRects.statsClose = null;
 
@@ -68,7 +71,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
         if (enemy.dormant) this.drawBreakable({ type: "box", size: enemy.size }, enemy.x - cameraX, enemy.y - cameraY);
         else this.drawMimic(enemy, enemy.x - cameraX, enemy.y - cameraY);
       } else {
-        this.drawGhost(enemy.x - cameraX, enemy.y - cameraY, enemy.size);
+        this.drawGhost(enemy, enemy.x - cameraX, enemy.y - cameraY, enemy.size);
       }
       this.drawEnemyHealthBar(enemy, enemy.x - cameraX, enemy.y - cameraY);
     }

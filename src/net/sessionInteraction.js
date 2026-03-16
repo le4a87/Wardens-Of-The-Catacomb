@@ -110,6 +110,18 @@ export function handleNetworkUiActions(game, netClient, isController) {
       netClient.sendAction({ kind: "spendSkill", key: "warriorExecute" });
       continue;
     }
+    if (hit(click.x, click.y, game.uiRects.skillUndeadMasteryNode)) {
+      netClient.sendAction({ kind: "spendSkill", key: "undeadMastery" });
+      continue;
+    }
+    if (hit(click.x, click.y, game.uiRects.skillDeathBoltNode)) {
+      netClient.sendAction({ kind: "spendSkill", key: "deathBolt" });
+      continue;
+    }
+    if (hit(click.x, click.y, game.uiRects.skillExplodingDeathNode)) {
+      netClient.sendAction({ kind: "spendSkill", key: "explodingDeath" });
+      continue;
+    }
     if (hit(click.x, click.y, game.uiRects.returnMenuButton)) {
       if (typeof game.onReturnToMenu === "function") game.onReturnToMenu();
     }
@@ -172,7 +184,7 @@ export function updateNetworkRole(game, isController, networkTakeControl) {
 }
 
 export function setSelectedClass(classType, classButtons) {
-  const selectedClass = classType === "fighter" || classType === "warrior" ? "fighter" : "archer";
+  const selectedClass = classType === "fighter" || classType === "warrior" ? "fighter" : classType === "necromancer" ? "necromancer" : "archer";
   for (const button of classButtons || []) {
     const option = button.dataset.classOption === "warrior" ? "fighter" : button.dataset.classOption;
     const isActive = option === selectedClass;

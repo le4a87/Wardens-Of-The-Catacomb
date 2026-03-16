@@ -99,14 +99,14 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
     enemy.dormant = false;
     enemy.revealed = true;
   }
-  const defense = game.getEnemyDefenseScale();
+  const defense = game.getEnemyDefenseScale() * (Number.isFinite(enemy?.controlledDefenseMultiplier) ? Math.max(0.1, enemy.controlledDefenseMultiplier) : 1);
   if (!Number.isFinite(defense) || defense <= 0) return;
   const effective = adjusted / defense;
   if (!Number.isFinite(effective) || effective <= 0) return;
   const enemyHpBefore = Number.isFinite(enemy.hp) ? Math.max(0, enemy.hp) : 0;
   const dealt = Math.min(effective, enemyHpBefore);
   enemy.hp -= effective;
-  const lifeLeech = game.getLifeLeechPercent();
+  const lifeLeech = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy) ? 0 : game.getLifeLeechPercent();
   if (lifeLeech > 0 && dealt > 0) {
     game.applyPlayerHealing(Math.max(1, Math.ceil(dealt * lifeLeech)));
   }
@@ -116,6 +116,13 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
     enemy.damageTextTimer = 0.14;
   }
   if (enemy?.type === "skeleton_warrior" && enemy.hp <= 0) {
+    if (game.isControlledUndead && game.isControlledUndead(enemy)) {
+      enemy.hp = 0;
+      enemy.collapsed = false;
+      enemy.collapseTimer = 0;
+      enemy.reviveAtEnd = false;
+      return;
+    }
     if (damageType === "fire") {
       enemy.reviveAtEnd = false;
       enemy.collapseTimer = 0;

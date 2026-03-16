@@ -92,7 +92,10 @@ export const runtimeBaseDifficultyMethods = {
       : Number.isFinite(enemy?.damage)
       ? enemy.damage
       : min;
-    return { min: Math.min(min, max), max: Math.max(min, max) };
+    const multiplier = enemy?.isControlledUndead && Number.isFinite(enemy?.damageBuffMultiplier) && (enemy?.damageBuffTimer || 0) > 0
+      ? Math.max(0.1, enemy.damageBuffMultiplier)
+      : 1;
+    return { min: Math.min(min, max) * multiplier, max: Math.max(min, max) * multiplier };
   },
 
   rollEnemyContactDamage(enemy) {
