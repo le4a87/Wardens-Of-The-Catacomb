@@ -33,6 +33,8 @@ export function stepGame(game, dt, controls = {}) {
   if (typeof game.isActive === "function" && !game.isActive()) return;
 
   game.time += dt;
+  if (typeof game.updateFloorBossTrigger === "function") game.updateFloorBossTrigger();
+  if (typeof game.syncFloorBossFeedback === "function") game.syncFloorBossFeedback();
   game.player.speed = game.getPlayerMoveSpeed();
   game.player.fireCooldown = Math.max(0, game.player.fireCooldown - dt);
   game.player.fireArrowCooldown = Math.max(0, game.player.fireArrowCooldown - dt);
@@ -89,6 +91,18 @@ export function stepGame(game, dt, controls = {}) {
   };
 
   const enemySpeedScale = game.getEnemySpeedScale();
+  if (typeof game.consumeFloorBossSpawnRequest === "function") {
+    const bossRequest = game.consumeFloorBossSpawnRequest();
+    if (bossRequest) {
+      const point = game.randomEnemySpawnPoint() || { x: game.door.x || game.player.x, y: game.door.y || game.player.y };
+      const boss = game.spawnNecromancer(point.x, point.y);
+      game.enemies.push(boss);
+      if (typeof game.markFloorBossActive === "function") game.markFloorBossActive();
+      if (typeof game.spawnFloatingText === "function") {
+        game.spawnFloatingText(game.player.x, game.player.y - 96, `Necromancer Stirs`, "#d49dff", 1.5, 18);
+      }
+    }
+  }
   game.enemySpawnTimer -= dt;
   let spawnIterations = 0;
   while (game.enemySpawnTimer <= 0 && game.enemies.length < game.config.enemy.maxCount && spawnIterations < 6) {
@@ -130,6 +144,7 @@ export function stepGame(game, dt, controls = {}) {
     activeEnemies.push(enemy);
     if (enemy.type === "goblin") game.updateGoblin(enemy, dt, enemySpeedScale);
     else if (enemy.type === "mimic") game.updateMimic(enemy, dt, enemySpeedScale);
+    else if (enemy.type === "necromancer") game.updateNecromancer(enemy, dt, enemySpeedScale);
     else game.moveEnemyTowardPlayer(enemy, enemySpeedScale, dt);
   }
   for (const br of game.breakables || []) {
@@ -147,6 +162,7 @@ export function stepGame(game, dt, controls = {}) {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     b.life -= dt;
+    if (b.faction === "enemy") continue;
     for (const br of activeBreakables) {
       if ((br.hp || 0) <= 0) continue;
       const half = (br.size || 20) * 0.5 + (b.size || 6) * 0.5;
@@ -197,6 +213,17 @@ export function stepGame(game, dt, controls = {}) {
   for (const b of game.bullets) {
     if (b.life <= 0) continue;
     if (!b.hitTargets) b.hitTargets = new Set();
+    if (b.faction === "enemy") {
+      if (vecLength(b.x - game.player.x, b.y - game.player.y) < (game.player.size + b.size) * 0.5) {
+        const rawDamage = Number.isFinite(b.damage) ? b.damage : game.config.enemy.necromancerProjectileDamage || 16;
+        const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+        const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
+        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
+        game.applyPlayerDamage(damageTaken);
+        b.life = 0;
+      }
+      continue;
+    }
     for (const br of activeBreakables) {
       if (b.hitTargets.has(br)) continue;
       if (vecLength(b.x - br.x, b.y - br.y) < (br.size + b.size) * 0.45) {
@@ -259,22 +286,37 @@ export function stepGame(game, dt, controls = {}) {
     }
   }
 
+  let removeBossSummons = false;
   game.enemies = game.enemies.filter((enemy) => {
     if (enemy.hp <= 0) {
       game.triggerWarriorMomentumOnKill();
       if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
       else if (enemy.type === "armor") game.score += 40;
       else if (enemy.type === "mimic") game.score += 35;
+      else if (enemy.type === "necromancer") game.score += 250;
+      else if (enemy.type === "skeleton") game.score += 12;
       else game.score += 10;
       game.gainExperience(game.xpFromEnemy(enemy));
       if (enemy.type === "goblin") game.dropTreasureBag(enemy.x, enemy.y, enemy.goldEaten);
       else if (enemy.type === "armor") game.dropArmorLoot(enemy.x, enemy.y);
       else if (enemy.type === "mimic") game.dropTreasureBag(enemy.x, enemy.y, 24);
+      else if (enemy.type === "necromancer") {
+        if (typeof game.markFloorBossDefeated === "function") game.markFloorBossDefeated();
+        removeBossSummons = true;
+        if (typeof game.spawnExitPortal === "function") game.spawnExitPortal(enemy.x, enemy.y);
+        game.dropNecromancerLoot(enemy.x, enemy.y);
+        game.spawnFloatingText(enemy.x, enemy.y - 42, "Boss Defeated", "#f2bf7b", 1.5, 18);
+        game.spawnFloatingText(enemy.x, enemy.y - 62, "Portal Open", "#90f0ff", 1.5, 18);
+      }
+      else if (enemy.type === "skeleton") game.maybeSpawnDrop(enemy.x, enemy.y);
       else game.maybeSpawnDrop(enemy.x, enemy.y);
       return false;
     }
     return true;
   });
+  if (removeBossSummons) {
+    game.enemies = game.enemies.filter((enemy) => !(enemy.type === "skeleton" && enemy.summonerBoss));
+  }
   game.breakables = (game.breakables || []).filter((br) => {
     if ((br.hp || 0) <= 0) {
       game.dropBreakableLoot(br.x, br.y);
@@ -298,18 +340,9 @@ export function stepGame(game, dt, controls = {}) {
   }
   game.drops = game.drops.filter((drop) => drop.life > 0);
 
-  if (!game.pickup.taken && vecLength(game.player.x - game.pickup.x, game.player.y - game.pickup.y) < game.getPickupRadius()) {
-    game.pickup.taken = true;
-    game.hasKey = true;
-    game.score += 50;
-  }
-
-  if (!game.door.open && game.hasKey && vecLength(game.player.x - game.door.x, game.player.y - game.door.y) < 28) {
-    game.door.open = true;
-    game.score += 100;
-  }
-
-  if (game.isPlayerAtDoor()) {
+  if (typeof game.isPlayerAtPortal === "function" && game.isPlayerAtPortal()) {
+    if (typeof game.markFloorBossCompleted === "function") game.markFloorBossCompleted();
+    if (game.portal) game.portal.active = false;
     game.advanceToNextFloor();
     return;
   }

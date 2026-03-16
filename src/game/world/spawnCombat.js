@@ -3,7 +3,9 @@ import {
   spawnGhost as spawnGhostEntity,
   spawnTreasureGoblin as spawnTreasureGoblinEntity,
   spawnAnimatedArmor as spawnAnimatedArmorEntity,
-  spawnMimic as spawnMimicEntity
+  spawnMimic as spawnMimicEntity,
+  spawnNecromancer as spawnNecromancerEntity,
+  spawnSkeleton as spawnSkeletonEntity
 } from "../enemySystems.js";
 import { isWalkableTile } from "./navigationCollision.js";
 
@@ -60,6 +62,14 @@ export function spawnAnimatedArmor(game, x, y) {
 
 export function spawnMimic(game, x, y) {
   return spawnMimicEntity(game, x, y);
+}
+
+export function spawnNecromancer(game, x, y) {
+  return spawnNecromancerEntity(game, x, y);
+}
+
+export function spawnSkeleton(game, x, y, options) {
+  return spawnSkeletonEntity(game, x, y, options);
 }
 
 export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {

@@ -15,6 +15,8 @@ import {
   spawnTreasureGoblin,
   spawnAnimatedArmor,
   spawnMimic,
+  spawnNecromancer,
+  spawnSkeleton,
   applyEnemyDamage,
   randomEnemySpawnPoint
 } from "./world/spawnCombat.js";
@@ -88,6 +90,14 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   spawnMimic(x, y) {
     return spawnMimic(this, x, y);
+  }
+
+  spawnNecromancer(x, y) {
+    return spawnNecromancer(this, x, y);
+  }
+
+  spawnSkeleton(x, y, options) {
+    return spawnSkeleton(this, x, y, options);
   }
 
   applyEnemyDamage(enemy, amount, damageType = "physical") {

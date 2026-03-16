@@ -94,6 +94,61 @@ export function spawnMimic(game, x, y) {
   };
 }
 
+export function spawnNecromancer(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.necromancerHpMin, game.config.enemy.necromancerHpMax);
+  return {
+    type: "necromancer",
+    x,
+    y,
+    size: 28,
+    speed: game.config.enemy.necromancerSpeed,
+    hp,
+    maxHp: hp,
+    hpBarTimer: 9999,
+    damageMin: game.config.enemy.necromancerDamageMin,
+    damageMax: game.config.enemy.necromancerDamageMax,
+    isFloorBoss: true,
+    strafeDir: Math.random() < 0.5 ? -1 : 1,
+    strafeTimer: 1.1 + Math.random() * 1.2,
+    summonCooldown: 0,
+    castCooldown: 0
+  };
+}
+
+export function spawnSkeleton(game, x, y, options = {}) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.skeletonHpMin, game.config.enemy.skeletonHpMax);
+  return {
+    type: "skeleton",
+    x,
+    y,
+    size: 18,
+    speed: game.config.enemy.skeletonSpeed,
+    hp,
+    maxHp: hp,
+    hpBarTimer: 0,
+    damageMin: game.config.enemy.skeletonDamageMin,
+    damageMax: game.config.enemy.skeletonDamageMax,
+    summonedByNecromancer: !!options.summonedByNecromancer,
+    summonerBoss: !!options.summonerBoss,
+    summonLife: Number.isFinite(options.summonLife) ? options.summonLife : null
+  };
+}
+
+function countSummonedSkeletons(game, enemy) {
+  return (game.enemies || []).filter((other) => other && other.type === "skeleton" && other.summonerBoss && other.hp > 0).length;
+}
+
+function findSkeletonSummonPoint(game, enemy, angle, distance) {
+  const tile = game.config?.map?.tile || 32;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const dist = distance + attempt * (tile * 0.35);
+    const x = enemy.x + Math.cos(angle) * dist;
+    const y = enemy.y + Math.sin(angle) * dist;
+    if (!game.isWallAt(x, y, true)) return { x, y };
+  }
+  return null;
+}
+
 export function isGoldDrop(drop) {
   return drop.type === "gold" || drop.type === "gold_bag";
 }
@@ -246,8 +301,113 @@ export function updateMimic(game, enemy, dt, speedScale) {
   if (playerDist > tongueRange * 0.72) game.moveEnemyTowardPlayer(enemy, speedScale, dt);
 }
 
+export function updateNecromancer(game, enemy, dt, speedScale) {
+  const tile = game.config?.map?.tile || 32;
+  const preferredRange = (game.config.enemy.necromancerPreferredRangeTiles || 5) * tile;
+  const retreatRange = (game.config.enemy.necromancerRetreatRangeTiles || 3) * tile;
+  const castCooldownMax = Math.max(0.3, game.config.enemy.necromancerCastCooldown || 2.2);
+  const summonCooldownMax = Math.max(0.8, game.config.enemy.necromancerSummonCooldown || 5.5);
+  const summonCap = Math.max(1, Math.floor(game.config.enemy.necromancerSummonCap || 5));
+  const summonCount = Math.max(1, Math.floor(game.config.enemy.necromancerSummonCount || 2));
+  const toPlayerX = game.player.x - enemy.x;
+  const toPlayerY = game.player.y - enemy.y;
+  const playerDist = vecLength(toPlayerX, toPlayerY) || 1;
+  const dirX = toPlayerX / playerDist;
+  const dirY = toPlayerY / playerDist;
+  const perpX = -dirY;
+  const perpY = dirX;
+  const moveStep = enemy.speed * (Number.isFinite(speedScale) ? speedScale : 1) * Math.max(0, dt);
+
+  enemy.strafeTimer = Math.max(0, (enemy.strafeTimer || 0) - dt);
+  enemy.castCooldown = Math.max(0, (enemy.castCooldown || 0) - dt);
+  enemy.summonCooldown = Math.max(0, (enemy.summonCooldown || 0) - dt);
+  if (enemy.strafeTimer <= 0) {
+    enemy.strafeTimer = 0.8 + Math.random() * 1.4;
+    enemy.strafeDir = Math.random() < 0.5 ? -1 : 1;
+  }
+
+  if (playerDist < retreatRange) {
+    game.moveWithCollision(enemy, -dirX * moveStep, -dirY * moveStep);
+    return;
+  }
+
+  if (playerDist > preferredRange || !hasLineOfSight(game, enemy.x, enemy.y, game.player.x, game.player.y)) {
+    game.moveEnemyTowardPlayer(enemy, speedScale * 0.92, dt);
+    return;
+  }
+
+  if (enemy.summonCooldown <= 0 && countSummonedSkeletons(game, enemy) < summonCap) {
+    const activeCount = countSummonedSkeletons(game, enemy);
+    const budget = Math.max(0, summonCap - activeCount);
+    const toSpawn = Math.min(summonCount, budget);
+    const baseAngle = Math.atan2(dirY, dirX) + Math.PI * 0.5;
+    const radius = enemy.size + tile * 0.65;
+    let spawned = 0;
+    for (let i = 0; i < toSpawn; i++) {
+      const offset = (i - (toSpawn - 1) * 0.5) * 0.85;
+      const point = findSkeletonSummonPoint(game, enemy, baseAngle + offset, radius);
+      if (!point) continue;
+      game.enemies.push(
+        spawnSkeleton(game, point.x, point.y, {
+          summonedByNecromancer: true,
+          summonerBoss: true
+        })
+      );
+      spawned += 1;
+    }
+    if (spawned > 0) {
+      enemy.summonCooldown = summonCooldownMax;
+      game.spawnFloatingText(enemy.x, enemy.y - enemy.size - 10, `Raise Dead`, "#cfc1ff", 1.1, 14);
+    }
+  }
+
+  if (enemy.castCooldown <= 0) {
+    const baseAngle = Math.atan2(dirY, dirX);
+    const spread = ((game.config.enemy.necromancerProjectileSpreadDeg || 16) * Math.PI) / 180;
+    const speed = game.config.enemy.necromancerProjectileSpeed || 230;
+    const size = game.config.enemy.necromancerProjectileSize || 12;
+    const damage = game.config.enemy.necromancerProjectileDamage || 16;
+    const life = game.config.enemy.necromancerProjectileLife || 2.8;
+    const originDistance = enemy.size * 0.75;
+    for (const offset of [-spread, 0, spread]) {
+      const angle = baseAngle + offset;
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed;
+      game.bullets.push({
+        x: enemy.x + Math.cos(angle) * originDistance,
+        y: enemy.y + Math.sin(angle) * originDistance,
+        vx,
+        vy,
+        angle,
+        life,
+        size,
+        kind: "necroticBolt",
+        faction: "enemy",
+        damage,
+        damageType: "necrotic"
+      });
+    }
+    enemy.castCooldown = castCooldownMax;
+    enemy.hpBarTimer = Math.max(enemy.hpBarTimer || 0, game.config.enemy.hpBarDuration);
+  }
+
+  const strafeScale = playerDist > preferredRange * 0.7 ? 0.9 : 0.55;
+  game.moveWithCollision(enemy, perpX * enemy.strafeDir * moveStep * strafeScale, perpY * enemy.strafeDir * moveStep * strafeScale);
+}
+
 export function xpFromEnemy(game, enemy) {
-  const baseXp = enemy.type === "armor" ? 24 : enemy.type === "mimic" ? 18 : enemy.type === "goblin" ? 12 + Math.floor(enemy.goldEaten * 0.6) : 6;
+  const baseXp =
+    enemy.type === "necromancer"
+      ? 90
+      : enemy.type === "skeleton"
+      ? 10
+      : enemy.type === "armor"
+      ? 24
+      : enemy.type === "mimic"
+      ? 18
+      : enemy.type === "goblin"
+      ? 12 + Math.floor(enemy.goldEaten * 0.6)
+      : 6;
   const level = Number.isFinite(game?.level) ? Math.max(1, game.level) : 1;
   const floor = Number.isFinite(game?.floor) ? Math.max(1, game.floor) : 1;
   const ratio = level / floor;
@@ -329,4 +489,28 @@ export function dropArmorLoot(game, x, y) {
       life: game.config.drops.life
     });
   }
+}
+
+export function dropNecromancerLoot(game, x, y) {
+  const amountMult = game.getGoldDropAmountMultiplier ? game.getGoldDropAmountMultiplier() : 1;
+  const c = game.config.enemy;
+  const baseAmount =
+    Math.min(c.necromancerRewardGoldMin, c.necromancerRewardGoldMax) +
+    Math.floor(Math.random() * (Math.abs(c.necromancerRewardGoldMax - c.necromancerRewardGoldMin) + 1));
+  game.drops.push({
+    type: "gold_bag",
+    x,
+    y,
+    size: 20,
+    amount: Math.max(1, Math.floor(baseAmount * amountMult)),
+    life: game.config.drops.life + 10
+  });
+  game.drops.push({
+    type: "health",
+    x: x + 16,
+    y: y - 10,
+    size: 12,
+    amount: game.config.drops.healthRestore,
+    life: game.config.drops.life + 4
+  });
 }

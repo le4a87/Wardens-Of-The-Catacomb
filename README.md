@@ -10,7 +10,7 @@ You can play in local single-player mode or connect to an authoritative WebSocke
 
 ## Project Status
 - Playable prototype with two classes (Archer, Warrior)
-- Procedural castle floors with key/exit progression
+- Procedural castle floors with level-gated necromancer boss progression
 - Authoritative network mode is implemented as a Phase 1 architecture:
   - One active controller per room
   - Other connected peers are spectators (can request control)
@@ -61,15 +61,16 @@ Stop with `Ctrl+C`.
 - `npm run serve`: static host only (`python -m http.server 8080`)
 - `npm run server:net`: authoritative WebSocket server only
 - `npm run check`: syntax check all JS files (`node --check` sweep)
+- `npm run validate:boss`: headless validation for the floor-boss progression loop
 - `npm run perf:test`: run automated local+network perf flow and emit `artifacts/perf/latest.json`
 
 ## How to Play
 
 ### Goal Loop
 1. Explore the procedural floor.
-2. Find the key.
-3. Open the exit door.
-4. Reach the door to advance.
+2. Reach the floor trigger level: `floor * 5`.
+3. Defeat the necromancer mini-boss.
+4. Enter the portal that opens on boss defeat.
 5. New floor is generated 20% larger each clear.
 
 Run ends when player health reaches 0.
@@ -183,6 +184,16 @@ Shop and skill tree are available from HUD buttons and support scrolling.
   - Drop large gold bag on death
 - Animated Armor:
   - Tough melee enemies with better rewards
+- Mimics:
+  - Rarely emerge from breakable boxes
+  - Use a tongue strike at short range
+- Necromancer floor boss:
+  - Spawns when player level reaches `floor * 5`
+  - Strafes, casts a three-bolt necrotic volley, and summons skeletons
+  - Drops high-value rewards and opens the exit portal on death
+- Skeletons:
+  - Summoned by the necromancer during the boss encounter
+  - Removed when the boss dies
 
 Drop behavior includes gold, health potions, treasure bags, and breakable-container loot.
 
@@ -204,6 +215,7 @@ Drop behavior includes gold, health potions, treasure bags, and breakable-contai
   - client session/input/prediction/map-readiness helpers in `src/net/*`
   - shared runtime methods in `src/game/*`
   - server protocol/scheduler/serialization helpers in `server/net/*`
+- Floor-boss progression is validated by a dedicated headless script in `server/validate-floor-boss.js`
 - Delta snapshot protocol is in use with stable entity IDs and keyframe recovery.
 - Snapshot ack and per-client recovery are implemented to reduce prolonged desync.
 - Projectile reconciliation includes held-fire cadence linkage for reduced origin drift/snap.
@@ -241,8 +253,8 @@ This section reflects a code review pass over the current repository state.
 
 ### File Size Hotspots (non-`node_modules`)
 - `game.js` (~473 lines)
-- `server/networkServer.js` (~467 lines)
-- `src/game/GameRuntimeBase.js` (~447 lines)
+- `server/networkServer.js` (~482 lines)
+- `src/rendering/runtimeSceneDrawMethods.js` (~481 lines)
 - `server/perfRunner.js` (~435 lines)
 
 No current source monoliths exceed 500 lines.

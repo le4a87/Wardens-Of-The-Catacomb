@@ -33,7 +33,10 @@ function serializeBullet(room, b, domain = "bullet", prefix = "b") {
     vy: b.vy,
     angle: b.angle,
     life: b.life,
-    size: b.size
+    size: b.size,
+    kind: typeof b.kind === "string" ? b.kind : "arrow",
+    faction: typeof b.faction === "string" ? b.faction : "player",
+    damage: b.damage
   };
 }
 
@@ -41,6 +44,7 @@ function serializeEnemy(room, e) {
   return {
     id: getStableId(room, "enemy", "e", e),
     type: e.type,
+    isFloorBoss: !!e.isFloorBoss,
     x: e.x,
     y: e.y,
     size: e.size,
@@ -108,6 +112,7 @@ function isInsideBounds(obj, bounds, extra = 0) {
 export function serializeMetaState(source) {
   const sim = source && source.sim ? source.sim : source;
   const musicTrack = source && source.currentMusicTrack ? { ...source.currentMusicTrack } : sim && sim.musicTrack ? { ...sim.musicTrack } : null;
+  const floorBoss = sim.floorBoss && typeof sim.floorBoss === "object" ? { ...sim.floorBoss } : null;
   return {
     floor: sim.floor,
     level: sim.level,
@@ -125,6 +130,8 @@ export function serializeMetaState(source) {
     warriorMomentumTimer: sim.warriorMomentumTimer || 0,
     warriorRageActiveTimer: sim.warriorRageActiveTimer || 0,
     warriorRageCooldownTimer: sim.warriorRageCooldownTimer || 0,
+    floorBoss,
+    portal: sim.portal ? { ...sim.portal } : null,
     musicTrack,
     skills: sim.skills,
     upgrades: sim.upgrades
@@ -134,6 +141,14 @@ export function serializeMetaState(source) {
 export function serializeState(room) {
   const sim = room.sim;
   const activeBounds = makeActiveBounds(sim, 10);
+  const floorBoss =
+    sim.floorBoss && typeof sim.floorBoss === "object"
+      ? {
+          floor: sim.floorBoss.floor,
+          triggerLevel: sim.floorBoss.triggerLevel,
+          phase: sim.floorBoss.phase
+        }
+      : null;
   const activeEnemies = sim.enemies.filter((e) => isInsideBounds(e, activeBounds, 72));
   const activeDrops = sim.drops.filter((d) => isInsideBounds(d, activeBounds, 64));
   const activeBreakables = (sim.breakables || []).filter((b) => isInsideBounds(b, activeBounds, 72));
@@ -145,9 +160,12 @@ export function serializeState(room) {
   return {
     mapSignature: `${sim.floor}:${sim.mapWidth}x${sim.mapHeight}`,
     time: sim.time,
+    floor: sim.floor,
+    floorBoss,
     player: shallowPlayerState(sim.player),
     door: { ...sim.door },
     pickup: { ...sim.pickup },
+    portal: sim.portal ? { ...sim.portal } : null,
     enemies: activeEnemies.map((e) => serializeEnemy(room, e)),
     drops: activeDrops.map((d) => serializeDrop(room, d)),
     breakables: activeBreakables.map((b) => serializeBreakable(room, b)),
@@ -163,7 +181,7 @@ export function serializeState(room) {
       range: s.range,
       life: s.life
     })),
-    floatingTexts: activeTexts.slice(-12).map((t) => ({
+    floatingTexts: activeTexts.slice(-8).map((t) => ({
       id: getStableId(room, "floatingText", "ft", t),
       x: t.x,
       y: t.y,

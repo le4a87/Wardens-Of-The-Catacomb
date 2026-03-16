@@ -125,6 +125,29 @@ export const CONFIG = {
     armorSpeed: 72,
     armorDamageMin: 20,
     armorDamageMax: 32,
+    necromancerHpMin: 36,
+    necromancerHpMax: 48,
+    necromancerSpeed: 76,
+    necromancerDamageMin: 18,
+    necromancerDamageMax: 28,
+    necromancerPreferredRangeTiles: 5,
+    necromancerRetreatRangeTiles: 3,
+    necromancerCastCooldown: 2.5,
+    necromancerProjectileSpeed: 230,
+    necromancerProjectileLife: 2.8,
+    necromancerProjectileSize: 12,
+    necromancerProjectileDamage: 13,
+    necromancerProjectileSpreadDeg: 16,
+    necromancerSummonCooldown: 6.4,
+    necromancerSummonCap: 4,
+    necromancerSummonCount: 1,
+    necromancerRewardGoldMin: 90,
+    necromancerRewardGoldMax: 130,
+    skeletonHpMin: 8,
+    skeletonHpMax: 12,
+    skeletonSpeed: 96,
+    skeletonDamageMin: 8,
+    skeletonDamageMax: 12,
     hpBarDuration: 0.9
   },
   drops: {
@@ -149,7 +172,8 @@ export const CONFIG = {
   progression: {
     baseXpToLevel: 30,
     xpLevelScaling: 1.35,
-    mapGrowthFactorPerFloor: 1.2
+    mapGrowthFactorPerFloor: 1.2,
+    floorBossLevelMultiplier: 5
   },
   fireArrow: {
     cooldown: 2.0,

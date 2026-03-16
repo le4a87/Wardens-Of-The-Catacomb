@@ -186,6 +186,18 @@ function hasOwn(obj, key) {
   return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
 }
 
+function syncFloorBossState(target, source, game) {
+  if (!source || typeof source !== "object") return target;
+  const base =
+    target && typeof target === "object"
+      ? target
+      : typeof game?.createFloorBossState === "function"
+      ? game.createFloorBossState(Number.isFinite(source.floor) ? source.floor : game.floor)
+      : {};
+  Object.assign(base, source);
+  return base;
+}
+
 export function applyMetaStateToGame(game, state) {
   if (!state || typeof state !== "object") return;
   if (Number.isFinite(state.time)) game.time = state.time;
@@ -205,6 +217,8 @@ export function applyMetaStateToGame(game, state) {
   if (Number.isFinite(state.warriorMomentumTimer)) game.warriorMomentumTimer = state.warriorMomentumTimer;
   if (Number.isFinite(state.warriorRageActiveTimer)) game.warriorRageActiveTimer = state.warriorRageActiveTimer;
   if (Number.isFinite(state.warriorRageCooldownTimer)) game.warriorRageCooldownTimer = state.warriorRageCooldownTimer;
+  if (state.floorBoss && typeof state.floorBoss === "object") game.floorBoss = syncFloorBossState(game.floorBoss, state.floorBoss, game);
+  if (state.portal && typeof state.portal === "object") game.portal = { ...state.portal };
   if (state.musicTrack && typeof state.musicTrack === "object") game.musicTrack = { ...state.musicTrack };
   if (state.skills && typeof state.skills === "object") game.skills = syncNamedObject(game.skills, state.skills);
   if (state.upgrades && typeof state.upgrades === "object") game.upgrades = syncNamedObject(game.upgrades, state.upgrades);
@@ -305,6 +319,7 @@ export function applySnapshotToGame({
 
   if (state.door && typeof state.door === "object") game.door = { ...state.door };
   if (state.pickup && typeof state.pickup === "object") game.pickup = { ...state.pickup };
+  if (state.portal && typeof state.portal === "object") game.portal = { ...state.portal };
   const snapAlpha = isNetworkController ? 0.72 : 0.62;
   const reconcileProjectileSpawn = (p, type) => {
     if (!p || !controller || !isNetworkController) return p;

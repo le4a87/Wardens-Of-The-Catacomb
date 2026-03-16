@@ -1,17 +1,11 @@
-# Task Board: Network Performance and Sync Stabilization
+# Task Board: Floor Exit Rework
 
-All tasks from this board are complete and have been folded into project documentation.
+The floor-exit rework is implemented and documented in [README.md](README.md).
 
-## Current State
-- No open tasks.
-- Historical implementation details and outcomes are documented in `README.md`.
+## Open Follow-Ups
+- None currently tracked for this initiative.
 
-## Baseline Policy (Ongoing)
-- Use `artifacts/perf/baseline.json` as the active performance baseline.
-- Any new performance task must define target metrics up front.
-- A task may be marked complete only if targeted metrics improve by at least 2% vs baseline (or better threshold if explicitly defined).
-- If baseline metrics are invalid for a target area (for example, zero or missing samples), recapture baseline before evaluating completion.
-
-## Standard Validation Commands
+## Validation Commands
 - `npm run check`
+- `npm run validate:boss`
 - `npm run perf:test`

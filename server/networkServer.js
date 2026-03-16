@@ -87,6 +87,11 @@ class Room {
     this.lastMetaPayloadJson = "";
     this.lastChunkPushMs = 0;
     this.lastMapSignature = this.mapSignature();
+    this.lastSnapshotFloor = null;
+    this.lastSnapshotBossPhase = null;
+    this.lastSnapshotDoorOpen = null;
+    this.lastSnapshotPickupTaken = null;
+    this.lastSnapshotPortalActive = null;
     this.currentMusicTrack = chooseGameplayTrack();
     this.snapshotCounter = 0;
     this.snapshotSeq = 0;
@@ -302,6 +307,11 @@ class Room {
     const sig = this.mapSignature();
     if (sig !== this.lastMapSignature) {
       this.lastMapSignature = sig;
+      this.lastSnapshotFloor = null;
+      this.lastSnapshotBossPhase = null;
+      this.lastSnapshotDoorOpen = null;
+      this.lastSnapshotPickupTaken = null;
+      this.lastSnapshotPortalActive = null;
       this.currentMusicTrack = chooseGameplayTrack();
       this.snapshotCounter = 0;
       for (const cache of Object.values(this.deltaCache)) cache.clear();
@@ -343,14 +353,28 @@ class Room {
     if (keyframe || fireZoneDelta) delta.fireZones = fireZoneDelta || {};
     if (keyframe || meleeSwingDelta) delta.meleeSwings = meleeSwingDelta || {};
     if (keyframe || floatingTextDelta) delta.floatingTexts = floatingTextDelta || {};
+    const floorBossPhase = fullState.floorBoss?.phase || null;
+    const floorStateChanged = fullState.floor !== this.lastSnapshotFloor;
+    const bossPhaseChanged = floorBossPhase !== this.lastSnapshotBossPhase;
+    const doorStateChanged = !!fullState.door?.open !== this.lastSnapshotDoorOpen;
+    const pickupStateChanged = !!fullState.pickup?.taken !== this.lastSnapshotPickupTaken;
+    const portalStateChanged = !!fullState.portal?.active !== this.lastSnapshotPortalActive;
     const state = {
       mapSignature: fullState.mapSignature,
       time: fullState.time,
       player: fullState.player,
-      door: fullState.door,
-      pickup: fullState.pickup,
       delta
     };
+    if (keyframe || floorStateChanged) state.floor = fullState.floor;
+    if (keyframe || bossPhaseChanged) state.floorBoss = fullState.floorBoss;
+    if (keyframe || doorStateChanged) state.door = fullState.door;
+    if (keyframe || pickupStateChanged) state.pickup = fullState.pickup;
+    if (keyframe || portalStateChanged) state.portal = fullState.portal;
+    this.lastSnapshotFloor = fullState.floor;
+    this.lastSnapshotBossPhase = floorBossPhase;
+    this.lastSnapshotDoorOpen = !!fullState.door?.open;
+    this.lastSnapshotPickupTaken = !!fullState.pickup?.taken;
+    this.lastSnapshotPortalActive = !!fullState.portal?.active;
     this.broadcast("state.snapshot", {
       serverTime: nowMs,
       snapshotSeq: this.snapshotSeq,

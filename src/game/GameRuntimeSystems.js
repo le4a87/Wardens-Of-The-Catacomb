@@ -5,10 +5,12 @@ import {
   applyGoblinGrowth as applyGoblinGrowthEntity,
   updateGoblin as updateGoblinEntity,
   updateMimic as updateMimicEntity,
+  updateNecromancer as updateNecromancerEntity,
   xpFromEnemy as xpFromEnemyEntity,
   maybeSpawnDrop as maybeSpawnDropEntity,
   dropTreasureBag as dropTreasureBagEntity,
-  dropArmorLoot as dropArmorLootEntity
+  dropArmorLoot as dropArmorLootEntity,
+  dropNecromancerLoot as dropNecromancerLootEntity
 } from "./enemySystems.js";
 import { GameRuntimeWorld } from "./GameRuntimeWorld.js";
 
@@ -31,6 +33,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   updateMimic(enemy, dt, speedScale) {
     updateMimicEntity(this, enemy, dt, speedScale);
+  }
+
+  updateNecromancer(enemy, dt, speedScale) {
+    updateNecromancerEntity(this, enemy, dt, speedScale);
   }
 
   xpFromEnemy(enemy) {
@@ -65,6 +71,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
       this.spawnFloatingText(this.player.x, this.player.y - 62, `+${dmgGain.toFixed(1)} Weapon Dmg`, "#f3d18b", 0.95, 13);
       this.expToNextLevel = Math.floor(this.expToNextLevel * this.config.progression.xpLevelScaling);
       this.spawnFloatingText(this.player.x, this.player.y - 30, `Level ${this.level}! +1 SP`, "#9be18a", 1.2, 16);
+      if (this.updateFloorBossTrigger()) {
+        const target = this.floorBoss?.triggerLevel || this.getFloorBossTriggerLevel();
+        this.spawnFloatingText(this.player.x, this.player.y - 80, `Boss Ready: Lv ${target}`, "#c78bff", 1.4, 16);
+      }
     }
   }
 
@@ -78,6 +88,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   dropArmorLoot(x, y) {
     dropArmorLootEntity(this, x, y);
+  }
+
+  dropNecromancerLoot(x, y) {
+    dropNecromancerLootEntity(this, x, y);
   }
 
   fire(dx, dy) {

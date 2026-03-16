@@ -70,9 +70,12 @@ export function buildJoinKeyframeState(fullState) {
   return {
     mapSignature: fullState.mapSignature,
     time: fullState.time,
+    floor: fullState.floor,
+    floorBoss: fullState.floorBoss ? { ...fullState.floorBoss } : null,
     player: fullState.player,
     door: fullState.door,
     pickup: fullState.pickup,
+    portal: fullState.portal,
     delta: {
       keyframe: true,
       enemies: toKeyframeCollection(fullState.enemies),

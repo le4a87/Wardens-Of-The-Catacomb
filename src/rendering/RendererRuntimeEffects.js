@@ -8,6 +8,10 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     }
 
     for (const b of game.bullets) {
+      if (b.kind === "necroticBolt") {
+        this.drawNecroticBolt(b, cameraX, cameraY, game.time);
+        continue;
+      }
       const x = b.x - cameraX;
       const y = b.y - cameraY;
       ctx.save();
@@ -45,6 +49,40 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     }
 
     for (const zone of game.fireZones) this.drawFireZone(zone, cameraX, cameraY, game.time);
+  }
+
+  drawNecroticBolt(projectile, cameraX, cameraY, time = 0) {
+    const ctx = this.ctx;
+    const x = projectile.x - cameraX;
+    const y = projectile.y - cameraY;
+    const size = Number.isFinite(projectile.size) ? projectile.size : 12;
+    const pulse = 0.82 + Math.sin(time * 13 + projectile.x * 0.02 + projectile.y * 0.017) * 0.16;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Number.isFinite(projectile.angle) ? projectile.angle : 0);
+    const outer = ctx.createRadialGradient(0, 0, 1, 0, 0, size * 0.9);
+    outer.addColorStop(0, "rgba(235, 183, 255, 0.92)");
+    outer.addColorStop(0.45, "rgba(153, 78, 214, 0.68)");
+    outer.addColorStop(1, "rgba(56, 19, 89, 0)");
+    ctx.fillStyle = outer;
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.9 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#3a154f";
+    ctx.beginPath();
+    ctx.moveTo(size * 0.7, 0);
+    ctx.lineTo(-size * 0.55, -size * 0.34);
+    ctx.lineTo(-size * 0.1, 0);
+    ctx.lineTo(-size * 0.55, size * 0.34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#f1d5ff";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.25, 0);
+    ctx.lineTo(size * 0.5, 0);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawMeleeSwing(swing, cameraX, cameraY, player) {

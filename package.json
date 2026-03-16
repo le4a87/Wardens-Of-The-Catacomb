@@ -8,6 +8,7 @@
     "server:net": "node server/networkServer.js",
     "dev": "node server/devLauncher.js",
     "check": "node server/check-all.js",
+    "validate:boss": "node server/validate-floor-boss.js",
     "perf:test": "node server/perfRunner.js"
   },
   "dependencies": {
