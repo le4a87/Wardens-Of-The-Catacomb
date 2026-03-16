@@ -81,6 +81,7 @@ export function buildJoinKeyframeState(fullState) {
       enemies: toKeyframeCollection(fullState.enemies),
       drops: toKeyframeCollection(fullState.drops),
       breakables: toKeyframeCollection(fullState.breakables),
+      wallTraps: toKeyframeCollection(fullState.wallTraps),
       bullets: toKeyframeCollection(fullState.bullets),
       fireArrows: toKeyframeCollection(fullState.fireArrows),
       fireZones: toKeyframeCollection(fullState.fireZones),

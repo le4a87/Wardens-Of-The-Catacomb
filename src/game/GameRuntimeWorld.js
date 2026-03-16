@@ -7,7 +7,8 @@ import {
   updateNavigationField,
   getPathDirectionToPlayer,
   moveEnemyTowardPlayer,
-  moveWithCollision
+  moveWithCollision,
+  separateEnemyFromPlayer
 } from "./world/navigationCollision.js";
 import {
   placeArmorStands,
@@ -70,6 +71,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   moveWithCollision(entity, dx, dy) {
     moveWithCollision(this, entity, dx, dy);
+  }
+
+  separateEnemyFromPlayer(enemy) {
+    separateEnemyFromPlayer(this, enemy);
   }
 
   placeArmorStands() {

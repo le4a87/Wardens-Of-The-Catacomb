@@ -21,7 +21,8 @@ function makeRoom(sim) {
       meleeSwing: 1,
       armorStand: 1,
       floatingText: 1,
-      breakable: 1
+      breakable: 1,
+      wallTrap: 1
     },
     idMaps: {
       enemy: new WeakMap(),
@@ -32,7 +33,8 @@ function makeRoom(sim) {
       meleeSwing: new WeakMap(),
       armorStand: new WeakMap(),
       floatingText: new WeakMap(),
-      breakable: new WeakMap()
+      breakable: new WeakMap(),
+      wallTrap: new WeakMap()
     }
   };
 }

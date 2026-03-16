@@ -357,6 +357,7 @@ export function applySnapshotToGame({
     game.enemies = applyDeltaCollection(game.enemies, state.delta.enemies, { keyframe, positionAlpha: snapAlpha });
     game.drops = applyDeltaCollection(game.drops, state.delta.drops, { keyframe, positionAlpha: snapAlpha });
     game.breakables = applyDeltaCollection(game.breakables, state.delta.breakables, { keyframe, positionAlpha: 1 });
+    game.wallTraps = applyDeltaCollection(game.wallTraps, state.delta.wallTraps, { keyframe, positionAlpha: 1 });
     game.bullets = applyDeltaCollection(game.bullets, state.delta.bullets, {
       keyframe,
       positionAlpha: 1,
@@ -382,6 +383,7 @@ export function applySnapshotToGame({
     game.enemies = syncByIdLerp(game.enemies, state.enemies, snapAlpha);
     game.drops = syncByIdLerp(game.drops, state.drops, snapAlpha);
     game.breakables = syncByIdLerp(game.breakables, state.breakables, 1);
+    game.wallTraps = syncByIdLerp(game.wallTraps, state.wallTraps, 1);
     game.bullets = syncByIdLerp(game.bullets, (state.bullets || []).map((p) => reconcileProjectileSpawn(p, "bullet")), 1);
     game.fireArrows = syncByIdLerp(game.fireArrows, (state.fireArrows || []).map((p) => reconcileProjectileSpawn(p, "fireArrow")), 1);
     game.fireZones = syncByIdLerp(game.fireZones, state.fireZones, 1);

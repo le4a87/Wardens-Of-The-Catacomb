@@ -48,6 +48,7 @@ export const CONFIG = {
     hpBarDuration: 1.25,
     lowHealthThreshold: 0.35,
     hitDamage: 16,
+    enemyCollisionSize: 16,
     pickupRadius: 18,
     primaryDamage: 1,
     projectileSpeed: 360,
@@ -101,6 +102,9 @@ export const CONFIG = {
     armorStandAnimatedChance: 0.35,
     armorWakeRadius: 260,
     mimicChestChance: 0.02,
+    mimicChestChanceLevel5: 0.04,
+    mimicMinFloor: 2,
+    mimicChanceLevelThreshold: 5,
     mimicWakeRadiusTiles: 3,
     mimicTongueRangeTiles: 2,
     mimicTongueCooldown: 1.35,
@@ -168,6 +172,21 @@ export const CONFIG = {
     dropHealthRate: 0.02,
     goldMin: 2,
     goldMax: 9
+  },
+  traps: {
+    wall: {
+      minCount: 5,
+      maxCount: 12,
+      sightRangeTiles: 8,
+      detectRangeTiles: 12,
+      detectForwardChance: 0.5,
+      initialArmDelay: 5,
+      resetMin: 10,
+      resetMax: 30,
+      projectileSpeed: 520,
+      projectileLife: 1.6,
+      projectileSize: 10
+    }
   },
   progression: {
     baseXpToLevel: 30,

@@ -15,6 +15,31 @@ import {
 import { GameRuntimeWorld } from "./GameRuntimeWorld.js";
 
 export class GameRuntimeSystems extends GameRuntimeWorld {
+  fireWallTrap(trap) {
+    if (!trap) return;
+    const cfg = this.config?.traps?.wall || {};
+    const tile = this.config?.map?.tile || 32;
+    const speed = Number.isFinite(cfg.projectileSpeed) ? cfg.projectileSpeed : 520;
+    const life = Number.isFinite(cfg.projectileLife) ? cfg.projectileLife : 1.6;
+    const size = Number.isFinite(cfg.projectileSize) ? cfg.projectileSize : 7;
+    const damageRange = this.getWallTrapDamageRange();
+    const muzzleOffset = Math.max(tile * 0.5 + 4, (Number.isFinite(trap.size) ? trap.size : 18) * 0.6);
+    trap.spotted = true;
+    this.bullets.push({
+      x: trap.x + trap.dirX * muzzleOffset,
+      y: trap.y + trap.dirY * muzzleOffset,
+      vx: trap.dirX * speed,
+      vy: trap.dirY * speed,
+      angle: Math.atan2(trap.dirY, trap.dirX),
+      life,
+      size,
+      projectileType: "trapArrow",
+      damageMin: damageRange.min,
+      damageMax: damageRange.max
+    });
+    trap.cooldown = this.getWallTrapResetTime();
+  }
+
   isGoldDrop(drop) {
     return isGoldDropEntity(drop);
   }

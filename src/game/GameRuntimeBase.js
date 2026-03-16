@@ -23,6 +23,7 @@ export class GameRuntimeBase {
     this.onReturnToMenu = typeof options.onReturnToMenu === "function" ? options.onReturnToMenu : null;
     this.onPauseChanged = typeof options.onPauseChanged === "function" ? options.onPauseChanged : null;
     this.onFloorChanged = typeof options.onFloorChanged === "function" ? options.onFloorChanged : null;
+    this.onGameOverChanged = typeof options.onGameOverChanged === "function" ? options.onGameOverChanged : null;
     this.floor = 1;
     this.mapWidth = this.config.map.width;
     this.mapHeight = this.config.map.height;
@@ -37,6 +38,12 @@ export class GameRuntimeBase {
     this.expToNextLevel = this.config.progression.baseXpToLevel;
     this.hasKey = false;
     this.gameOver = false;
+    this.deathTransitionDuration = 7;
+    this.deathTransition = {
+      active: false,
+      elapsed: 0,
+      returnTriggered: false
+    };
     this.paused = false;
     this.shopOpen = false;
     this.skillTreeOpen = false;
@@ -57,6 +64,7 @@ export class GameRuntimeBase {
     this.enemies = [];
     this.armorStands = [];
     this.breakables = [];
+    this.wallTraps = [];
     this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
     this.explored = [];
     this.navDistance = [];
@@ -150,7 +158,38 @@ export class GameRuntimeBase {
     this.spawnFloatingText(this.player.x, this.player.y - 18, `-${Math.round(amount)}`, "#ef6d6d");
     this.player.health = Math.max(0, this.player.health - amount);
     this.markPlayerHealthBarVisible();
-    if (this.player.health <= 0) this.gameOver = true;
+    if (this.player.health <= 0) this.triggerGameOver();
+  }
+
+  triggerGameOver() {
+    if (this.deathTransition.active) return;
+    this.gameOver = true;
+    this.paused = false;
+    this.shopOpen = false;
+    this.skillTreeOpen = false;
+    this.statsPanelOpen = false;
+    this.deathTransition.active = true;
+    this.deathTransition.elapsed = 0;
+    this.deathTransition.returnTriggered = false;
+    if (typeof this.onGameOverChanged === "function") this.onGameOverChanged(true, this);
+  }
+
+  updateDeathTransition(dt) {
+    if (!this.deathTransition.active) return false;
+    this.deathTransition.elapsed = Math.min(
+      this.deathTransitionDuration,
+      this.deathTransition.elapsed + Math.max(0, Number.isFinite(dt) ? dt : 0)
+    );
+    if (!this.deathTransition.returnTriggered && this.deathTransition.elapsed >= this.deathTransitionDuration) {
+      this.deathTransition.returnTriggered = true;
+      if (typeof this.onReturnToMenu === "function") this.onReturnToMenu();
+    }
+    return true;
+  }
+
+  getDeathTransitionProgress() {
+    if (!this.deathTransition.active || this.deathTransitionDuration <= 0) return 0;
+    return Math.max(0, Math.min(1, this.deathTransition.elapsed / this.deathTransitionDuration));
   }
 
   spawnFloatingText(x, y, text, color, life = 0.75, size = 14) {
@@ -172,6 +211,7 @@ export class GameRuntimeBase {
     this.enemies = [];
     this.armorStands = [];
     this.breakables = [];
+    this.wallTraps = [];
     this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
@@ -185,6 +225,7 @@ export class GameRuntimeBase {
     this.floorBoss = this.createFloorBossState(this.floor);
     this.parseMap();
     this.placeArmorStands();
+    this.placeWallTraps();
     this.placeBreakables();
   }
 
@@ -217,6 +258,17 @@ export class GameRuntimeBase {
 
   getPlayerMoveSpeed() {
     return this.classSpec.baseMoveSpeed * this.getMoveSpeedMultiplier() * this.getWarriorMomentumMultiplier();
+  }
+
+  getPlayerEnemyCollisionRadius() {
+    const size = Number.isFinite(this.config.player.enemyCollisionSize)
+      ? this.config.player.enemyCollisionSize
+      : this.player.size;
+    return Math.max(0, size) * 0.5;
+  }
+
+  getTrapDetectionBonus() {
+    return 0;
   }
 
   getActiveBounds(padTiles = 8) {

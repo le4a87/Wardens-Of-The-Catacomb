@@ -50,6 +50,10 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       if (stand.animated && stand.activated) continue;
       this.drawArmorStand(stand, stand.x - cameraX, stand.y - cameraY);
     }
+    for (const trap of game.wallTraps || []) {
+      if (!trap.spotted) continue;
+      this.drawWallTrap(trap, trap.x - cameraX, trap.y - cameraY);
+    }
     for (const br of game.breakables || []) this.drawBreakable(br, br.x - cameraX, br.y - cameraY);
 
     for (const enemy of game.enemies) {
@@ -83,14 +87,19 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.gameOver) this.drawPausedOverlay(layout);
 
     if (game.gameOver) {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+      const progress = typeof game.getDeathTransitionProgress === "function" ? game.getDeathTransitionProgress() : 1;
+      const fadeAlpha = Math.min(1, progress / 0.45);
+      const titleAlpha = progress <= 0.16 ? 0 : Math.min(1, (progress - 0.16) / 0.2);
+      const subtitleAlpha = progress <= 0.34 ? 0 : Math.min(1, (progress - 0.34) / 0.14);
+      ctx.fillStyle = `rgba(0, 0, 0, ${fadeAlpha})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      ctx.fillStyle = "#f3f0e8";
-      ctx.font = "bold 52px Trebuchet MS";
       ctx.textAlign = "center";
-      ctx.fillText("Game Over", this.canvas.width / 2, this.canvas.height / 2 - 20);
-      ctx.font = "22px Trebuchet MS";
-      ctx.fillText("Press Esc for character select", this.canvas.width / 2, this.canvas.height / 2 + 24);
+      ctx.fillStyle = `rgba(243, 240, 232, ${titleAlpha})`;
+      ctx.font = "bold 64px Trebuchet MS";
+      ctx.fillText("GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 18);
+      ctx.fillStyle = `rgba(208, 203, 194, ${subtitleAlpha})`;
+      ctx.font = "20px Trebuchet MS";
+      ctx.fillText("Returning to the main menu...", this.canvas.width / 2, this.canvas.height / 2 + 28);
       ctx.textAlign = "left";
     }
   }

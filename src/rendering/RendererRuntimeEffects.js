@@ -14,18 +14,29 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
       }
       const x = b.x - cameraX;
       const y = b.y - cameraY;
+      const isTrapArrow = b.projectileType === "trapArrow";
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(b.angle);
-      ctx.fillStyle = "#d9c27f";
+      ctx.fillStyle = isTrapArrow ? "#d66e57" : "#d9c27f";
       ctx.fillRect(-7, -1.3, 11, 2.6);
-      ctx.fillStyle = "#e5e2dc";
+      ctx.fillStyle = isTrapArrow ? "#ffb9a7" : "#e5e2dc";
       ctx.beginPath();
       ctx.moveTo(5, 0);
       ctx.lineTo(1, -3);
       ctx.lineTo(1, 3);
       ctx.closePath();
       ctx.fill();
+      if (isTrapArrow) {
+        ctx.fillStyle = "#791d15";
+        ctx.beginPath();
+        ctx.moveTo(-7, 0);
+        ctx.lineTo(-10, -2.2);
+        ctx.lineTo(-8.2, 0);
+        ctx.lineTo(-10, 2.2);
+        ctx.closePath();
+        ctx.fill();
+      }
       ctx.restore();
     }
 

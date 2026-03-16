@@ -30,6 +30,15 @@ body {
   margin: 0 auto;
 }
 
+.layout.is-splash {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+.layout.is-splash canvas {
+  width: min(100%, 960px);
+}
+
 .panel {
   background: color-mix(in srgb, var(--panel) 88%, black 12%);
   border: 2px solid #314060;

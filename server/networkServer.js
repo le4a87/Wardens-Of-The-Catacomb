@@ -112,6 +112,7 @@ class Room {
       enemies: new Map(),
       drops: new Map(),
       breakables: new Map(),
+      wallTraps: new Map(),
       bullets: new Map(),
       fireArrows: new Map(),
       fireZones: new Map(),
@@ -127,7 +128,8 @@ class Room {
       meleeSwing: 1,
       armorStand: 1,
       floatingText: 1,
-      breakable: 1
+      breakable: 1,
+      wallTrap: 1
     };
     this.idMaps = {
       enemy: new WeakMap(),
@@ -138,7 +140,8 @@ class Room {
       meleeSwing: new WeakMap(),
       armorStand: new WeakMap(),
       floatingText: new WeakMap(),
-      breakable: new WeakMap()
+      breakable: new WeakMap(),
+      wallTrap: new WeakMap()
     };
   }
 
@@ -199,6 +202,7 @@ class Room {
     for (let i = preBulletCount; i < this.sim.bullets.length; i++) {
       const bullet = this.sim.bullets[i];
       if (!bullet || typeof bullet !== "object") continue;
+      if (bullet.projectileType === "trapArrow") continue;
       bullet.spawnSeq = taggedSeq;
       bullet.ownerId = ownerId;
     }
@@ -340,6 +344,7 @@ class Room {
     const enemyDelta = buildDeltaCollection(this.deltaCache.enemies, fullState.enemies, keyframe);
     const dropDelta = buildDeltaCollection(this.deltaCache.drops, fullState.drops, keyframe);
     const breakableDelta = buildDeltaCollection(this.deltaCache.breakables, fullState.breakables, keyframe);
+    const wallTrapDelta = buildDeltaCollection(this.deltaCache.wallTraps, fullState.wallTraps, keyframe);
     const bulletDelta = buildDeltaCollection(this.deltaCache.bullets, fullState.bullets, keyframe);
     const fireArrowDelta = buildDeltaCollection(this.deltaCache.fireArrows, fullState.fireArrows, keyframe);
     const fireZoneDelta = buildDeltaCollection(this.deltaCache.fireZones, fullState.fireZones, keyframe);
@@ -348,6 +353,7 @@ class Room {
     if (keyframe || enemyDelta) delta.enemies = enemyDelta || {};
     if (keyframe || dropDelta) delta.drops = dropDelta || {};
     if (keyframe || breakableDelta) delta.breakables = breakableDelta || {};
+    if (keyframe || wallTrapDelta) delta.wallTraps = wallTrapDelta || {};
     if (keyframe || bulletDelta) delta.bullets = bulletDelta || {};
     if (keyframe || fireArrowDelta) delta.fireArrows = fireArrowDelta || {};
     if (keyframe || fireZoneDelta) delta.fireZones = fireZoneDelta || {};

@@ -252,6 +252,42 @@ export const runtimeSceneDrawMethods = {
     }
   },
 
+  drawWallTrap(trap, screenX, screenY) {
+    const ctx = this.ctx;
+    const dirX = Number.isFinite(trap.dirX) ? trap.dirX : 1;
+    const dirY = Number.isFinite(trap.dirY) ? trap.dirY : 0;
+    const perpX = -dirY;
+    const perpY = dirX;
+    const baseX = screenX - dirX * 10;
+    const baseY = screenY - dirY * 10;
+    const tipX = screenX + dirX * 9;
+    const tipY = screenY + dirY * 9;
+
+    ctx.fillStyle = "#4b1714";
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 8, baseY + perpY * 8);
+    ctx.lineTo(baseX - perpX * 8, baseY - perpY * 8);
+    ctx.lineTo(baseX - dirX * 4, baseY - dirY * 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#c43e34";
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 5, baseY + perpY * 5);
+    ctx.lineTo(baseX - perpX * 5, baseY - perpY * 5);
+    ctx.lineTo(tipX, tipY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "#ff9d82";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(baseX + perpX * 3.4, baseY + perpY * 3.4);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(baseX - perpX * 3.4, baseY - perpY * 3.4);
+    ctx.stroke();
+  },
+
   drawAnimatedArmor(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size / 2;
