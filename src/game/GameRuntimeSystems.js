@@ -6,6 +6,7 @@ import {
   updateGoblin as updateGoblinEntity,
   updateMimic as updateMimicEntity,
   updateRatArcher as updateRatArcherEntity,
+  updateSkeletonWarrior as updateSkeletonWarriorEntity,
   updateNecromancer as updateNecromancerEntity,
   xpFromEnemy as xpFromEnemyEntity,
   maybeSpawnDrop as maybeSpawnDropEntity,
@@ -63,6 +64,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   updateRatArcher(enemy, dt, speedScale) {
     updateRatArcherEntity(this, enemy, dt, speedScale);
+  }
+
+  updateSkeletonWarrior(enemy, dt, speedScale) {
+    updateSkeletonWarriorEntity(this, enemy, dt, speedScale);
   }
 
   updateNecromancer(enemy, dt, speedScale) {
@@ -166,12 +171,14 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
     const arcDeg = this.classSpec.meleeArcDeg || 95;
     const arc = (arcDeg * Math.PI) / 180;
     const angle = Math.atan2(dy, dx);
+    let executeProc = false;
     this.meleeSwings.push({
       x: this.player.x,
       y: this.player.y,
       angle,
       arc,
       range,
+      executeProc: false,
       life: this.config.effects.meleeSwingLife,
       maxLife: this.config.effects.meleeSwingLife
     });
@@ -186,7 +193,16 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
       let diff = enemyAngle - angle;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      if (Math.abs(diff) <= halfArc) this.applyEnemyDamage(enemy, this.rollPrimaryDamage(), "melee");
+      if (Math.abs(diff) <= halfArc) {
+        this.applyEnemyDamage(enemy, this.rollPrimaryDamage(), "melee");
+        const threshold = this.getWarriorExecuteThreshold();
+        const chance = this.getWarriorExecuteChance();
+        const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
+        if (!enemy.isBoss && chance > 0 && enemy.hp > 0 && hpRatio > 0 && hpRatio <= threshold && Math.random() < chance) {
+          enemy.hp = 0;
+          executeProc = true;
+        }
+      }
     }
     for (const br of this.breakables || []) {
       const ex = br.x - this.player.x;
@@ -198,6 +214,12 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
       if (Math.abs(diff) <= halfArc) br.hp = 0;
+    }
+    if (executeProc && this.meleeSwings.length > 0) {
+      const swing = this.meleeSwings[this.meleeSwings.length - 1];
+      swing.executeProc = true;
+      swing.life += 0.5;
+      swing.maxLife += 0.5;
     }
   }
 

@@ -17,6 +17,7 @@ import {
   spawnAnimatedArmor,
   spawnMimic,
   spawnRatArcher,
+  spawnSkeletonWarrior,
   spawnNecromancer,
   spawnSkeleton,
   applyEnemyDamage,
@@ -100,6 +101,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   spawnRatArcher(x, y) {
     return spawnRatArcher(this, x, y);
+  }
+
+  spawnSkeletonWarrior(x, y) {
+    return spawnSkeletonWarrior(this, x, y);
   }
 
   spawnNecromancer(x, y) {

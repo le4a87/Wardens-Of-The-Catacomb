@@ -172,6 +172,10 @@ export function handleUiClicks(game) {
       game.spendSkillPoint("warriorRage");
       continue;
     }
+    if (pointInRect(game, click.x, click.y, game.uiRects.skillWarriorExecuteNode)) {
+      game.spendSkillPoint("warriorExecute");
+      continue;
+    }
     const itemRects = game.uiRects.shopItems || [];
     for (const item of itemRects) {
       if (pointInRect(game, click.x, click.y, item.rect)) {

@@ -28,6 +28,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.skillMultiarrowNode = null;
     game.uiRects.skillWarriorMomentumNode = null;
     game.uiRects.skillWarriorRageNode = null;
+    game.uiRects.skillWarriorExecuteNode = null;
     game.uiRects.statsButton = null;
     game.uiRects.statsClose = null;
 
@@ -60,6 +61,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       if (enemy.type === "goblin") this.drawTreasureGoblin(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "armor") this.drawAnimatedArmor(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "rat_archer") this.drawRatArcher(enemy, enemy.x - cameraX, enemy.y - cameraY);
+      else if (enemy.type === "skeleton_warrior") this.drawSkeletonWarrior(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "necromancer") this.drawNecromancer(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "skeleton") this.drawSkeleton(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "mimic") {

@@ -115,8 +115,14 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     ctx.save();
     ctx.globalAlpha = 0.55 * alpha;
     const slashGrad = ctx.createRadialGradient(x, y, range * 0.15, x + dirX * range * 0.6, y + dirY * range * 0.6, range);
-    slashGrad.addColorStop(0, "rgba(255, 232, 188, 0.9)");
-    slashGrad.addColorStop(1, "rgba(189, 96, 64, 0)");
+    if (swing.executeProc) {
+      slashGrad.addColorStop(0, "rgba(255, 106, 106, 0.96)");
+      slashGrad.addColorStop(0.55, "rgba(221, 48, 48, 0.7)");
+      slashGrad.addColorStop(1, "rgba(128, 12, 12, 0)");
+    } else {
+      slashGrad.addColorStop(0, "rgba(255, 232, 188, 0.9)");
+      slashGrad.addColorStop(1, "rgba(189, 96, 64, 0)");
+    }
     ctx.fillStyle = slashGrad;
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -125,16 +131,25 @@ export class RendererRuntimeEffects extends RendererRuntimeScene {
     ctx.fill();
 
     ctx.globalAlpha = 0.85 * alpha;
-    ctx.strokeStyle = "#f4d8b3";
-    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = swing.executeProc ? "#ff5f5f" : "#f4d8b3";
+    ctx.lineWidth = swing.executeProc ? 3 : 2.4;
     ctx.beginPath();
     ctx.arc(x, y, range * 0.82, start, end);
     ctx.stroke();
 
+    if (swing.executeProc) {
+      ctx.globalAlpha = 0.95 * alpha;
+      ctx.strokeStyle = "#ff4545";
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.arc(x, y, range * 0.88, start + arc * 0.08, end - arc * 0.08);
+      ctx.stroke();
+    }
+
     const bladeX = x + dirX * (range * 0.72);
     const bladeY = y + dirY * (range * 0.72);
-    ctx.strokeStyle = "#e9e0d1";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = swing.executeProc ? "#ffd0d0" : "#e9e0d1";
+    ctx.lineWidth = swing.executeProc ? 2.3 : 2;
     ctx.beginPath();
     ctx.moveTo(player.x - cameraX + dirX * 12, player.y - cameraY + dirY * 12);
     ctx.lineTo(bladeX, bladeY);
