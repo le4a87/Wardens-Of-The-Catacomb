@@ -77,7 +77,7 @@ export function stepGame(game, dt, controls = {}) {
   const trapSightRange = (Number.isFinite(trapCfg.sightRangeTiles) ? trapCfg.sightRangeTiles : 5) * game.config.map.tile;
   const trapDetectRange = (Number.isFinite(trapCfg.detectRangeTiles) ? trapCfg.detectRangeTiles : 10) * game.config.map.tile;
   const trapDetectBaseChance = Number.isFinite(trapCfg.detectForwardChance) ? trapCfg.detectForwardChance : 0.3;
-  const playerTrapRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
+  const playerEnemyRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
     ? game.getPlayerEnemyCollisionRadius()
     : game.player.size * 0.5;
   const isPlayerInTrapLane = (trap) => {
@@ -89,7 +89,7 @@ export function stepGame(game, dt, controls = {}) {
     const forward = dx * trap.dirX + dy * trap.dirY;
     if (forward <= 0 || forward > trapSightRange) return false;
     const side = Math.abs(dx * -trap.dirY + dy * trap.dirX);
-    if (side > playerTrapRadius + game.config.map.tile * 0.18) return false;
+    if (side > playerEnemyRadius + game.config.map.tile * 0.18) return false;
     const samples = Math.max(1, Math.ceil(forward / Math.max(8, game.config.map.tile * 0.35)));
     for (let i = 1; i < samples; i++) {
       const t = i / samples;
@@ -271,7 +271,7 @@ export function stepGame(game, dt, controls = {}) {
         }
       }
       if (b.life <= 0) continue;
-      if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerTrapRadius + b.size * 0.5) {
+      if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerEnemyRadius + b.size * 0.5) {
         const rawDamage = typeof game.rollWallTrapDamage === "function"
           ? game.rollWallTrapDamage()
           : game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
