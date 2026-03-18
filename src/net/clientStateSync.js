@@ -207,6 +207,7 @@ export function applyMetaStateToGame(game, state) {
   if (Number.isFinite(state.gold)) game.gold = state.gold;
   if (Number.isFinite(state.experience)) game.experience = state.experience;
   if (Number.isFinite(state.expToNextLevel)) game.expToNextLevel = state.expToNextLevel;
+  if (Number.isFinite(state.activePlayerCount)) game.activePlayerCount = state.activePlayerCount;
   if (Number.isFinite(state.skillPoints)) game.skillPoints = state.skillPoints;
   if (hasOwn(state, "hasKey")) game.hasKey = !!state.hasKey;
   if (hasOwn(state, "gameOver")) game.gameOver = !!state.gameOver;

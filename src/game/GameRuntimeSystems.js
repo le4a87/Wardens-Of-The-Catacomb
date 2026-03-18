@@ -201,6 +201,7 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
   }
 
   gainExperience(amount) {
+    if (typeof this.isFloorBossActive === "function" && this.isFloorBossActive()) return;
     this.experience += amount;
     while (this.experience >= this.expToNextLevel) {
       this.experience -= this.expToNextLevel;
@@ -270,7 +271,7 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
     const spreadRad = (spreadDeg * Math.PI) / 180;
     // Arrow sprite tail sits ~7px behind its local origin; push spawn forward so tail aligns with bow center.
     const releaseTailOffset = 7;
-    const damageMult = this.getMultiarrowDamageMultiplier();
+    const damageMultipliers = this.getMultiarrowArrowDamageMultipliers();
 
     for (let i = 0; i < count; i++) {
       const t = count <= 1 ? 0 : i / (count - 1);
@@ -287,7 +288,7 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
         angle: a,
         life: 1.1,
         size: 6,
-        damageMult,
+        damageMult: damageMultipliers[i] || damageMultipliers[damageMultipliers.length - 1] || 1,
         hitTargets: new Set()
       });
     }

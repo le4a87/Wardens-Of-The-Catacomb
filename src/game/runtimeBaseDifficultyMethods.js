@@ -1,13 +1,49 @@
 import { vecLength } from "../utils.js";
 
 export const runtimeBaseDifficultyMethods = {
+  getActivePlayerCount() {
+    return Math.max(1, Math.floor(Number.isFinite(this.activePlayerCount) ? this.activePlayerCount : 1));
+  },
+
+  getPlayerCountDifficultyFactor() {
+    return Math.max(0, this.getActivePlayerCount() - 1);
+  },
+
+  getMultiplayerSpawnRateScale() {
+    const cfg = this.config?.multiplayer || {};
+    const perPlayer = Number.isFinite(cfg.spawnRatePerPlayer) ? Math.max(0, cfg.spawnRatePerPlayer) : 0;
+    const cap = Number.isFinite(cfg.spawnRateCap) ? Math.max(1, cfg.spawnRateCap) : 1.45;
+    return Math.min(cap, 1 + this.getPlayerCountDifficultyFactor() * perPlayer);
+  },
+
+  getMultiplayerActiveEnemyCapScale() {
+    const cfg = this.config?.multiplayer || {};
+    const perPlayer = Number.isFinite(cfg.activeCapPerPlayer) ? Math.max(0, cfg.activeCapPerPlayer) : 0;
+    const cap = Number.isFinite(cfg.activeCapCap) ? Math.max(1, cfg.activeCapCap) : 1.65;
+    return Math.min(cap, 1 + this.getPlayerCountDifficultyFactor() * perPlayer);
+  },
+
+  getMultiplayerEnemySpeedScale() {
+    const cfg = this.config?.multiplayer || {};
+    const perPlayer = Number.isFinite(cfg.speedPerPlayer) ? Math.max(0, cfg.speedPerPlayer) : 0;
+    const cap = Number.isFinite(cfg.speedCap) ? Math.max(1, cfg.speedCap) : 1.18;
+    return Math.min(cap, 1 + this.getPlayerCountDifficultyFactor() * perPlayer);
+  },
+
+  getMultiplayerEnemyDamageScale() {
+    const cfg = this.config?.multiplayer || {};
+    const perPlayer = Number.isFinite(cfg.damagePerPlayer) ? Math.max(0, cfg.damagePerPlayer) : 0;
+    const cap = Number.isFinite(cfg.damageCap) ? Math.max(1, cfg.damageCap) : 1.24;
+    return Math.min(cap, 1 + this.getPlayerCountDifficultyFactor() * perPlayer);
+  },
+
   getEnemySpeedScale() {
     const c = this.config.enemy;
     const tier = this.getDifficultyTier();
     const base = Number.isFinite(c.levelSpeedBase) ? c.levelSpeedBase : 0.62;
     const per = Number.isFinite(c.levelSpeedPerLevel) ? c.levelSpeedPerLevel : 0.085;
     const cap = Number.isFinite(c.levelSpeedCap) ? c.levelSpeedCap : 2.2;
-    return Math.max(0.15, Math.min(cap, base + tier * per));
+    return Math.max(0.15, Math.min(cap, (base + tier * per) * this.getMultiplayerEnemySpeedScale()));
   },
 
   getEnemyDamageScale() {
@@ -16,7 +52,7 @@ export const runtimeBaseDifficultyMethods = {
     const base = Number.isFinite(c.levelDamageBase) ? c.levelDamageBase : 1.0;
     const per = Number.isFinite(c.levelDamagePerLevel) ? c.levelDamagePerLevel : 0.11;
     const cap = Number.isFinite(c.levelDamageCap) ? c.levelDamageCap : 2.8;
-    return Math.max(0.1, Math.min(cap, base + tier * per));
+    return Math.max(0.1, Math.min(cap, (base + tier * per) * this.getMultiplayerEnemyDamageScale()));
   },
 
   getEnemyHealthScale() {
@@ -34,16 +70,16 @@ export const runtimeBaseDifficultyMethods = {
     const base = Number.isFinite(c.levelDefenseBase) ? c.levelDefenseBase : 1.0;
     const per = Number.isFinite(c.levelDefensePerLevel) ? c.levelDefensePerLevel : 0.07;
     const cap = Number.isFinite(c.levelDefenseCap) ? c.levelDefenseCap : 2.2;
-    return Math.max(0.1, Math.min(cap, base + tier * per));
+    return Math.max(0.1, Math.min(cap, (base + tier * per) * this.getMultiplayerSpawnRateScale()));
   },
 
   getEnemySpawnRateScale() {
     const c = this.config.enemy;
-    const tier = this.getDifficultyTier();
+    const levelPart = Math.max(0, (Number.isFinite(this.level) ? this.level : 1) - 1);
     const base = Number.isFinite(c.levelSpawnRateBase) ? c.levelSpawnRateBase : 1.0;
-    const per = Number.isFinite(c.levelSpawnRatePerLevel) ? c.levelSpawnRatePerLevel : 0.08;
+    const per = Number.isFinite(c.levelSpawnRatePerLevel) ? c.levelSpawnRatePerLevel : 0.10;
     const cap = Number.isFinite(c.levelSpawnRateCap) ? c.levelSpawnRateCap : 2.4;
-    return Math.max(0.1, Math.min(cap, base + tier * per));
+    return Math.max(0.1, Math.min(cap, base + levelPart * per));
   },
 
   getDifficultyTier() {
@@ -57,6 +93,17 @@ export const runtimeBaseDifficultyMethods = {
     const tier = this.getDifficultyTier();
     const pack = 1 + Math.floor(tier / 3.2);
     return Math.max(1, Math.min(6, pack));
+  },
+
+  getActiveEnemyCap() {
+    const cfg = this.config?.enemy || {};
+    const base = Number.isFinite(cfg.activeCapBase) ? Math.max(1, Math.floor(cfg.activeCapBase)) : 24;
+    const perFloor = Number.isFinite(cfg.activeCapPerFloor) ? Math.max(0, cfg.activeCapPerFloor) : 4;
+    const floorValue = base + Math.max(0, this.floor - 1) * perFloor;
+    const scaled = Math.round(floorValue * this.getMultiplayerActiveEnemyCapScale());
+    const curveCap = Number.isFinite(cfg.activeCapMax) ? Math.max(base, Math.floor(cfg.activeCapMax)) : scaled;
+    const hardCap = Number.isFinite(cfg.maxCount) ? Math.max(base, Math.floor(cfg.maxCount)) : curveCap;
+    return Math.max(1, Math.min(hardCap, Math.min(curveCap, scaled)));
   },
 
   getEnemyOutpacingStatus() {
@@ -247,6 +294,7 @@ export const runtimeBaseDifficultyMethods = {
   dropBreakableLoot(x, y) {
     const cfg = this.config.breakables;
     if (!cfg) return;
+    const healthAmount = typeof this.getHealthPickupAmount === "function" ? this.getHealthPickupAmount() : 1;
     if (Math.random() < cfg.dropGoldRate) {
       const base = cfg.goldMin + Math.floor(Math.random() * (cfg.goldMax - cfg.goldMin + 1));
       const amount = Math.max(1, Math.floor(base * this.getGoldDropAmountMultiplier()));
@@ -259,13 +307,13 @@ export const runtimeBaseDifficultyMethods = {
         life: this.config.drops.life
       });
     }
-    if (Math.random() < cfg.dropHealthRate) {
+    if (Math.random() < this.getHealthDropRate()) {
       this.drops.push({
         type: "health",
         x: x + (Math.random() - 0.5) * 10,
         y: y + (Math.random() - 0.5) * 10,
         size: 12,
-        amount: this.config.drops.healthRestore,
+        amount: healthAmount,
         life: this.config.drops.life
       });
     }

@@ -2,9 +2,8 @@ export function getEnemySpawnInterval(game) {
   const c = game.config.enemy;
   const base = Number.isFinite(c.spawnIntervalStart) ? c.spawnIntervalStart : 2.6;
   const min = Number.isFinite(c.spawnIntervalMin) ? c.spawnIntervalMin : 0.55;
-  const multA = game.getEnemySpawnRateMultiplier();
-  const multB = game.getEnemySpawnRateScale();
-  const denom = Number.isFinite(multA) && Number.isFinite(multB) ? multA * multB : 1;
+  const mult = game.getEnemySpawnRateScale();
+  const denom = Number.isFinite(mult) ? mult : 1;
   return Math.max(min, base / Math.max(0.05, denom));
 }
 
@@ -12,27 +11,30 @@ export function getMoveSpeedMultiplier(game) {
   return 1 + game.upgrades.moveSpeed.level * 0.05;
 }
 
-export function getEnemySpawnRateMultiplier(game) {
-  return 1 + game.upgrades.enemySpawnRate.level * 0.07;
-}
-
 export function getGoldFindMultiplier(game) {
-  return 1 + game.upgrades.goldFind.level * 0.12;
+  const levelScale = 1 + Math.max(0, game.level - 1) * 0.05;
+  const floorScale = 1 + Math.max(0, game.floor - 1) * 0.08;
+  return levelScale * floorScale;
 }
 
 export function getGoldDropRate(game) {
   const base = game.config.drops.rateGold;
   const levelBonus = (game.level - 1) * 0.008;
   const floorBonus = (game.floor - 1) * 0.012;
-  const shopBonus = game.upgrades.goldFind.level * 0.006;
-  return Math.min(0.7, base + levelBonus + floorBonus + shopBonus);
+  return Math.min(0.7, base + levelBonus + floorBonus);
+}
+
+export function getHealthDropRate(game) {
+  const base = Number.isFinite(game.config.drops.rateHealth) ? game.config.drops.rateHealth : 0.05;
+  const levelBonus = Math.max(0, game.level - 1) * 0.004;
+  const floorBonus = Math.max(0, game.floor - 1) * 0.008;
+  return Math.min(0.28, base + levelBonus + floorBonus);
 }
 
 export function getGoldDropAmountMultiplier(game) {
   const levelScale = 1 + (game.level - 1) * 0.09;
   const floorScale = 1 + (game.floor - 1) * 0.12;
-  const shopScale = 1 + game.upgrades.goldFind.level * 0.06;
-  return levelScale * floorScale * shopScale;
+  return levelScale * floorScale;
 }
 
 export function getAttackSpeedMultiplier(game) {
@@ -46,7 +48,8 @@ export function getDamageMultiplier(game) {
 
 export function getDefenseFlatReduction(game) {
   const base = Number.isFinite(game.classSpec.baseDefenseFlat) ? game.classSpec.baseDefenseFlat : 0;
-  return base + game.upgrades.defense.level * 1.5;
+  const levelBonus = Number.isFinite(game.classSpec.levelDefenseFlatGain) ? Math.max(0, game.classSpec.levelDefenseFlatGain) * Math.max(0, game.level - 1) : 0;
+  return base + levelBonus + game.upgrades.defense.level * 1.5;
 }
 
 export function getUpgradeCost(game, upgradeKey) {

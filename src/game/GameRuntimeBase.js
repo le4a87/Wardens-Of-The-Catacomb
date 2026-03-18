@@ -6,6 +6,7 @@ import { Renderer } from "../Renderer.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
 import { runtimeCombatStatsMethods } from "./runtimeCombatStatsMethods.js";
 import { runtimeFloorBossMethods } from "./runtimeFloorBossMethods.js";
+import { createNecromancerBeamState, createPlayerState, createSkillState, createUpgradeState } from "./runtimeBaseStateFactories.js";
 
 export class GameRuntimeBase {
   constructor(canvas, options = {}) {
@@ -53,6 +54,7 @@ export class GameRuntimeBase {
     this.time = 0;
     this.skillPoints = 0;
     this.statsPanelOpen = false;
+    this.activePlayerCount = 1;
     this.passiveRegenTimer = 2;
     this.levelWeaponDamageBonus = 0;
     this.floorBoss = this.createFloorBossState(this.floor);
@@ -75,57 +77,15 @@ export class GameRuntimeBase {
     this.uiRects = {};
     this.uiScroll = { skillTree: 0, shop: 0 };
     this.floatingTexts = [];
-    this.skills = {
-      fireArrow: { key: "fireArrow", label: "Fire Arrow", points: 0, maxPoints: 8 },
-      piercingStrike: { key: "piercingStrike", label: "Piercing Strike", points: 0, maxPoints: 8 },
-      multiarrow: { key: "multiarrow", label: "Multiarrow", points: 0, maxPoints: 8 },
-      warriorMomentum: { key: "warriorMomentum", label: "Frenzy", points: 0, maxPoints: 8 },
-      warriorRage: { key: "warriorRage", label: "Rage", points: 0, maxPoints: 8 },
-      warriorExecute: { key: "warriorExecute", label: "Execute", points: 0, maxPoints: 8 },
-      undeadMastery: { key: "undeadMastery", label: "Control Mastery", points: 0, maxPoints: 4 },
-      deathBolt: { key: "deathBolt", label: "Death Bolt", points: 0, maxPoints: 8 },
-      explodingDeath: { key: "explodingDeath", label: "Augment Death", points: 0, maxPoints: 8 }
-    };
+    this.skills = createSkillState();
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
     this.warriorRageCooldownTimer = 0;
-    this.necromancerBeam = {
-      active: false,
-      targetId: null,
-      targetX: 0,
-      targetY: 0,
-      progress: 0,
-      healTickTimer: 0
-    };
-    this.upgrades = {
-      moveSpeed: { key: "moveSpeed", label: "Move Speed", baseCost: 80, costScale: 1.28, level: 0, maxLevel: 20 },
-      enemySpawnRate: { key: "enemySpawnRate", label: "Enemy Spawn Rate", baseCost: 60, costScale: 1.25, level: 0, maxLevel: 15 },
-      goldFind: { key: "goldFind", label: "Gold Find", baseCost: 90, costScale: 1.3, level: 0, maxLevel: 20 },
-      attackSpeed: { key: "attackSpeed", label: "Attack Speed", baseCost: 120, costScale: 1.32, level: 0, maxLevel: 20 },
-      damage: { key: "damage", label: "Damage", baseCost: 110, costScale: 1.3, level: 0, maxLevel: 20 },
-      defense: { key: "defense", label: "Defense", baseCost: 95, costScale: 1.29, level: 0, maxLevel: 16 }
-    };
-    this.shopOrder = ["moveSpeed", "enemySpawnRate", "goldFind", "attackSpeed", "damage", "defense"];
+    this.necromancerBeam = createNecromancerBeamState();
+    this.upgrades = createUpgradeState();
+    this.shopOrder = ["moveSpeed", "attackSpeed", "damage", "defense"];
 
-    this.player = {
-      x: 0,
-      y: 0,
-      size: 22,
-      speed: this.classSpec.baseMoveSpeed,
-      health: Number.isFinite(this.classSpec.baseMaxHealth) ? this.classSpec.baseMaxHealth : this.config.player.maxHealth,
-      maxHealth: Number.isFinite(this.classSpec.baseMaxHealth) ? this.classSpec.baseMaxHealth : this.config.player.maxHealth,
-      fireCooldown: 0,
-      fireArrowCooldown: 0,
-      deathBoltCooldown: 0,
-      dirX: 1,
-      dirY: 0,
-      facing: 0,
-      moving: false,
-      animTime: 0,
-      hitCooldown: 0,
-      hpBarTimer: 0,
-      classType: this.classType
-    };
+    this.player = createPlayerState(this.classType, this.classSpec, this.config.player.maxHealth);
 
     this.door = { x: 0, y: 0, open: false };
     this.pickup = { x: 0, y: 0, taken: false };
@@ -167,6 +127,11 @@ export class GameRuntimeBase {
       this.markPlayerHealthBarVisible();
       this.spawnFloatingText(this.player.x, this.player.y - 26, `+${Math.max(1, Math.round(healed))}`, "#79e59a", 0.8, 14);
     }
+  }
+
+  getHealthPickupAmount() {
+    const pct = Number.isFinite(this.config?.drops?.healthRestorePct) ? this.config.drops.healthRestorePct : 0.25;
+    return Math.max(1, Math.round(this.player.maxHealth * Math.max(0, pct)));
   }
 
   applyPlayerDamage(amount) {
@@ -244,14 +209,7 @@ export class GameRuntimeBase {
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
     this.warriorRageCooldownTimer = 0;
-    this.necromancerBeam = {
-      active: false,
-      targetId: null,
-      targetX: 0,
-      targetY: 0,
-      progress: 0,
-      healTickTimer: 0
-    };
+    this.necromancerBeam = createNecromancerBeamState();
     this.navDistance = Array.from({ length: this.map.length }, () => Array(this.map[0].length).fill(-1));
     this.navPlayerTile = { x: -1, y: -1 };
     this.hasKey = false;
@@ -358,7 +316,8 @@ export class GameRuntimeBase {
   }
 
   getPlayerMoveSpeed() {
-    return this.classSpec.baseMoveSpeed * this.getMoveSpeedMultiplier() * this.getWarriorMomentumMultiplier();
+    const levelBonus = Number.isFinite(this.classSpec.levelMoveSpeedGain) ? Math.max(0, this.classSpec.levelMoveSpeedGain) * Math.max(0, this.level - 1) : 0;
+    return (this.classSpec.baseMoveSpeed + levelBonus) * this.getMoveSpeedMultiplier() * this.getWarriorMomentumMultiplier();
   }
 
   isArcherClass() {
@@ -402,7 +361,11 @@ export class GameRuntimeBase {
     const min = Number.isFinite(this.config.necromancer?.minCharmDuration) ? this.config.necromancer.minCharmDuration : 0.5;
     const denom = Math.log1p(1.2 * Math.max(1, maxPoints));
     const norm = denom > 0 ? Math.log1p(1.2 * Math.min(maxPoints, p)) / denom : 1;
-    return base - (base - min) * Math.max(0, Math.min(1, norm));
+    const skillDuration = base - (base - min) * Math.max(0, Math.min(1, norm));
+    const levelReductionPct = Number.isFinite(this.classSpec.levelCharmTimeReductionPct)
+      ? Math.max(0, this.classSpec.levelCharmTimeReductionPct) * Math.max(0, this.level - 1)
+      : 0;
+    return Math.max(min, skillDuration * Math.max(0.35, 1 - levelReductionPct));
   }
 
   getControlledUndeadCount() {
@@ -412,7 +375,10 @@ export class GameRuntimeBase {
   getControlledUndeadBoost(points = this.skills.explodingDeath.points) {
     const perRank = Number.isFinite(this.config.necromancer?.petBuffPerRank) ? this.config.necromancer.petBuffPerRank : 0.2;
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
-    return 1 + perRank * p;
+    const levelBoost = Number.isFinite(this.classSpec.levelControlPowerPct)
+      ? Math.max(0, this.classSpec.levelControlPowerPct) * Math.max(0, this.level - 1)
+      : 0;
+    return (1 + perRank * p) * (1 + levelBoost);
   }
 
   getControlledUndeadDefenseMultiplier(points = this.skills.explodingDeath.points) {

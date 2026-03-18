@@ -128,7 +128,10 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
   row("Defense", `${game.getDefenseFlatReduction().toFixed(1)}`);
   row("Gold Find", `x${game.getGoldFindMultiplier().toFixed(2)}`);
   row("Drop Rate", `${(game.getGoldDropRate() * 100).toFixed(1)}%`);
-  row("Spawn Rate", `x${game.getEnemySpawnRateMultiplier().toFixed(2)}`);
+  row("Health Drop", `${(game.getHealthDropRate().toFixed(3) * 100).toFixed(1)}%`);
+  row("Spawn Scale", `x${game.getEnemySpawnRateScale().toFixed(2)}`);
+  row("Enemy Cap", `${game.getActiveEnemyCap()}`);
+  row("Players", `${game.getActivePlayerCount()}`);
   row("Class", game.classSpec.label);
   row(
     "Range/Reach",

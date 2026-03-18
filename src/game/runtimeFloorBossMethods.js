@@ -121,6 +121,11 @@ export const runtimeFloorBossMethods = {
     boss.completedAtTime = this.time;
   },
 
+  isFloorBossActive() {
+    const boss = this.syncFloorBossState();
+    return boss.phase === "active";
+  },
+
   spawnExitPortal(x, y) {
     if (!Number.isFinite(x) || !Number.isFinite(y) || this.portal?.active) return false;
     this.portal = { x, y, active: true };

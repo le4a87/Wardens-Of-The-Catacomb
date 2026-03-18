@@ -1,6 +1,10 @@
 export const runtimeCombatStatsMethods = {
   getPlayerFireCooldown() {
-    return Math.max(this.classSpec.minAttackCooldown, this.classSpec.baseAttackCooldown / this.getAttackSpeedMultiplier());
+    const levelAttackBonusPct = Number.isFinite(this.classSpec.levelAttackSpeedPct)
+      ? Math.max(0, this.classSpec.levelAttackSpeedPct) * Math.max(0, this.level - 1)
+      : 0;
+    const attackMultiplier = this.getAttackSpeedMultiplier() * (1 + levelAttackBonusPct);
+    return Math.max(this.classSpec.minAttackCooldown, this.classSpec.baseAttackCooldown / attackMultiplier);
   },
 
   getAttackSpeed() {
@@ -44,7 +48,8 @@ export const runtimeCombatStatsMethods = {
 
   getLifeLeechPercent() {
     const base = Number.isFinite(this.classSpec.baseLifeLeech) ? this.classSpec.baseLifeLeech : 0;
-    return Math.max(0, base);
+    const levelGain = Number.isFinite(this.classSpec.levelLifeLeechGain) ? Math.max(0, this.classSpec.levelLifeLeechGain) * Math.max(0, this.level - 1) : 0;
+    return Math.max(0, base + levelGain);
   },
 
   getProjectileSpeed() {
@@ -109,6 +114,23 @@ export const runtimeCombatStatsMethods = {
     const norm = Math.log1p(1.35 * p) / Math.log1p(1.35 * Math.max(1, maxPoints));
     const bonus = 0.18 * Math.max(0, Math.min(1, norm));
     return 1 + bonus;
+  },
+
+  getMultiarrowArrowDamageMultipliers(points = this.skills.multiarrow.points) {
+    const count = this.getMultiarrowCount(points);
+    const volleyMultiplier = this.getMultiarrowDamageMultiplier(points);
+    if (count <= 1) return [volleyMultiplier];
+
+    const center = (count - 1) * 0.5;
+    const rawWeights = [];
+    for (let i = 0; i < count; i++) {
+      const distanceFromCenter = Math.abs(i - center);
+      const normalizedDistance = center > 0 ? distanceFromCenter / center : 0;
+      const weight = 0.28 + 1.05 * Math.pow(Math.max(0, 1 - normalizedDistance), 1.35);
+      rawWeights.push(weight);
+    }
+    const totalWeight = rawWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+    return rawWeights.map((weight) => volleyMultiplier * (weight / totalWeight));
   },
 
   getMultiarrowSpreadDeg(points = this.skills.multiarrow.points) {

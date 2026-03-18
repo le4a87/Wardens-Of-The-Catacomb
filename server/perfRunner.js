@@ -2,14 +2,17 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { GameSim } from "../src/sim/GameSim.js";
 import { diffMetric, estimateServerNow, mean, percentile, readBaseline, stddev } from "./perf/helpers.js";
 import { updateProjectileStateFromSnapshot } from "./perf/projectileState.js";
 
 const PERF_PORT = Number.parseInt(process.env.PERF_PORT || "8091", 10);
-const OUTPUT_PATH = resolve(process.cwd(), "artifacts/perf/latest.json");
-const BASELINE_PATH = resolve(process.cwd(), "artifacts/perf/baseline.json");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+process.chdir(projectRoot);
+const OUTPUT_PATH = resolve(projectRoot, "artifacts/perf/latest.json");
+const BASELINE_PATH = resolve(projectRoot, "artifacts/perf/baseline.json");
 const ROOM_ID = "perf-room";
 const RUN_MS = 5200;
 const INPUT_HZ = 20;
@@ -66,7 +69,7 @@ function makeInput(seq, elapsedMs) {
 
 function startServer(port) {
   const child = spawn(process.execPath, ["server/networkServer.js"], {
-    cwd: process.cwd(),
+    cwd: projectRoot,
     env: { ...process.env, PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"]
   });

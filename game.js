@@ -13,6 +13,27 @@ import {
 import { chunkKey, computeChunkReadiness } from "./src/net/mapChunkReadiness.js";
 import { predictProjectileSpawn, prunePredictedProjectiles } from "./src/net/projectilePrediction.js";
 import { canRunPredictedCollision, collectInput, handleNetworkUiActions, predictFromInput, setSelectedClass, shouldSendNetworkInput, updateNetworkRole } from "./src/net/sessionInteraction.js";
+import {
+  clearSplashRender as clearSplashCanvas,
+  consumeSnapshotForRender,
+  drawSplashFrame,
+  estimateServerNowMs as estimateServerNowMsFromState,
+  observeServerTime as observeServerTimeIntoState,
+  syncIdleSoundState as syncIdleMusicState,
+  syncMusicForGame as syncMusicControllerForGame
+} from "./src/bootstrap/gameUiRuntime.js";
+import {
+  cleanupCurrentGame as cleanupCurrentGameRuntime,
+  dismissSplash as dismissSplashRuntime,
+  getRenderDelayMs as getRenderDelayForRole,
+  handleSplashKeydown as handleSplashKeydownRuntime,
+  returnToMenu as returnToMenuRuntime,
+  startSplashScreen as startSplashScreenRuntime,
+  updateNetworkStatus as updateNetworkStatusRuntime,
+  updateRequiredChunkReadiness as updateRequiredChunkReadinessRuntime
+} from "./src/bootstrap/gameUiSessionRuntime.js";
+import { createLocalGame, startIdleSoundMonitor, wireMenuControls } from "./src/bootstrap/gameStartupRuntime.js";
+import { applyNetworkSnapshot, startNetworkRenderLoopRuntime } from "./src/bootstrap/networkRenderRuntime.js";
 
 const canvas = document.getElementById("game");
 const layout = document.querySelector(".layout");
@@ -21,30 +42,20 @@ const selector = document.getElementById("character-select");
 const devStartOptions = document.getElementById("dev-start-options");
 const devStartFloorInput = document.getElementById("dev-start-floor");
 const classButtons = Array.from(document.querySelectorAll("[data-class-option]"));
-const startButton = document.getElementById("start-game");
-const startNetworkButton = document.getElementById("start-network-game");
-const serverUrlInput = document.getElementById("net-server-url");
-const roomIdInput = document.getElementById("net-room-id");
-const playerNameInput = document.getElementById("net-player-name");
-const networkSession = document.getElementById("network-session");
-const networkStatus = document.getElementById("network-status");
-const networkTakeControl = document.getElementById("network-take-control");
+const startButton = document.getElementById("start-game"), startNetworkButton = document.getElementById("start-network-game");
+const serverUrlInput = document.getElementById("net-server-url"), roomIdInput = document.getElementById("net-room-id");
+const playerNameInput = document.getElementById("net-player-name"), networkSession = document.getElementById("network-session");
+const networkStatus = document.getElementById("network-status"), networkTakeControl = document.getElementById("network-take-control");
 const networkLeave = document.getElementById("network-leave");
 const music = new MusicController();
 const splashLogo = new Image();
 const SPLASH_FADE_MS = 1800;
 let selectedClass = "archer";
-let currentGame = null;
-let netClient = null;
-let netInputTimer = 0;
-let netRenderRaf = 0;
-let netPlayerId = null;
-let netControllerId = null;
-let netInputSeq = 0;
-let netLastAckSeq = 0;
-let netPendingInputs = [];
-let netMapSignature = "";
-let netPendingSnapshot = null;
+let currentGame = null, netClient = null;
+let netInputTimer = 0, netRenderRaf = 0;
+let netPlayerId = null, netControllerId = null;
+let netInputSeq = 0, netLastAckSeq = 0;
+let netPendingInputs = [], netMapSignature = "", netPendingSnapshot = null;
 const NET_INPUT_DT = 1 / 60;
 const NET_CLOCK_OFFSET_SMOOTHING = 0.12;
 const netDelayParams = new URLSearchParams(window.location.search);
@@ -55,108 +66,28 @@ const NET_RENDER_DELAY_MS_SPECTATOR = Number.isFinite(parsedSpectatorDelay) ? Ma
 const NET_MAX_SNAPSHOT_BUFFER = 20;
 const NET_MIN_SEND_MS = 12;
 const NET_FORCE_SEND_IDLE_MS = 66;
-let netSnapshotBuffer = [];
-let netLastInputSendAt = 0;
-let netLastSentInput = null;
-let netLastInputProcessAt = 0;
-let netMapChunksReceived = 0;
-let netMapChunkSize = 24;
-let netRequiredChunkKeys = new Set();
-let netReceivedChunkKeys = new Set();
-let netLastServerPlayer = null;
-let netClockOffsetMs = 0;
-let netClockOffsetReady = false;
-let netPredictedProjectiles = new Map();
-let netNextHeldPrimaryPredictAtMs = 0;
-let netLastSnapshotRecvAtMs = 0;
-let netSnapshotIntervalMeanMs = 33;
-let netSnapshotJitterMs = 0;
-let netLastSnapshotGapMs = 33;
-let splashActive = true;
-let splashDismissed = false;
-let splashRaf = 0;
-let splashStartedAt = 0;
-let splashReady = false;
+let netSnapshotBuffer = [], netLastInputSendAt = 0, netLastSentInput = null, netLastInputProcessAt = 0;
+let netMapChunksReceived = 0, netMapChunkSize = 24;
+let netRequiredChunkKeys = new Set(), netReceivedChunkKeys = new Set(), netLastServerPlayer = null;
+const netClockState = { offsetMs: 0, ready: false };
+let netPredictedProjectiles = new Map(), netNextHeldPrimaryPredictAtMs = 0;
+let netLastSnapshotRecvAtMs = 0, netSnapshotIntervalMeanMs = 33, netSnapshotJitterMs = 0, netLastSnapshotGapMs = 33;
+let splashActive = true, splashDismissed = false, splashRaf = 0, splashStartedAt = 0, splashReady = false;
 const isDevMode = new URLSearchParams(window.location.search).get("dev") === "1";
 
-splashLogo.addEventListener("load", () => {
-  splashReady = true;
-});
-splashLogo.addEventListener("error", () => {
-  splashReady = false;
-});
+if (devStartOptions) devStartOptions.hidden = !isDevMode;
+
+splashLogo.addEventListener("load", () => { splashReady = true; });
+splashLogo.addEventListener("error", () => { splashReady = false; });
 splashLogo.src = "./assets/images/logo.png";
-if (splashLogo.complete && splashLogo.naturalWidth > 0 && splashLogo.naturalHeight > 0) {
-  splashReady = true;
-}
+if (splashLogo.complete && splashLogo.naturalWidth > 0 && splashLogo.naturalHeight > 0) splashReady = true;
 
 function syncIdleSoundState(game) {
-  if (splashActive) {
-    music.setIdleGameplayActive(false);
-    music.resetIdleTimer();
-    return;
-  }
-  const idleGameplayActive = !!(
-    game &&
-    !game.paused &&
-    !game.gameOver &&
-    !game.shopOpen &&
-    !game.skillTreeOpen &&
-    !game.statsPanelOpen
-  );
-  music.setIdleGameplayActive(idleGameplayActive);
-  if (!idleGameplayActive) music.resetIdleTimer();
+  syncIdleMusicState(music, splashActive, game);
 }
 
 function syncMusicForGame(game) {
-  if (splashActive) return;
-  syncIdleSoundState(game);
-  if (!game) {
-    music.playMenuMusic();
-    return;
-  }
-  if (game.gameOver) {
-    music.playDeathMusic();
-    return;
-  }
-  if (game.networkEnabled) {
-    if (game.musicTrack) music.playGameplayMusic(game.floor, game.musicTrack);
-  } else {
-    music.playGameplayMusic(game.floor);
-  }
-  if (game.paused || game.gameOver) music.pauseCurrentTrack();
-  else music.playCurrentTrack();
-}
-
-function updateNetworkStatus(text) {
-  if (networkStatus) networkStatus.textContent = text;
-  if (currentGame && currentGame.networkEnabled) currentGame.networkLoadingMessage = text;
-}
-
-function getRenderDelayMs() {
-  return isNetworkController() ? NET_RENDER_DELAY_MS_CONTROLLER : NET_RENDER_DELAY_MS_SPECTATOR;
-}
-
-function observeServerTime(serverTime) {
-  if (!Number.isFinite(serverTime)) return;
-  const observedOffset = Date.now() - serverTime;
-  if (!netClockOffsetReady) {
-    netClockOffsetMs = observedOffset;
-    netClockOffsetReady = true;
-    return;
-  }
-  netClockOffsetMs += (observedOffset - netClockOffsetMs) * NET_CLOCK_OFFSET_SMOOTHING;
-}
-
-function estimateServerNowMs() {
-  if (!netClockOffsetReady) return NaN;
-  return Date.now() - netClockOffsetMs;
-}
-
-function updateRequiredChunkReadiness(game, playerX, playerY) {
-  const readiness = computeChunkReadiness(game, playerX, playerY, netMapChunkSize, netReceivedChunkKeys);
-  netRequiredChunkKeys = readiness.requiredChunkKeys;
-  if (game) game.networkHasChunks = readiness.hasChunks;
+  syncMusicControllerForGame(music, splashActive, game);
 }
 
 function stopNetworkSession() {
@@ -172,277 +103,169 @@ function stopNetworkSession() {
     netClient.disconnect();
     netClient = null;
   }
-  netPlayerId = null;
-  netControllerId = null;
-  netInputSeq = 0;
-  netLastAckSeq = 0;
-  netPendingInputs = [];
-  netMapSignature = "";
-  netPendingSnapshot = null;
-  netSnapshotBuffer = [];
-  netLastInputSendAt = 0;
-  netLastSentInput = null;
-  netLastInputProcessAt = 0;
-  netMapChunksReceived = 0;
-  netMapChunkSize = 24;
-  netRequiredChunkKeys = new Set();
-  netReceivedChunkKeys = new Set();
-  netLastServerPlayer = null;
-  netClockOffsetMs = 0;
-  netClockOffsetReady = false;
-  netPredictedProjectiles = new Map();
-  netNextHeldPrimaryPredictAtMs = 0;
-  netLastSnapshotRecvAtMs = 0;
-  netSnapshotIntervalMeanMs = 33;
-  netSnapshotJitterMs = 0;
-  netLastSnapshotGapMs = 33;
+  netPlayerId = null; netControllerId = null;
+  netInputSeq = 0; netLastAckSeq = 0;
+  netPendingInputs = []; netMapSignature = ""; netPendingSnapshot = null;
+  netSnapshotBuffer = []; netLastInputSendAt = 0; netLastSentInput = null; netLastInputProcessAt = 0;
+  netMapChunksReceived = 0; netMapChunkSize = 24;
+  netRequiredChunkKeys = new Set(); netReceivedChunkKeys = new Set(); netLastServerPlayer = null;
+  netClockState.offsetMs = 0; netClockState.ready = false;
+  netPredictedProjectiles = new Map(); netNextHeldPrimaryPredictAtMs = 0;
+  netLastSnapshotRecvAtMs = 0; netSnapshotIntervalMeanMs = 33; netSnapshotJitterMs = 0; netLastSnapshotGapMs = 33;
   if (networkSession) networkSession.hidden = true;
-}
-
-function cleanupCurrentGame() {
-  if (currentGame) {
-    currentGame.stop();
-    currentGame = null;
-  }
 }
 
 function returnToMenu() {
-  stopNetworkSession();
-  cleanupCurrentGame();
-  if (layout) layout.classList.remove("is-splash");
-  if (menuPanel) menuPanel.hidden = false;
-  if (selector) selector.hidden = false;
-  music.playMenuMusic();
+  returnToMenuRuntime({
+    stopNetworkSession,
+    cleanupCurrentGame: () => {
+      currentGame = cleanupCurrentGameRuntime(currentGame);
+    },
+    layout,
+    menuPanel,
+    selector,
+    music
+  });
 }
 
-function clearSplashRender() {
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-function drawSplash(now) {
+const drawSplash = (now) => {
   if (!canvas || !splashActive) return;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const elapsed = Math.max(0, now - splashStartedAt);
-  const fade = Math.max(0, Math.min(1, elapsed / SPLASH_FADE_MS));
-  const width = canvas.width;
-  const height = canvas.height;
-
-  ctx.clearRect(0, 0, width, height);
-
-  const bg = ctx.createLinearGradient(0, 0, width, height);
-  bg.addColorStop(0, "#090d14");
-  bg.addColorStop(0.52, "#111827");
-  bg.addColorStop(1, "#1b1410");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.save();
-  ctx.globalAlpha = 0.18 * fade;
-  ctx.fillStyle = "#d2a15f";
-  ctx.beginPath();
-  ctx.arc(width * 0.5, height * 0.5, Math.min(width, height) * 0.32, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  if (splashReady && splashLogo.naturalWidth > 0 && splashLogo.naturalHeight > 0) {
-    const maxWidth = width * 0.68;
-    const maxHeight = height * 0.42;
-    const scale = Math.min(maxWidth / splashLogo.naturalWidth, maxHeight / splashLogo.naturalHeight);
-    const drawWidth = splashLogo.naturalWidth * scale;
-    const drawHeight = splashLogo.naturalHeight * scale;
-    const drawX = (width - drawWidth) * 0.5;
-    const drawY = height * 0.23;
-    ctx.save();
-    ctx.globalAlpha = fade;
-    ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
-    ctx.shadowBlur = 28;
-    ctx.drawImage(splashLogo, drawX, drawY, drawWidth, drawHeight);
-    ctx.restore();
-  }
-
-  const promptAlpha = fade >= 0.92 ? 0.92 : fade * 0.65;
-  ctx.save();
-  ctx.textAlign = "center";
-  ctx.fillStyle = `rgba(244, 236, 222, ${0.82 * fade})`;
-  ctx.font = "600 18px Trebuchet MS, Segoe UI, sans-serif";
-  ctx.fillText("Wardens Of The Catacomb", width * 0.5, height * 0.74);
-  ctx.fillStyle = `rgba(216, 203, 182, ${promptAlpha})`;
-  ctx.font = "15px Trebuchet MS, Segoe UI, sans-serif";
-  ctx.fillText("Press any key to continue", width * 0.5, height * 0.82);
-  ctx.restore();
-
+  drawSplashFrame({
+    canvas,
+    splashStartedAt,
+    fadeMs: SPLASH_FADE_MS,
+    splashReady,
+    splashLogo,
+    now
+  });
   splashRaf = requestAnimationFrame(drawSplash);
-}
+};
 
-function dismissSplash() {
-  if (!splashActive || splashDismissed) return;
-  splashDismissed = true;
-  splashActive = false;
-  window.removeEventListener("keydown", handleSplashKeydown);
-  if (layout) layout.classList.remove("is-splash");
-  if (splashRaf) {
-    cancelAnimationFrame(splashRaf);
-    splashRaf = 0;
-  }
-  clearSplashRender();
-  if (selector && !currentGame) {
-    if (menuPanel) menuPanel.hidden = false;
-    selector.hidden = false;
-    music.playMenuMusic();
-    return;
-  }
-  if (!selector && !startButton && classButtons.length === 0 && !currentGame) {
-    currentGame = new Game(canvas, {
-      classType: "archer",
-      onPauseChanged: (_paused, game) => syncMusicForGame(game),
-      onFloorChanged: (_floor, game) => syncMusicForGame(game),
-      onGameOverChanged: (_gameOver, game) => syncMusicForGame(game)
-    });
-    syncMusicForGame(currentGame);
-    currentGame.start();
-  }
-}
+const dismissSplash = () => {
+  dismissSplashRuntime({
+    splashActive,
+    splashDismissed,
+    setSplashDismissed: (value) => {
+      splashDismissed = value;
+    },
+    setSplashActive: (value) => {
+      splashActive = value;
+    },
+    windowObject: window,
+    handleSplashKeydown,
+    layout,
+    splashRaf,
+    cancelFrame: (raf) => {
+      cancelAnimationFrame(raf);
+      splashRaf = 0;
+    },
+    clearSplashRender: () => clearSplashCanvas(canvas),
+    selector,
+    currentGame,
+    menuPanel,
+    music,
+    startFallbackGame: () => {
+      if (!startButton && classButtons.length === 0 && !currentGame) {
+        currentGame = createLocalGame({
+          Game,
+          canvas,
+          selectedClass: "archer",
+          returnToMenu,
+          syncMusicForGame,
+          startingFloor: 1
+        });
+      }
+    }
+  });
+};
 
-function handleSplashKeydown(event) {
-  if (!splashActive) return;
-  if (!event || event.repeat) return;
-  dismissSplash();
-}
+const handleSplashKeydown = (event) => {
+  handleSplashKeydownRuntime(event, splashActive, dismissSplash);
+};
 
-function startSplashScreen() {
-  splashStartedAt = performance.now();
-  if (layout) layout.classList.add("is-splash");
-  if (menuPanel) menuPanel.hidden = true;
-  if (selector) selector.hidden = true;
-  if (networkSession) networkSession.hidden = true;
-  music.playMenuMusic({ fadeInMs: SPLASH_FADE_MS });
-  splashRaf = requestAnimationFrame(drawSplash);
-  window.addEventListener("keydown", handleSplashKeydown);
-}
-
-function isNetworkController() {
-  return !!(netControllerId && netPlayerId && netControllerId === netPlayerId);
-}
+const startSplashScreen = () => {
+  const next = startSplashScreenRuntime({
+    layout,
+    menuPanel,
+    selector,
+    networkSession,
+    music,
+    fadeMs: SPLASH_FADE_MS,
+    requestFrame: requestAnimationFrame,
+    drawSplash,
+    windowObject: window,
+    handleSplashKeydown,
+    now: performance.now()
+  });
+  splashStartedAt = next.splashStartedAt;
+  splashRaf = next.splashRaf;
+};
+const isNetworkController = () => !!(netControllerId && netPlayerId && netControllerId === netPlayerId);
 
 function applySnapshot(game, state, controller = false, ackSeq = 0) {
-  const next = applySnapshotToGame({
+  const next = applyNetworkSnapshot({
     game,
     state,
     controller,
     ackSeq,
+    applySnapshotToGame,
     isNetworkController: isNetworkController(),
     localPlayerId: netPlayerId,
     netPredictedProjectiles,
     netPendingInputs,
     netLastAckSeq,
-    snapshotJitterMs: netSnapshotJitterMs,
-    frameGapMs: netLastSnapshotGapMs
+    netSnapshotJitterMs,
+    netLastSnapshotGapMs,
+    syncMusicForGame
   });
   netPendingInputs = next.netPendingInputs;
   netLastAckSeq = next.netLastAckSeq;
-  if (game.gameOver && !game.deathTransition?.active && typeof game.triggerGameOver === "function") game.triggerGameOver();
-  syncMusicForGame(game);
 }
 
 function startNetworkRenderLoop(game) {
-  let lastFrameAt = performance.now();
-
-  const consumeSnapshotForRender = (targetServerTime, targetRecvTime) => {
-    if (netSnapshotBuffer.length === 0) return null;
-    // Keep buffer bounded and drop stale backlog to prevent catch-up bursts.
-    if (netSnapshotBuffer.length > NET_MAX_SNAPSHOT_BUFFER) {
-      netSnapshotBuffer.splice(0, netSnapshotBuffer.length - NET_MAX_SNAPSHOT_BUFFER);
+  startNetworkRenderLoopRuntime({
+    game,
+    getCurrentGame: () => currentGame,
+    handleNetworkUiActions,
+    netClient,
+    isNetworkController,
+    getRenderDelayMs: () => getRenderDelayForRole(isNetworkController, NET_RENDER_DELAY_MS_CONTROLLER, NET_RENDER_DELAY_MS_SPECTATOR),
+    estimateServerNowMs: () => estimateServerNowMsFromState(netClockState),
+    consumeSnapshotForRender,
+    netSnapshotBuffer,
+    maxSnapshotBuffer: NET_MAX_SNAPSHOT_BUFFER,
+    applySnapshot,
+    collectInput,
+    prunePredictedProjectiles,
+    netPredictedProjectiles,
+    setNetRenderRaf: (value) => {
+      netRenderRaf = value;
     }
-    const useServerClock = Number.isFinite(targetServerTime);
-    let chosenIndex = -1;
-    for (let i = 0; i < netSnapshotBuffer.length; i++) {
-      const pkt = netSnapshotBuffer[i];
-      const compareTime = useServerClock && Number.isFinite(pkt.serverTime) ? pkt.serverTime : pkt.recvTime;
-      if (compareTime <= (useServerClock ? targetServerTime : targetRecvTime)) chosenIndex = i;
-      else break;
-    }
-    if (chosenIndex < 0) {
-      // Nothing old enough yet; avoid rendering far behind by trimming excessive queue growth.
-      if (netSnapshotBuffer.length > 10) {
-        const keep = netSnapshotBuffer.slice(-6);
-        netSnapshotBuffer.length = 0;
-        netSnapshotBuffer.push(...keep);
-      }
-      return null;
-    }
-    const chosen = netSnapshotBuffer[chosenIndex];
-    // Drop all snapshots up to chosen; render at most one snapshot per frame.
-    netSnapshotBuffer.splice(0, chosenIndex + 1);
-    return chosen;
-  };
-
-  const loop = (now) => {
-    if (!currentGame || currentGame !== game) return;
-    const dt = Math.min((now - lastFrameAt) / 1000, 0.05);
-    lastFrameAt = now;
-    handleNetworkUiActions(game, netClient, isNetworkController());
-    const renderDelay = getRenderDelayMs();
-    const targetRecvTime = performance.now() - renderDelay;
-    const estimatedServerNow = estimateServerNowMs();
-    const targetServerTime = Number.isFinite(estimatedServerNow) ? estimatedServerNow - renderDelay : NaN;
-    const pkt = consumeSnapshotForRender(targetServerTime, targetRecvTime);
-    if (pkt) {
-      applySnapshot(
-        game,
-        pkt.state,
-        isNetworkController(),
-        Number.isFinite(pkt.lastInputSeq) ? pkt.lastInputSeq : 0
-      );
-    }
-    if (isNetworkController()) {
-      const input = collectInput(game, false);
-      if (input.hasAim) {
-        const ax = input.aimX - game.player.x;
-        const ay = input.aimY - game.player.y;
-        const alen = Math.hypot(ax, ay) || 1;
-        game.player.dirX = ax / alen;
-        game.player.dirY = ay / alen;
-      }
-    }
-    if (typeof game.updateDeathTransition === "function") game.updateDeathTransition(dt);
-    if (Array.isArray(game.map) && game.map.length > 0) game.revealAroundPlayer();
-    prunePredictedProjectiles(netPredictedProjectiles);
-    game.renderer.draw(game);
-    netRenderRaf = requestAnimationFrame(loop);
-  };
-  netRenderRaf = requestAnimationFrame(loop);
+  });
 }
 
 function startLocalGame() {
   stopNetworkSession();
   if (selector) selector.hidden = true;
-  cleanupCurrentGame();
+  currentGame = cleanupCurrentGameRuntime(currentGame);
   const requestedStartFloor = isDevMode && devStartFloorInput
     ? Math.max(1, Number.parseInt(devStartFloorInput.value || "1", 10) || 1)
     : 1;
-  currentGame = new Game(canvas, {
-    classType: selectedClass,
-    onReturnToMenu: returnToMenu,
-    onPauseChanged: (_paused, game) => syncMusicForGame(game),
-    onFloorChanged: (_floor, game) => syncMusicForGame(game),
-    onGameOverChanged: (_gameOver, game) => syncMusicForGame(game)
+  currentGame = createLocalGame({
+    Game,
+    canvas,
+    selectedClass,
+    returnToMenu,
+    syncMusicForGame,
+    startingFloor: requestedStartFloor
   });
-  if (requestedStartFloor > 1 && typeof currentGame.applyDebugStartingFloor === "function") {
-    currentGame.applyDebugStartingFloor(requestedStartFloor);
-  }
-  syncMusicForGame(currentGame);
-  currentGame.start();
 }
 
 function startNetworkGame() {
   stopNetworkSession();
   if (selector) selector.hidden = true;
   if (networkSession) networkSession.hidden = false;
-  cleanupCurrentGame();
+  currentGame = cleanupCurrentGameRuntime(currentGame);
 
   const wsUrl = serverUrlInput && serverUrlInput.value ? serverUrlInput.value.trim() : "ws://localhost:8090";
   const roomId = roomIdInput && roomIdInput.value ? roomIdInput.value.trim() : "lobby";
@@ -464,12 +287,12 @@ function startNetworkGame() {
   game.networkLoadingMessage = "Connecting...";
   currentGame = game;
   syncMusicForGame(game);
-  updateNetworkStatus(`Connecting to ${wsUrl}...`);
+  updateNetworkStatusRuntime(networkStatus, currentGame, `Connecting to ${wsUrl}...`);
   startNetworkRenderLoop(game);
 
   netClient = new NetClient(wsUrl);
   netClient.on("open", () => {
-    updateNetworkStatus(`Connected. Joining room "${roomId}"...`);
+    updateNetworkStatusRuntime(networkStatus, currentGame, `Connected. Joining room "${roomId}"...`);
     netClient.join(roomId, name, selectedClass);
   });
   netClient.on("hello", (msg) => {
@@ -478,26 +301,33 @@ function startNetworkGame() {
   netClient.on("join.ok", (msg) => {
     netControllerId = msg.controllerId || null;
     updateNetworkRole(game, isNetworkController(), networkTakeControl);
-    updateNetworkStatus(`Joined "${msg.roomId}" as ${game.networkRole}`);
+    updateNetworkStatusRuntime(networkStatus, currentGame, `Joined "${msg.roomId}" as ${game.networkRole}`);
   });
   netClient.on("room.roster", (msg) => {
     netControllerId = msg.controllerId || null;
     updateNetworkRole(game, isNetworkController(), networkTakeControl);
     const players = Array.isArray(msg.players) ? msg.players.length : 0;
-    updateNetworkStatus(`Room: ${players} connected | Role: ${game.networkRole}`);
+    updateNetworkStatusRuntime(networkStatus, currentGame, `Room: ${players} connected | Role: ${game.networkRole}`);
   });
   const handleMapReady = () => {
     const playerX = Number.isFinite(netLastServerPlayer?.x) ? netLastServerPlayer.x : game.player.x;
     const playerY = Number.isFinite(netLastServerPlayer?.y) ? netLastServerPlayer.y : game.player.y;
-    updateRequiredChunkReadiness(game, playerX, playerY);
+    netRequiredChunkKeys = updateRequiredChunkReadinessRuntime(
+      computeChunkReadiness,
+      game,
+      playerX,
+      playerY,
+      netMapChunkSize,
+      netReceivedChunkKeys
+    );
     if (!game.networkHasMap || !game.networkHasChunks) return;
     if (netPendingSnapshot && (!netPendingSnapshot.mapSignature || netPendingSnapshot.mapSignature === netMapSignature)) {
-      observeServerTime(netPendingSnapshot.serverTime);
+      observeServerTimeIntoState(netClockState, netPendingSnapshot.serverTime, NET_CLOCK_OFFSET_SMOOTHING);
       netSnapshotBuffer.push({ recvTime: performance.now(), ...netPendingSnapshot });
       netPendingSnapshot = null;
     }
     updateNetworkRole(game, isNetworkController(), networkTakeControl);
-    updateNetworkStatus(`Room synced | Role: ${game.networkRole}`);
+    updateNetworkStatusRuntime(networkStatus, currentGame, `Room synced | Role: ${game.networkRole}`);
     game.networkReady = true;
   };
 
@@ -516,7 +346,7 @@ function startNetworkGame() {
     game.networkHasChunks = false;
     game.networkChunkSync = true;
     game.armorStands = syncByIdLerp(game.armorStands, msg.armorStands, 1);
-    updateNetworkStatus("Loading nearby map chunks...");
+    updateNetworkStatusRuntime(networkStatus, currentGame, "Loading nearby map chunks...");
   });
   netClient.on("state.mapChunk", (msg) => {
     const chunkSig = typeof msg.mapSignature === "string" ? msg.mapSignature : "";
@@ -547,7 +377,7 @@ function startNetworkGame() {
     handleMapReady();
   });
   netClient.on("state.meta", (msg) => {
-    observeServerTime(msg.serverTime);
+    observeServerTimeIntoState(netClockState, msg.serverTime, NET_CLOCK_OFFSET_SMOOTHING);
     const metaSig = typeof msg.mapSignature === "string" ? msg.mapSignature : "";
     if (metaSig && netMapSignature && metaSig !== netMapSignature) return;
     const meta = msg && msg.meta && typeof msg.meta === "object" ? msg.meta : msg;
@@ -564,7 +394,7 @@ function startNetworkGame() {
     }
     netLastSnapshotRecvAtMs = recvAt;
     netControllerId = msg.controllerId || netControllerId;
-    observeServerTime(msg.serverTime);
+    observeServerTimeIntoState(netClockState, msg.serverTime, NET_CLOCK_OFFSET_SMOOTHING);
     if (Number.isFinite(msg.snapshotSeq)) {
       netClient.send("state.snapshotAck", { snapshotSeq: Math.floor(msg.snapshotSeq) });
     }
@@ -579,7 +409,7 @@ function startNetworkGame() {
       netReceivedChunkKeys = new Set();
       netLastServerPlayer = null;
       netPredictedProjectiles = new Map();
-      updateNetworkStatus("Synchronizing floor data...");
+      updateNetworkStatusRuntime(networkStatus, currentGame, "Synchronizing floor data...");
       updateNetworkRole(game, isNetworkController(), networkTakeControl);
       return;
     }
@@ -589,14 +419,21 @@ function startNetworkGame() {
       game.networkHasChunks = false;
       netLastServerPlayer = null;
       netPredictedProjectiles = new Map();
-      updateNetworkStatus("Waiting for map meta...");
+      updateNetworkStatusRuntime(networkStatus, currentGame, "Waiting for map meta...");
       updateNetworkRole(game, isNetworkController(), networkTakeControl);
       return;
     }
     const p = msg?.state?.player;
     if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
       netLastServerPlayer = { x: p.x, y: p.y };
-      updateRequiredChunkReadiness(game, p.x, p.y);
+      netRequiredChunkKeys = updateRequiredChunkReadinessRuntime(
+        computeChunkReadiness,
+        game,
+        p.x,
+        p.y,
+        netMapChunkSize,
+        netReceivedChunkKeys
+      );
     }
     netSnapshotBuffer.push({ recvTime: recvAt, ...msg });
     if (netSnapshotBuffer.length > NET_MAX_SNAPSHOT_BUFFER * 2) {
@@ -605,12 +442,12 @@ function startNetworkGame() {
     if (game.networkHasMap && game.networkHasChunks) handleMapReady();
     updateNetworkRole(game, isNetworkController(), networkTakeControl);
   });
-  netClient.on("warn", (msg) => updateNetworkStatus(`Warning: ${msg.message || "Server warning"}`));
-  netClient.on("error", (msg) => updateNetworkStatus(`Error: ${msg.message || "Connection error"}`));
+  netClient.on("warn", (msg) => updateNetworkStatusRuntime(networkStatus, currentGame, `Warning: ${msg.message || "Server warning"}`));
+  netClient.on("error", (msg) => updateNetworkStatusRuntime(networkStatus, currentGame, `Error: ${msg.message || "Connection error"}`));
   netClient.on("close", () => {
     game.networkReady = false;
     syncMusicForGame(game);
-    updateNetworkStatus("Disconnected from server");
+    updateNetworkStatusRuntime(networkStatus, currentGame, "Disconnected from server");
   });
   netClient.connect();
 
@@ -672,29 +509,25 @@ if (!canvas) {
   throw new Error("Game canvas not found.");
 }
 
-function monitorIdleSoundState() {
-  syncIdleSoundState(currentGame);
-  requestAnimationFrame(monitorIdleSoundState);
-}
+startIdleSoundMonitor(() => currentGame, syncIdleSoundState);
 
-requestAnimationFrame(monitorIdleSoundState);
-
-if (selector && startButton && classButtons.length > 0) {
-  if (devStartOptions) devStartOptions.hidden = !isDevMode;
-  selectedClass = setSelectedClass("archer", classButtons);
-  for (const button of classButtons) {
-    button.addEventListener("click", () => {
-      selectedClass = setSelectedClass(button.dataset.classOption, classButtons);
-    });
-  }
-  startButton.addEventListener("click", startLocalGame);
-  if (startNetworkButton) startNetworkButton.addEventListener("click", startNetworkGame);
-  if (networkTakeControl) {
-    networkTakeControl.addEventListener("click", () => {
-      if (netClient) netClient.takeControl();
-    });
-  }
-  if (networkLeave) networkLeave.addEventListener("click", returnToMenu);
-}
+selectedClass = wireMenuControls({
+  selector,
+  startButton,
+  classButtons,
+  setSelectedClass,
+  onClassSelected: (nextClass) => {
+    selectedClass = nextClass;
+  },
+  startLocalGame,
+  startNetworkButton,
+  startNetworkGame,
+  networkTakeControl,
+  takeControl: () => {
+    if (netClient) netClient.takeControl();
+  },
+  networkLeave,
+  returnToMenu
+});
 
 startSplashScreen();

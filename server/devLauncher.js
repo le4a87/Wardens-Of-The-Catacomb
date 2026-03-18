@@ -1,5 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
+import net from "node:net";
 import process from "node:process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+process.chdir(projectRoot);
 
 const HTTP_PORT = Number.parseInt(process.env.HTTP_PORT || "8080", 10);
 const WS_PORT = Number.parseInt(process.env.WS_PORT || "8090", 10);
@@ -23,6 +29,7 @@ function choosePythonCommand() {
 function startProcess(name, cmd, args, extraEnv = {}) {
   const child = spawn(cmd, args, {
     env: { ...process.env, ...extraEnv },
+    cwd: projectRoot,
     stdio: "inherit",
     shell: false
   });
@@ -34,6 +41,40 @@ function startProcess(name, cmd, args, extraEnv = {}) {
     shutdown(1);
   });
   return child;
+}
+
+function describePortConflict(port, label) {
+  const envName = label === "HTTP" ? "HTTP_PORT" : "WS_PORT";
+  const fallbackPort = label === "HTTP" ? port + 1 : port + 10;
+  const startCommand = label === "HTTP"
+    ? `${envName}=${fallbackPort} npm run dev`
+    : `HTTP_PORT=${HTTP_PORT} ${envName}=${fallbackPort} npm run dev`;
+  return [
+    `Port ${port} is already in use for the ${label} server.`,
+    "Recommended action:",
+    `- Stop the process using port ${port}. On Linux/WSL: \`lsof -i :${port}\` then \`kill <pid>\`.`,
+    `- Or start the dev stack on a different port: \`${startCommand}\`.`
+  ].join("\n");
+}
+
+function ensurePortAvailable(port, label) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", (err) => {
+      if (err && err.code === "EADDRINUSE") {
+        rejectPromise(new Error(describePortConflict(port, label)));
+        return;
+      }
+      rejectPromise(err);
+    });
+    server.listen(port, "127.0.0.1", () => {
+      server.close((closeErr) => {
+        if (closeErr) rejectPromise(closeErr);
+        else resolvePromise();
+      });
+    });
+  });
 }
 
 function openBrowser(url) {
@@ -68,9 +109,12 @@ function shutdown(exitCode = 0) {
   }, 600);
 }
 
-function main() {
+async function main() {
   const pythonCmd = choosePythonCommand();
   const pyArgs = pythonCmd === "py" ? ["-3", "-m", "http.server", String(HTTP_PORT)] : ["-m", "http.server", String(HTTP_PORT)];
+
+  await ensurePortAvailable(HTTP_PORT, "HTTP");
+  await ensurePortAvailable(WS_PORT, "WebSocket");
 
   console.log(`Starting HTTP server on http://localhost:${HTTP_PORT}`);
   startProcess("http", pythonCmd, pyArgs);
@@ -91,4 +135,7 @@ process.on("uncaughtException", (err) => {
   shutdown(1);
 });
 
-main();
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
+  shutdown(1);
+});

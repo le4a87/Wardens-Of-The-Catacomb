@@ -139,6 +139,7 @@ export function serializeMetaState(source) {
     gold: sim.gold,
     experience: sim.experience,
     expToNextLevel: sim.expToNextLevel,
+    activePlayerCount: sim.activePlayerCount,
     skillPoints: sim.skillPoints,
     hasKey: sim.hasKey,
     gameOver: sim.gameOver,

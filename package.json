@@ -1,15 +1,15 @@
 {
-  "name": "gauntlet-clone",
+  "name": "wardens-of-the-catacomb",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "serve": "python -m http.server 8080",
-    "server:net": "node server/networkServer.js",
-    "dev": "node server/devLauncher.js",
-    "check": "node server/check-all.js",
-    "validate:boss": "node server/validate-floor-boss.js",
-    "perf:test": "node server/perfRunner.js"
+    "server:net": "node -e \"Promise.all([import('node:path'), import('node:url')]).then(([{ resolve }, { pathToFileURL }]) => import(pathToFileURL(resolve(process.env.INIT_CWD || process.cwd(), 'server/networkServer.js')).href))\"",
+    "dev": "node -e \"Promise.all([import('node:path'), import('node:url')]).then(([{ resolve }, { pathToFileURL }]) => import(pathToFileURL(resolve(process.env.INIT_CWD || process.cwd(), 'server/devLauncher.js')).href))\"",
+    "check": "node -e \"Promise.all([import('node:path'), import('node:url')]).then(([{ resolve }, { pathToFileURL }]) => import(pathToFileURL(resolve(process.env.INIT_CWD || process.cwd(), 'server/check-all.js')).href))\"",
+    "validate:boss": "node -e \"Promise.all([import('node:path'), import('node:url')]).then(([{ resolve }, { pathToFileURL }]) => import(pathToFileURL(resolve(process.env.INIT_CWD || process.cwd(), 'server/validate-floor-boss.js')).href))\"",
+    "perf:test": "node -e \"Promise.all([import('node:path'), import('node:url')]).then(([{ resolve }, { pathToFileURL }]) => import(pathToFileURL(resolve(process.env.INIT_CWD || process.cwd(), 'server/perfRunner.js')).href))\""
   },
   "dependencies": {
     "ws": "^8.18.0"

@@ -138,6 +138,32 @@ function validateNetworkReconciliation() {
   };
 }
 
+function validateBossLocksAmbientSpawns() {
+  const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
+  game.level = game.getFloorBossTriggerLevel();
+  assert(game.updateFloorBossTrigger() === true, "boss lockout test did not queue boss");
+  const boss = game.spawnNecromancer(game.player.x + 96, game.player.y);
+  game.enemies.push(boss);
+  game.markFloorBossActive();
+
+  game.enemySpawnTimer = -1;
+  const animatedStand = game.armorStands.find((stand) => stand.animated && !stand.activated);
+  if (animatedStand) {
+    game.player.x = animatedStand.x;
+    game.player.y = animatedStand.y;
+  }
+
+  const enemyCountBefore = game.enemies.length;
+  stepGame(game, 0.016, { processUi: false });
+  assert(game.enemies.length === enemyCountBefore, "ambient enemy spawn continued during active boss");
+  if (animatedStand) assert(animatedStand.activated !== true, "animated armor activated during active boss");
+
+  return {
+    enemyCountBefore,
+    enemyCountAfter: game.enemies.length
+  };
+}
+
 function validateRegressionSurface() {
   const game = new GameSim({ classType: "fighter", viewportWidth: 960, viewportHeight: 640 });
   assert(Array.isArray(game.map) && game.map.length > 0, "map generation failed");
@@ -162,6 +188,7 @@ function main() {
     triggerLevels: validateTriggerLevels(),
     localProgression: validateLocalProgression(),
     networkReconciliation: validateNetworkReconciliation(),
+    bossSpawnLockout: validateBossLocksAmbientSpawns(),
     regressionSurface: validateRegressionSurface()
   };
   console.log(JSON.stringify(results, null, 2));

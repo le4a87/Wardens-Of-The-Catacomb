@@ -15,7 +15,9 @@ export const CONFIG = {
       projectileSpeed: 360,
       passiveRegenPct: 0.01,
       levelHpGain: 6,
-      levelWeaponDamagePct: 0.05
+      levelWeaponDamagePct: 0.05,
+      levelMoveSpeedGain: 2.5,
+      levelAttackSpeedPct: 0.015
     },
     fighter: {
       key: "fighter",
@@ -35,7 +37,9 @@ export const CONFIG = {
       meleeArcDeg: 95,
       passiveRegenPct: 0.02,
       levelHpGain: 10,
-      levelWeaponDamagePct: 0.05
+      levelWeaponDamagePct: 0.05,
+      levelDefenseFlatGain: 0.35,
+      levelLifeLeechGain: 0.002
     },
     necromancer: {
       key: "necromancer",
@@ -53,7 +57,9 @@ export const CONFIG = {
       projectileSpeed: 0,
       passiveRegenPct: 0.01,
       levelHpGain: 7,
-      levelWeaponDamagePct: 0.03
+      levelWeaponDamagePct: 0.03,
+      levelControlPowerPct: 0.03,
+      levelCharmTimeReductionPct: 0.015
     }
   },
   map: {
@@ -90,6 +96,9 @@ export const CONFIG = {
   },
   enemy: {
     maxCount: 120,
+    activeCapBase: 30,
+    activeCapPerFloor: 10,
+    activeCapMax: 200,
     speedAtZeroTime: 0.58,
     speedRampPerSecond: 0.0019,
     speedCap: 1.3,
@@ -100,7 +109,7 @@ export const CONFIG = {
     levelSpeedPerLevel: 0.06,
     levelSpeedCap: 1.9,
     levelSpawnRateBase: 1.0,
-    levelSpawnRatePerLevel: 0.08,
+    levelSpawnRatePerLevel: 0.10,
     levelSpawnRateCap: 2.4,
     levelDamageBase: 1.0,
     levelDamagePerLevel: 0.11,
@@ -201,6 +210,8 @@ export const CONFIG = {
     necromancerHpMin: 36,
     necromancerHpMax: 48,
     necromancerSpeed: 76,
+    necromancerBossHpMultiplier: 1.55,
+    necromancerBossSpeedMultiplier: 1.22,
     necromancerDamageMin: 18,
     necromancerDamageMax: 28,
     necromancerPreferredRangeTiles: 5,
@@ -214,6 +225,9 @@ export const CONFIG = {
     necromancerSummonCooldown: 6.4,
     necromancerSummonCap: 4,
     necromancerSummonCount: 1,
+    necromancerBossSummonCooldownMultiplier: 0.68,
+    necromancerBossSummonCapBonus: 2,
+    necromancerBossSummonCountBonus: 1,
     necromancerRewardGoldMin: 90,
     necromancerRewardGoldMax: 130,
     leprechaunFleeSpeed: 240,
@@ -257,7 +271,7 @@ export const CONFIG = {
     life: 14,
     rateGold: 0.10,
     rateHealth: 0.05,
-    healthRestore: 20,
+    healthRestorePct: 0.25,
     goldMin: 5,
     goldMax: 20,
     treasureBagBaseGold: 45,
@@ -290,6 +304,28 @@ export const CONFIG = {
   progression: {
     baseXpToLevel: 30,
     xpLevelScaling: 1.35,
+    xpRewardMultiplierByLevel: [
+      1.0,
+      1.04,
+      1.08,
+      1.13,
+      1.18,
+      1.24,
+      1.31,
+      1.39,
+      1.5,
+      1.64,
+      1.76,
+      1.88,
+      2.0,
+      2.12,
+      2.24,
+      2.36,
+      2.48,
+      2.6,
+      2.72,
+      2.84
+    ],
     mapGrowthFactorPerFloor: 1.2,
     floorBossLevelMultiplier: 5
   },
@@ -345,5 +381,15 @@ export const CONFIG = {
   hud: {
     sidebarWidth: 300,
     topHudHeight: 36
+  },
+  multiplayer: {
+    spawnRatePerPlayer: 0.18,
+    spawnRateCap: 1.45,
+    activeCapPerPlayer: 0.22,
+    activeCapCap: 1.65,
+    speedPerPlayer: 0.05,
+    speedCap: 1.18,
+    damagePerPlayer: 0.06,
+    damageCap: 1.24
   }
 };

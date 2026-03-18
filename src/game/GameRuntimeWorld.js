@@ -30,9 +30,9 @@ import {
 import {
   getEnemySpawnInterval,
   getMoveSpeedMultiplier,
-  getEnemySpawnRateMultiplier,
   getGoldFindMultiplier,
   getGoldDropRate,
+  getHealthDropRate,
   getGoldDropAmountMultiplier,
   getAttackSpeedMultiplier,
   getDamageMultiplier,
@@ -147,16 +147,16 @@ export class GameRuntimeWorld extends GameRuntimeBase {
     return getMoveSpeedMultiplier(this);
   }
 
-  getEnemySpawnRateMultiplier() {
-    return getEnemySpawnRateMultiplier(this);
-  }
-
   getGoldFindMultiplier() {
     return getGoldFindMultiplier(this);
   }
 
   getGoldDropRate() {
     return getGoldDropRate(this);
+  }
+
+  getHealthDropRate() {
+    return getHealthDropRate(this);
   }
 
   getGoldDropAmountMultiplier() {

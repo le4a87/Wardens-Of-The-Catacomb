@@ -1,6 +1,10 @@
 import { readdirSync, statSync } from "node:fs";
-import { join, extname } from "node:path";
+import { join, extname, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const projectRoot = dirname(scriptDir);
 
 function collectJsFiles(dir, acc = []) {
   const entries = readdirSync(dir);
@@ -14,10 +18,10 @@ function collectJsFiles(dir, acc = []) {
   return acc;
 }
 
-const files = collectJsFiles(process.cwd());
+const files = collectJsFiles(projectRoot);
 let failed = 0;
 for (const file of files) {
-  const res = spawnSync(process.execPath, ["--check", file], { stdio: "inherit" });
+  const res = spawnSync(process.execPath, ["--check", file], { stdio: "inherit", cwd: projectRoot });
   if (res.status !== 0) failed += 1;
 }
 
