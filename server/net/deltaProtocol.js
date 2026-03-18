@@ -85,8 +85,7 @@ export function buildJoinKeyframeState(fullState) {
       bullets: toKeyframeCollection(fullState.bullets),
       fireArrows: toKeyframeCollection(fullState.fireArrows),
       fireZones: toKeyframeCollection(fullState.fireZones),
-      meleeSwings: toKeyframeCollection(fullState.meleeSwings),
-      floatingTexts: toKeyframeCollection(fullState.floatingTexts)
+      meleeSwings: toKeyframeCollection(fullState.meleeSwings)
     }
   };
 }

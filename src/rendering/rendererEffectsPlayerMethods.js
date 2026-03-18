@@ -272,6 +272,26 @@ export const rendererEffectsPlayerMethods = {
     ctx.arc(miniX + (game.player.x / this.config.map.tile) * scale, miniY + (game.player.y / this.config.map.tile) * scale, Math.max(2, scale * 1.2), 0, Math.PI * 2);
     ctx.fill();
 
+    const activeBoss = typeof game.getActiveFloorBossEnemy === "function" ? game.getActiveFloorBossEnemy() : null;
+    if (activeBoss) {
+      const blink = 0.5 + 0.5 * Math.sin((game.time || 0) * 7.5);
+      const bossX = miniX + (activeBoss.x / this.config.map.tile) * scale;
+      const bossY = miniY + (activeBoss.y / this.config.map.tile) * scale;
+      const bossRadius = Math.max(2.5, scale * 1.45 + blink * 0.6);
+      ctx.save();
+      ctx.globalAlpha = 0.55 + blink * 0.4;
+      ctx.fillStyle = "#ff3b30";
+      ctx.beginPath();
+      ctx.arc(bossX, bossY, bossRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 214, 214, 0.9)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(bossX, bossY, bossRadius + 1.3 + blink * 0.8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     return miniY + drawH + 6;
   }
 };

@@ -31,11 +31,25 @@ Use [TASK_BOARD.md](TASK_BOARD.md) as the running task tracker. Each Codex sessi
 - Include both regression-oriented checks and performance-oriented checks when the project provides them.
 - Record the commands run and the outcome in `TASK_BOARD.md`.
 
+### Validation Command Groups
+- `npm run validate:core`
+  - syntax and LOC checks
+- `npm run validate:gameplay`
+  - gameplay regression checks for boss flow, tactics, and minotaur behavior
+- `npm run validate:network`
+  - browser-driven network join, combat, hit-confirmation, archer, and audio checks
+- `npm run perf:all`
+  - local+network perf plus browser perf
+- `npm run validate:pre-commit`
+  - recommended pre-commit gate
+- `npm run validate:closeout`
+  - full branch closeout gate
+
 ### Example Validation Commands
 ```bash
 git status -u
-npm run check
-npm run validate:boss
+npm run validate:core
+npm run validate:gameplay
 npm run perf:test
 ```
 
@@ -43,7 +57,7 @@ npm run perf:test
 ```bash
 git status -u
 git diff --stat
-npm run check
+npm run validate:core
 git diff
 ```
 
@@ -53,6 +67,7 @@ git diff
 - Summarize completed feature work back into the relevant sections of `README.md`.
 - Reset `TASK_BOARD.md` to a clean ready-for-next-initiative state after the work is documented.
 - Commit and push the final branch state, then open a pull request to `main`.
+- Explicitly review changed binary assets before final merge or PR closeout so unrelated media edits do not ride along unnoticed.
 
 ### Example File Size Audit Commands
 ```bash
@@ -66,6 +81,7 @@ rg --files -g "*.js" -g "*.md" -g "*.css" -g "*.html" | ForEach-Object {
 ```bash
 git status -u
 git diff --stat
+npm run validate:closeout
 git add README.md docs/TASK_BOARD.md docs/CODEX_WORKFLOW.md src
 git diff --cached
 git commit -m "Complete feature and document results"
@@ -146,12 +162,15 @@ git push
 3. Re-read the diff for accidental edits, debug code, or unrelated changes.
 4. Confirm `docs/TASK_BOARD.md` reflects completed work and no stale in-progress items remain.
 5. Run the relevant validation commands for the scope of the change.
+   Recommended grouping:
+   `validate:core` during iteration, `validate:pre-commit` before commit, `validate:closeout` before PR finalization.
 6. Perform the 500 LOC file audit and refactor oversized files when needed.
 7. Update the relevant sections of `README.md` with durable feature outcomes.
-8. Commit with a message that matches the actual change set.
-9. Push the branch and open or update the pull request.
-10. Include a short PR description with purpose, major changes, validation, and known risks.
-11. After review, address feedback, re-run validation as needed, and push the follow-up commits.
+8. Review changed binary assets intentionally before final merge or PR closeout.
+9. Commit with a message that matches the actual change set.
+10. Push the branch and open or update the pull request.
+11. Include a short PR description with purpose, major changes, validation, and known risks.
+12. After review, address feedback, re-run validation as needed, and push the follow-up commits.
 
 ## Example Prompt Sequence
 1. `Read TASK_BOARD.md, inspect the current gameplay difficulty, class stats, and XP progression systems, then summarize the main tuning levers and update TASK_BOARD.md with a short implementation plan.`

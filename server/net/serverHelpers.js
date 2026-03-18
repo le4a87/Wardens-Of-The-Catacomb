@@ -19,6 +19,8 @@ export function makeDefaultInput() {
     hasAim: false,
     aimX: 0,
     aimY: 0,
+    aimDirX: 0,
+    aimDirY: 0,
     firePrimaryQueued: false,
     firePrimaryHeld: false,
     fireAltQueued: false
@@ -34,9 +36,12 @@ export function sanitizeInput(raw, previous) {
     next.hasAim = !!raw.hasAim;
     next.aimX = Number.isFinite(raw.aimX) ? raw.aimX : next.aimX;
     next.aimY = Number.isFinite(raw.aimY) ? raw.aimY : next.aimY;
-    next.firePrimaryQueued = !!raw.firePrimaryQueued;
+    next.aimDirX = Number.isFinite(raw.aimDirX) ? clamp(raw.aimDirX, -1, 1) : next.aimDirX;
+    next.aimDirY = Number.isFinite(raw.aimDirY) ? clamp(raw.aimDirY, -1, 1) : next.aimDirY;
+    // Latch queued actions until the authoritative tick consumes them.
+    next.firePrimaryQueued = !!raw.firePrimaryQueued || !!previous.firePrimaryQueued;
     next.firePrimaryHeld = !!raw.firePrimaryHeld;
-    next.fireAltQueued = !!raw.fireAltQueued;
+    next.fireAltQueued = !!raw.fireAltQueued || !!previous.fireAltQueued;
   }
   return next;
 }

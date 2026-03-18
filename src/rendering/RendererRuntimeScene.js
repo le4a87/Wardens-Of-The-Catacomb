@@ -63,9 +63,11 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     for (const enemy of game.enemies) {
       if (enemy.type === "goblin") this.drawTreasureGoblin(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "armor") this.drawAnimatedArmor(enemy, enemy.x - cameraX, enemy.y - cameraY);
+      else if (enemy.type === "mummy") this.drawMummy(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "rat_archer") this.drawRatArcher(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "skeleton_warrior") this.drawSkeletonWarrior(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "necromancer") this.drawNecromancer(enemy, enemy.x - cameraX, enemy.y - cameraY);
+      else if (enemy.type === "minotaur") this.drawMinotaur(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "skeleton") this.drawSkeleton(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "mimic") {
         if (enemy.dormant) this.drawBreakable({ type: "box", size: enemy.size }, enemy.x - cameraX, enemy.y - cameraY);

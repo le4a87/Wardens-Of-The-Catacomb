@@ -1,4 +1,12 @@
 export function collectInput(game, consumeQueued = true) {
+  if (game?.input?.mouse?.hasAim && typeof game.input.refreshAimWorldPosition === "function") {
+    game.input.refreshAimWorldPosition();
+  }
+  const playerX = Number.isFinite(game?.player?.x) ? game.player.x : 0;
+  const playerY = Number.isFinite(game?.player?.y) ? game.player.y : 0;
+  const rawAimX = game.input.mouse.worldX - playerX;
+  const rawAimY = game.input.mouse.worldY - playerY;
+  const rawAimLen = Math.hypot(rawAimX, rawAimY) || 1;
   const keys = game.input.keys;
   let moveX = 0;
   let moveY = 0;
@@ -12,6 +20,8 @@ export function collectInput(game, consumeQueued = true) {
     hasAim: !!game.input.mouse.hasAim,
     aimX: game.input.mouse.worldX,
     aimY: game.input.mouse.worldY,
+    aimDirX: game.input.mouse.hasAim ? rawAimX / rawAimLen : 0,
+    aimDirY: game.input.mouse.hasAim ? rawAimY / rawAimLen : 0,
     firePrimaryQueued: consumeQueued ? game.input.consumeLeftQueued() : false,
     firePrimaryHeld: !!game.input.mouse.leftDown,
     fireAltQueued: consumeQueued ? game.input.consumeRightQueued() : false
@@ -26,14 +36,41 @@ export function shouldSendNetworkInput(input, nowMs, previous, lastInputSendAt, 
     input.hasAim &&
     previous.hasAim &&
     (Math.abs(input.aimX - previous.aimX) > 1.5 || Math.abs(input.aimY - previous.aimY) > 1.5);
+  const changedAimDir =
+    input.hasAim &&
+    previous.hasAim &&
+    (Math.abs((input.aimDirX || 0) - (previous.aimDirX || 0)) > 0.01 || Math.abs((input.aimDirY || 0) - (previous.aimDirY || 0)) > 0.01);
   const hasAction = !!input.firePrimaryQueued || !!input.fireAltQueued;
-  if (changedMove || changedAimMode || changedAimPos || hasAction) return true;
+  if (changedMove || changedAimMode || changedAimPos || changedAimDir || hasAction) return true;
   return nowMs - lastInputSendAt >= forceSendIdleMs;
 }
 
 export function handleNetworkUiActions(game, netClient, isController) {
+  if (!game.networkUiDebug || typeof game.networkUiDebug !== "object") {
+    game.networkUiDebug = {
+      lastClick: null,
+      lastHit: "",
+      lastActionKind: "",
+      recentActions: []
+    };
+  }
   if (!netClient || !isController) {
-    game.input.consumeUiLeftClicks();
+    const droppedClicks = game.input.consumeUiLeftClicks();
+    if (droppedClicks.length > 0) {
+      game.networkUiDebug.lastClick = droppedClicks[droppedClicks.length - 1];
+      game.networkUiDebug.lastHit = netClient ? "notController" : "noNetClient";
+      game.networkUiDebug.lastActionKind = "";
+      game.networkUiDebug.recentActions.push({
+        atMs: Math.round(performance.now()),
+        click: droppedClicks[droppedClicks.length - 1],
+        hit: netClient ? "notController" : "noNetClient",
+        actionKind: "",
+        actionKey: ""
+      });
+      if (game.networkUiDebug.recentActions.length > 16) {
+        game.networkUiDebug.recentActions.splice(0, game.networkUiDebug.recentActions.length - 16);
+      }
+    }
     if (game.input.consumeWheelDelta) game.input.consumeWheelDelta();
     return;
   }
@@ -54,74 +91,106 @@ export function handleNetworkUiActions(game, netClient, isController) {
   if (clicks.length === 0) return;
 
   const hit = (x, y, rect) => game.pointInRect(x, y, rect);
+  const recordAction = (click, hitName, actionKind, actionKey = "") => {
+    game.networkUiDebug.lastClick = click ? { x: click.x, y: click.y } : null;
+    game.networkUiDebug.lastHit = hitName || "";
+    game.networkUiDebug.lastActionKind = actionKind || "";
+    game.networkUiDebug.recentActions.push({
+      atMs: Math.round(performance.now()),
+      click: click ? { x: click.x, y: click.y } : null,
+      hit: hitName || "",
+      actionKind: actionKind || "",
+      actionKey
+    });
+    if (game.networkUiDebug.recentActions.length > 16) {
+      game.networkUiDebug.recentActions.splice(0, game.networkUiDebug.recentActions.length - 16);
+    }
+  };
   for (const click of clicks) {
     if (hit(click.x, click.y, game.uiRects.shopButton)) {
+      recordAction(click, "shopButton", "toggleShop");
       netClient.sendAction({ kind: "toggleShop" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.shopClose)) {
+      recordAction(click, "shopClose", "closeShop");
       netClient.sendAction({ kind: "closeShop" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeButton)) {
+      recordAction(click, "skillTreeButton", "toggleSkillTree");
       netClient.sendAction({ kind: "toggleSkillTree" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeClose)) {
+      recordAction(click, "skillTreeClose", "closeSkillTree");
       netClient.sendAction({ kind: "closeSkillTree" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsButton)) {
+      recordAction(click, "statsButton", "toggleStats");
       netClient.sendAction({ kind: "toggleStats" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsClose)) {
+      recordAction(click, "statsClose", "closeStats");
       netClient.sendAction({ kind: "closeStats" });
       continue;
     }
     const itemRects = game.uiRects.shopItems || [];
     for (const item of itemRects) {
       if (hit(click.x, click.y, item.rect)) {
+        recordAction(click, `shopItem:${item.key}`, "buyUpgrade", item.key);
         netClient.sendAction({ kind: "buyUpgrade", key: item.key });
         break;
       }
     }
     if (hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
+      recordAction(click, "skillFireArrowNode", "spendSkill", "fireArrow");
       netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillPiercingStrikeNode)) {
+    if (hit(click.x, click.y, game.uiRects.skillPiercingNode)) {
+      recordAction(click, "skillPiercingNode", "spendSkill", "piercingStrike");
       netClient.sendAction({ kind: "spendSkill", key: "piercingStrike" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillMultiarrowNode)) {
+      recordAction(click, "skillMultiarrowNode", "spendSkill", "multiarrow");
       netClient.sendAction({ kind: "spendSkill", key: "multiarrow" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillWarriorMomentumNode)) {
+      recordAction(click, "skillWarriorMomentumNode", "spendSkill", "warriorMomentum");
       netClient.sendAction({ kind: "spendSkill", key: "warriorMomentum" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillWarriorRageNode)) {
+      recordAction(click, "skillWarriorRageNode", "spendSkill", "warriorRage");
       netClient.sendAction({ kind: "spendSkill", key: "warriorRage" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillWarriorExecuteNode)) {
+      recordAction(click, "skillWarriorExecuteNode", "spendSkill", "warriorExecute");
       netClient.sendAction({ kind: "spendSkill", key: "warriorExecute" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillUndeadMasteryNode)) {
+      recordAction(click, "skillUndeadMasteryNode", "spendSkill", "undeadMastery");
       netClient.sendAction({ kind: "spendSkill", key: "undeadMastery" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillDeathBoltNode)) {
+      recordAction(click, "skillDeathBoltNode", "spendSkill", "deathBolt");
       netClient.sendAction({ kind: "spendSkill", key: "deathBolt" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillExplodingDeathNode)) {
+      recordAction(click, "skillExplodingDeathNode", "spendSkill", "explodingDeath");
       netClient.sendAction({ kind: "spendSkill", key: "explodingDeath" });
       continue;
     }
+    recordAction(click, "", "", "");
     if (hit(click.x, click.y, game.uiRects.returnMenuButton)) {
       if (typeof game.onReturnToMenu === "function") game.onReturnToMenu();
     }
@@ -156,11 +225,17 @@ export function predictFromInput(game, input, dt, canRunPredictedCollision) {
   }
 
   if (input.hasAim) {
-    const ax = input.aimX - game.player.x;
-    const ay = input.aimY - game.player.y;
-    const alen = Math.hypot(ax, ay) || 1;
-    game.player.dirX = ax / alen;
-    game.player.dirY = ay / alen;
+    if (Number.isFinite(input.aimDirX) && Number.isFinite(input.aimDirY)) {
+      const alen = Math.hypot(input.aimDirX, input.aimDirY) || 1;
+      game.player.dirX = input.aimDirX / alen;
+      game.player.dirY = input.aimDirY / alen;
+    } else {
+      const ax = input.aimX - game.player.x;
+      const ay = input.aimY - game.player.y;
+      const alen = Math.hypot(ax, ay) || 1;
+      game.player.dirX = ax / alen;
+      game.player.dirY = ay / alen;
+    }
   }
 }
 

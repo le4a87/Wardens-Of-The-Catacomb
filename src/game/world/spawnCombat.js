@@ -3,10 +3,12 @@ import {
   spawnGhost as spawnGhostEntity,
   spawnTreasureGoblin as spawnTreasureGoblinEntity,
   spawnAnimatedArmor as spawnAnimatedArmorEntity,
+  spawnMummy as spawnMummyEntity,
   spawnMimic as spawnMimicEntity,
   spawnRatArcher as spawnRatArcherEntity,
   spawnSkeletonWarrior as spawnSkeletonWarriorEntity,
   spawnNecromancer as spawnNecromancerEntity,
+  spawnMinotaur as spawnMinotaurEntity,
   spawnSkeleton as spawnSkeletonEntity
 } from "../enemySystems.js";
 import { isWalkableTile } from "./navigationCollision.js";
@@ -62,6 +64,10 @@ export function spawnAnimatedArmor(game, x, y) {
   return spawnAnimatedArmorEntity(game, x, y);
 }
 
+export function spawnMummy(game, x, y) {
+  return spawnMummyEntity(game, x, y);
+}
+
 export function spawnMimic(game, x, y) {
   return spawnMimicEntity(game, x, y);
 }
@@ -78,6 +84,10 @@ export function spawnNecromancer(game, x, y) {
   return spawnNecromancerEntity(game, x, y);
 }
 
+export function spawnMinotaur(game, x, y) {
+  return spawnMinotaurEntity(game, x, y);
+}
+
 export function spawnSkeleton(game, x, y, options) {
   return spawnSkeletonEntity(game, x, y, options);
 }
@@ -88,6 +98,8 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
     if (damageType === "fire" || damageType === "melee") {
       enemy.reviveAtEnd = false;
       enemy.collapseTimer = 0;
+      enemy.reanimateTimer = 0;
+      enemy.reanimating = false;
       enemy.hp = 0;
     }
     return;
@@ -121,17 +133,23 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
       enemy.collapsed = false;
       enemy.collapseTimer = 0;
       enemy.reviveAtEnd = false;
+      enemy.reanimateTimer = 0;
+      enemy.reanimating = false;
       return;
     }
     if (damageType === "fire") {
       enemy.reviveAtEnd = false;
       enemy.collapseTimer = 0;
+      enemy.reanimateTimer = 0;
+      enemy.reanimating = false;
       enemy.hp = 0;
       return;
     }
     enemy.collapsed = true;
     enemy.collapseTimer = game.config.enemy.skeletonWarriorBonePileLife || 5;
     enemy.reviveAtEnd = Math.random() < (game.config.enemy.skeletonWarriorReviveChance || 0.1);
+    enemy.reanimateTimer = 0;
+    enemy.reanimating = false;
     enemy.hp = 1;
   }
 }

@@ -6,6 +6,7 @@ import {
   isWalkableTile,
   updateNavigationField,
   getPathDirectionToPlayer,
+  moveEnemyTowardTargetPoint,
   moveEnemyTowardPlayer,
   moveWithCollision,
   separateEnemyFromPlayer
@@ -15,10 +16,12 @@ import {
   spawnGhost,
   spawnTreasureGoblin,
   spawnAnimatedArmor,
+  spawnMummy,
   spawnMimic,
   spawnRatArcher,
   spawnSkeletonWarrior,
   spawnNecromancer,
+  spawnMinotaur,
   spawnSkeleton,
   applyEnemyDamage,
   randomEnemySpawnPoint
@@ -59,12 +62,20 @@ export class GameRuntimeWorld extends GameRuntimeBase {
     return isWalkableTile(this, tx, ty);
   }
 
+  isPositionWalkable(x, y, radius = 0, blockBreakables = true) {
+    return super.isPositionWalkable(x, y, radius, blockBreakables);
+  }
+
   updateNavigationField(force = false) {
     updateNavigationField(this, force);
   }
 
   getPathDirectionToPlayer(entity) {
     return getPathDirectionToPlayer(this, entity);
+  }
+
+  moveEnemyTowardTargetPoint(enemy, target, speedScale, dt, minDistance = 0) {
+    moveEnemyTowardTargetPoint(this, enemy, target, speedScale, dt, minDistance);
   }
 
   moveEnemyTowardPlayer(enemy, speedScale, dt) {
@@ -95,6 +106,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
     return spawnAnimatedArmor(this, x, y);
   }
 
+  spawnMummy(x, y) {
+    return spawnMummy(this, x, y);
+  }
+
   spawnMimic(x, y) {
     return spawnMimic(this, x, y);
   }
@@ -109,6 +124,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   spawnNecromancer(x, y) {
     return spawnNecromancer(this, x, y);
+  }
+
+  spawnMinotaur(x, y) {
+    return spawnMinotaur(this, x, y);
   }
 
   spawnSkeleton(x, y, options) {

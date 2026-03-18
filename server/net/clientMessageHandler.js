@@ -104,8 +104,7 @@ export function handleClientMessage(raw, context) {
       controllerId: room.controllerId,
       classType: room.sim.classType
     });
-    room.sendMapMeta(client);
-    room.sendMapChunksToClient(client, Date.now());
+    room.sendMapState(client);
     const joinFullState = serializeState(room);
     const joinState = client.protocolVersion >= 2 ? buildJoinKeyframeState(joinFullState) : joinFullState;
     safeSend(ws, {

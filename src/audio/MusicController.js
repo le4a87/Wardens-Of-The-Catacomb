@@ -50,11 +50,32 @@ export class MusicController {
     this.idleAudios = new Set();
     this.idleRaf = 0;
     this.idleLastFrameAt = performance.now();
+    this.debug = {
+      playAttempts: 0,
+      playSuccesses: 0,
+      playFailures: 0,
+      pauseCalls: 0,
+      resetCount: 0,
+      trackTransitions: 0,
+      interruptionCount: 0,
+      waitingCount: 0,
+      stalledCount: 0,
+      seekCount: 0,
+      focusCount: 0,
+      blurCount: 0,
+      visibilityChangeCount: 0,
+      activeTrackTitle: "",
+      activeTrackSrc: "",
+      recentEvents: []
+    };
 
     this.handleUnlock = this.handleUnlock.bind(this);
     this.handleMuteToggle = this.handleMuteToggle.bind(this);
     this.handleInteraction = this.handleInteraction.bind(this);
     this.updateIdleLoop = this.updateIdleLoop.bind(this);
+    this.handleWindowFocus = this.handleWindowFocus.bind(this);
+    this.handleWindowBlur = this.handleWindowBlur.bind(this);
+    this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
 
     window.addEventListener("pointerdown", this.handleUnlock, { passive: true });
     window.addEventListener("keydown", this.handleUnlock);
@@ -63,6 +84,9 @@ export class MusicController {
     window.addEventListener("pointermove", this.handleInteraction, { passive: true });
     window.addEventListener("keydown", this.handleInteraction);
     window.addEventListener("wheel", this.handleInteraction, { passive: true });
+    window.addEventListener("focus", this.handleWindowFocus);
+    window.addEventListener("blur", this.handleWindowBlur);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
 
     this.idleRaf = requestAnimationFrame(this.updateIdleLoop);
   }
@@ -72,7 +96,102 @@ export class MusicController {
     audio.loop = loop;
     audio.preload = "auto";
     audio.volume = 1;
+    audio.addEventListener("play", () => {
+      this.debug.playSuccesses += 1;
+      this.recordDebugEvent("play", { src, currentTime: audio.currentTime });
+    });
+    audio.addEventListener("pause", () => {
+      this.debug.pauseCalls += 1;
+      this.recordDebugEvent("pause", { src, currentTime: audio.currentTime });
+    });
+    audio.addEventListener("waiting", () => {
+      this.debug.interruptionCount += 1;
+      this.debug.waitingCount += 1;
+      this.recordDebugEvent("waiting", { src, currentTime: audio.currentTime });
+    });
+    audio.addEventListener("stalled", () => {
+      this.debug.interruptionCount += 1;
+      this.debug.stalledCount += 1;
+      this.recordDebugEvent("stalled", { src, currentTime: audio.currentTime });
+    });
+    audio.addEventListener("seeking", () => {
+      this.debug.seekCount += 1;
+      this.recordDebugEvent("seeking", { src, currentTime: audio.currentTime });
+    });
+    audio.addEventListener("ended", () => {
+      this.recordDebugEvent("ended", { src, currentTime: audio.currentTime });
+    });
     return audio;
+  }
+
+  recordDebugEvent(type, detail = {}) {
+    this.debug.recentEvents.push({
+      type,
+      atMs: Math.round(performance.now()),
+      ...detail
+    });
+    if (this.debug.recentEvents.length > 40) this.debug.recentEvents.splice(0, this.debug.recentEvents.length - 40);
+  }
+
+  attemptAudioPlay(audio, reason) {
+    if (!audio) return;
+    this.debug.playAttempts += 1;
+    this.recordDebugEvent("playAttempt", {
+      reason,
+      src: audio.currentSrc || audio.src || "",
+      currentTime: audio.currentTime
+    });
+    const playAttempt = audio.play();
+    if (playAttempt && typeof playAttempt.catch === "function") {
+      playAttempt.catch((error) => {
+        this.debug.playFailures += 1;
+        this.recordDebugEvent("playFailure", {
+          reason,
+          src: audio.currentSrc || audio.src || "",
+          message: error?.message || String(error)
+        });
+      });
+    }
+  }
+
+  getDebugState() {
+    const activeAudio = this.currentMode === "death"
+      ? this.deathAudio
+      : this.currentTrack?.audio || null;
+    return {
+      ...this.debug,
+      currentMode: this.currentMode,
+      currentFloor: this.currentFloor,
+      muted: this.muted,
+      idleGameplayActive: this.idleGameplayActive,
+      idlePlayCount: this.idlePlayCount,
+      documentVisibilityState: typeof document.visibilityState === "string" ? document.visibilityState : "",
+      documentHasFocus: typeof document.hasFocus === "function" ? document.hasFocus() : null,
+      currentTrackTime: activeAudio ? activeAudio.currentTime : 0,
+      currentTrackPaused: activeAudio ? activeAudio.paused : true,
+      currentTrackReadyState: activeAudio ? activeAudio.readyState : 0
+    };
+  }
+
+  handleWindowFocus() {
+    this.debug.focusCount += 1;
+    this.recordDebugEvent("windowFocus", {
+      visibilityState: typeof document.visibilityState === "string" ? document.visibilityState : ""
+    });
+  }
+
+  handleWindowBlur() {
+    this.debug.blurCount += 1;
+    this.recordDebugEvent("windowBlur", {
+      visibilityState: typeof document.visibilityState === "string" ? document.visibilityState : ""
+    });
+  }
+
+  handleVisibilityChange() {
+    this.debug.visibilityChangeCount += 1;
+    this.recordDebugEvent("visibilityChange", {
+      visibilityState: typeof document.visibilityState === "string" ? document.visibilityState : ""
+    });
   }
 
   resolveTrack(trackLike) {
@@ -93,8 +212,7 @@ export class MusicController {
   handleUnlock() {
     if (this.muted) return;
     if (this.currentMode === "death" && this.deathAudio.paused) {
-      const playAttempt = this.deathAudio.play();
-      if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
+      this.attemptAudioPlay(this.deathAudio, "unlock-death");
       return;
     }
     if (this.currentTrack?.audio?.paused) this.playCurrentTrack();
@@ -143,12 +261,7 @@ export class MusicController {
     audio.addEventListener("ended", cleanup, { once: true });
     audio.addEventListener("pause", cleanup, { once: true });
     this.idleAudios.add(audio);
-    const playAttempt = audio.play();
-    if (playAttempt && typeof playAttempt.catch === "function") {
-      playAttempt.catch(() => {
-        this.idleAudios.delete(audio);
-      });
-    }
+    this.attemptAudioPlay(audio, "idle");
   }
 
   updateIdleLoop(now) {
@@ -177,8 +290,7 @@ export class MusicController {
       return;
     }
     if (this.currentMode === "death") {
-      const playAttempt = this.deathAudio.play();
-      if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
+      this.attemptAudioPlay(this.deathAudio, "unmute-death");
       return;
     }
     this.playCurrentTrack();
@@ -206,10 +318,17 @@ export class MusicController {
   playCurrentTrack({ reset = false, volume = 1 } = {}) {
     if (!this.currentTrack || this.muted) return;
     const audio = this.currentTrack.audio;
-    if (reset) audio.currentTime = 0;
+    if (reset) {
+      audio.currentTime = 0;
+      this.debug.resetCount += 1;
+      this.recordDebugEvent("reset", {
+        title: this.currentTrack.title,
+        src: audio.currentSrc || audio.src || ""
+      });
+    }
     audio.volume = Math.max(0, Math.min(1, volume));
-    const playAttempt = audio.play();
-    if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
+    if (!audio.paused && !reset) return;
+    this.attemptAudioPlay(audio, reset ? "playCurrentTrack-reset" : "playCurrentTrack");
   }
 
   fadeAudio(audio, from, to, durationMs, token, onDone) {
@@ -243,6 +362,8 @@ export class MusicController {
         previousAudio.volume = 1;
       }
       this.currentTrack = track;
+      this.debug.activeTrackTitle = track.title || "";
+      this.debug.activeTrackSrc = track.src || "";
       if (reset) nextAudio.currentTime = 0;
       nextAudio.volume = 1;
       return;
@@ -255,11 +376,19 @@ export class MusicController {
         previousAudio.volume = 1;
       }
       this.currentTrack = track;
+      this.debug.trackTransitions += 1;
+      this.debug.activeTrackTitle = track.title || "";
+      this.debug.activeTrackSrc = track.src || "";
+      this.recordDebugEvent("transition", {
+        title: track.title,
+        immediate: true,
+        reset,
+        fadeInMs
+      });
       if (fadeInMs > 0 && !this.muted) {
         if (reset) nextAudio.currentTime = 0;
         nextAudio.volume = 0;
-        const playAttempt = nextAudio.play();
-        if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
+        this.attemptAudioPlay(nextAudio, "transition-immediate-fade");
         const token = this.transitionToken;
         this.fadeAudio(nextAudio, 0, 1, fadeInMs, token, () => {
           nextAudio.volume = 1;
@@ -278,6 +407,15 @@ export class MusicController {
 
     this.cancelFade();
     const token = this.transitionToken;
+    this.debug.trackTransitions += 1;
+    this.debug.activeTrackTitle = track.title || "";
+    this.debug.activeTrackSrc = track.src || "";
+    this.recordDebugEvent("transition", {
+      title: track.title,
+      previousTitle: previousTrack?.title || "",
+      immediate: false,
+      reset
+    });
 
     this.fadeAudio(previousAudio, previousAudio.volume, 0, FADE_DURATION_MS * 0.5, token, () => {
       previousAudio.pause();
@@ -285,8 +423,7 @@ export class MusicController {
       this.currentTrack = track;
       if (reset) nextAudio.currentTime = 0;
       nextAudio.volume = 0;
-      const playAttempt = nextAudio.play();
-      if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
+      this.attemptAudioPlay(nextAudio, "transition-fade");
       this.fadeAudio(nextAudio, 0, 1, FADE_DURATION_MS * 0.5, token, () => {
         nextAudio.volume = 1;
       });
@@ -310,14 +447,14 @@ export class MusicController {
     const floorChanged = this.currentMode !== "gameplay" || this.currentFloor !== normalizedFloor;
     this.currentMode = "gameplay";
     this.currentFloor = normalizedFloor;
-    const nextTrack = trackLike
-      ? this.resolveTrack(trackLike)
-      : floorChanged
+    const resolvedTrack = trackLike ? this.resolveTrack(trackLike) : null;
+    const nextTrack = resolvedTrack || (floorChanged
       ? this.resolveTrack(GAMEPLAY_TRACKS[Math.floor(Math.random() * Math.max(1, GAMEPLAY_TRACKS.length))] || TITLE_TRACK)
-      : this.currentTrack;
+      : this.currentTrack);
     if (!nextTrack) return;
+    const trackChanged = this.currentTrack !== nextTrack;
     this.transitionToTrack(nextTrack, {
-      reset: floorChanged || !!trackLike,
+      reset: floorChanged || trackChanged,
       immediate: !this.currentTrack
     });
   }
@@ -332,11 +469,12 @@ export class MusicController {
     this.currentTrack = null;
     this.currentMode = "death";
     this.currentFloor = null;
+    this.debug.activeTrackTitle = DEATH_TRACK.title;
+    this.debug.activeTrackSrc = DEATH_TRACK.src;
     if (reset) this.deathAudio.currentTime = 0;
     this.deathAudio.volume = 1;
     if (this.muted) return;
     if (!this.deathAudio.paused && !reset) return;
-    const playAttempt = this.deathAudio.play();
-    if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => {});
+    this.attemptAudioPlay(this.deathAudio, reset ? "death-reset" : "death");
   }
 }

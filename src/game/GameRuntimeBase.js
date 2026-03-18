@@ -3,6 +3,7 @@ import { clamp } from "../utils.js";
 import { createCastleMap } from "../mapGenerator.js";
 import { InputController } from "../InputController.js";
 import { Renderer } from "../Renderer.js";
+import { runtimeBaseSupportMethods } from "./runtimeBaseSupportMethods.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
 import { runtimeCombatStatsMethods } from "./runtimeCombatStatsMethods.js";
 import { runtimeFloorBossMethods } from "./runtimeFloorBossMethods.js";
@@ -77,6 +78,7 @@ export class GameRuntimeBase {
     this.uiRects = {};
     this.uiScroll = { skillTree: 0, shop: 0 };
     this.floatingTexts = [];
+    this.recentPlayerShots = [];
     this.skills = createSkillState();
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
@@ -109,74 +111,6 @@ export class GameRuntimeBase {
     return this.canvas.width - this.config.hud.sidebarWidth;
   }
 
-  shouldShowPlayerHealthBar() {
-    const ratio = this.player.maxHealth > 0 ? this.player.health / this.player.maxHealth : 0;
-    return this.player.hpBarTimer > 0 || ratio <= this.config.player.lowHealthThreshold;
-  }
-
-  markPlayerHealthBarVisible() {
-    this.player.hpBarTimer = this.config.player.hpBarDuration;
-  }
-
-  applyPlayerHealing(amount) {
-    if (amount <= 0) return;
-    const before = this.player.health;
-    this.player.health = Math.min(this.player.maxHealth, this.player.health + amount);
-    if (this.player.health > before) {
-      const healed = this.player.health - before;
-      this.markPlayerHealthBarVisible();
-      this.spawnFloatingText(this.player.x, this.player.y - 26, `+${Math.max(1, Math.round(healed))}`, "#79e59a", 0.8, 14);
-    }
-  }
-
-  getHealthPickupAmount() {
-    const pct = Number.isFinite(this.config?.drops?.healthRestorePct) ? this.config.drops.healthRestorePct : 0.25;
-    return Math.max(1, Math.round(this.player.maxHealth * Math.max(0, pct)));
-  }
-
-  applyPlayerDamage(amount) {
-    if (amount <= 0) return;
-    this.spawnFloatingText(this.player.x, this.player.y - 18, `-${Math.round(amount)}`, "#ef6d6d");
-    this.player.health = Math.max(0, this.player.health - amount);
-    this.markPlayerHealthBarVisible();
-    if (this.player.health <= 0) this.triggerGameOver();
-  }
-
-  triggerGameOver() {
-    if (this.deathTransition.active) return;
-    this.gameOver = true;
-    this.paused = false;
-    this.shopOpen = false;
-    this.skillTreeOpen = false;
-    this.statsPanelOpen = false;
-    this.deathTransition.active = true;
-    this.deathTransition.elapsed = 0;
-    this.deathTransition.returnTriggered = false;
-    if (typeof this.onGameOverChanged === "function") this.onGameOverChanged(true, this);
-  }
-
-  updateDeathTransition(dt) {
-    if (!this.deathTransition.active) return false;
-    this.deathTransition.elapsed = Math.min(
-      this.deathTransitionDuration,
-      this.deathTransition.elapsed + Math.max(0, Number.isFinite(dt) ? dt : 0)
-    );
-    if (!this.deathTransition.returnTriggered && this.deathTransition.elapsed >= this.deathTransitionDuration) {
-      this.deathTransition.returnTriggered = true;
-      if (typeof this.onReturnToMenu === "function") this.onReturnToMenu();
-    }
-    return true;
-  }
-
-  getDeathTransitionProgress() {
-    if (!this.deathTransition.active || this.deathTransitionDuration <= 0) return 0;
-    return Math.max(0, Math.min(1, this.deathTransition.elapsed / this.deathTransitionDuration));
-  }
-
-  spawnFloatingText(x, y, text, color, life = 0.75, size = 14) {
-    this.floatingTexts.push({ x, y, text, color, life, maxLife: life, vy: 22, size });
-  }
-
   generateFloor(width, height) {
     this.mapWidth = width;
     this.mapHeight = height;
@@ -194,6 +128,7 @@ export class GameRuntimeBase {
     this.breakables = [];
     this.wallTraps = [];
     this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
+    this.recentPlayerShots = [];
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
     this.warriorRageCooldownTimer = 0;
@@ -209,6 +144,7 @@ export class GameRuntimeBase {
     this.placeArmorStands();
     this.placeWallTraps();
     this.placeBreakables();
+    this.ensurePlayerSafePosition(12);
   }
 
   advanceToNextFloor() {
@@ -433,14 +369,15 @@ export class GameRuntimeBase {
     const tile = this.config.map.tile;
     const tx = Math.floor(x / tile);
     const ty = Math.floor(y / tile);
+    const radius = Math.max(4, (this.player?.size || tile * 0.6) * 0.5);
     const isSafe = (cx, cy) => {
       const px = cx * tile + tile * 0.5;
       const py = cy * tile + tile * 0.5;
-      if (typeof this.isWalkableTile === "function") return this.isWalkableTile(cx, cy);
+      if (typeof this.isPositionWalkable === "function") return this.isPositionWalkable(px, py, radius);
+      if (typeof this.isWalkableTile === "function" && !this.isWalkableTile(cx, cy)) return false;
       if (typeof this.isWallAt === "function") {
-        const r = Math.max(4, tile * 0.3);
-        return !this.isWallAt(px - r, py - r, true) && !this.isWallAt(px + r, py - r, true) &&
-          !this.isWallAt(px - r, py + r, true) && !this.isWallAt(px + r, py + r, true);
+        return !this.isWallAt(px - radius, py - radius, true) && !this.isWallAt(px + radius, py - radius, true) &&
+          !this.isWallAt(px - radius, py + radius, true) && !this.isWallAt(px + radius, py + radius, true);
       }
       return true;
     };
@@ -464,6 +401,27 @@ export class GameRuntimeBase {
       ? this.config.player.enemyCollisionSize
       : this.player.size;
     return Math.max(0, size) * 0.5;
+  }
+
+  isPositionWalkable(x, y, radius = 0, blockBreakables = true) {
+    if (typeof this.isWallAt !== "function") return true;
+    const r = Math.max(0, Number.isFinite(radius) ? radius : 0);
+    return (
+      !this.isWallAt(x - r, y - r, blockBreakables) &&
+      !this.isWallAt(x + r, y - r, blockBreakables) &&
+      !this.isWallAt(x - r, y + r, blockBreakables) &&
+      !this.isWallAt(x + r, y + r, blockBreakables)
+    );
+  }
+
+  ensurePlayerSafePosition(maxRadiusTiles = 10) {
+    const radius = Math.max(4, (this.player?.size || this.config.map.tile * 0.6) * 0.5);
+    if (this.isPositionWalkable(this.player.x, this.player.y, radius, true)) return false;
+    const safe = this.findNearestSafePoint(this.player.x, this.player.y, maxRadiusTiles);
+    if (!safe) return false;
+    this.player.x = safe.x;
+    this.player.y = safe.y;
+    return true;
   }
 
   getTrapDetectionBonus() {
@@ -511,6 +469,7 @@ export class GameRuntimeBase {
   }
 }
 
+Object.assign(GameRuntimeBase.prototype, runtimeBaseSupportMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeBaseDifficultyMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeFloorBossMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeCombatStatsMethods);

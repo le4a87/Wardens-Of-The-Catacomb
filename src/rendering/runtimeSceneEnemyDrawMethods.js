@@ -50,6 +50,45 @@ export const runtimeSceneEnemyDrawMethods = {
     }
   },
 
+  drawMummy(enemy, screenX, screenY) {
+    const ctx = this.ctx;
+    const half = enemy.size * 0.5;
+    const auraAlpha = (enemy.auraPulseTimer || 0) > 0 ? 0.28 : 0.14;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.32)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.82, half, half * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(134, 214, 112, ${auraAlpha})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.22, half * 1.08, half * 0.72, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#80724e";
+    ctx.fillRect(screenX - half * 0.44, screenY - half * 0.2, half * 0.88, half * 1.0);
+    ctx.fillStyle = "#b6a57b";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - half * 0.48, half * 0.34, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#d9cfab";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.42, screenY - half * 0.6);
+    ctx.lineTo(screenX + half * 0.44, screenY - half * 0.32);
+    ctx.moveTo(screenX - half * 0.46, screenY - half * 0.12);
+    ctx.lineTo(screenX + half * 0.46, screenY + half * 0.16);
+    ctx.moveTo(screenX - half * 0.38, screenY + half * 0.26);
+    ctx.lineTo(screenX + half * 0.4, screenY + half * 0.52);
+    ctx.stroke();
+
+    ctx.fillStyle = "#4a4235";
+    ctx.fillRect(screenX - 4, screenY - half * 0.56, 2, 2);
+    ctx.fillRect(screenX + 2, screenY - half * 0.56, 2, 2);
+  },
+
   drawRatArcher(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size * 0.5;
@@ -160,6 +199,78 @@ export const runtimeSceneEnemyDrawMethods = {
     ctx.beginPath();
     ctx.arc(screenX + half * 0.82, screenY - half * 0.55, half * 0.12, 0, Math.PI * 2);
     ctx.fill();
+  },
+
+  drawMinotaur(enemy, screenX, screenY) {
+    const ctx = this.ctx;
+    const half = enemy.size * 0.5;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const moving = Math.hypot((enemy.x || 0) - (enemy.lastX ?? enemy.x ?? 0), (enemy.y || 0) - (enemy.lastY ?? enemy.y ?? 0));
+    const walkPhase = Math.sin(now * 0.014 + (enemy.x || 0) * 0.035 + (enemy.y || 0) * 0.021) * Math.min(1, moving * 0.2 + 0.35);
+    const chargeState = Math.max(enemy.chargeTimer || 0, enemy.chargeWindupTimer || 0);
+    const chargeGlow = chargeState > 0 ? 0.22 : 0.08;
+    const hornLower = Math.max(0, Math.min(1, (enemy.chargeWindupTimer || 0) / Math.max(0.01, this.config.enemy.minotaurWindup || 0.38)));
+    const chargeLean = (enemy.chargeTimer || 0) > 0 ? 1 : hornLower;
+    const armSwing = walkPhase * half * 0.18;
+    const legSwing = walkPhase * half * 0.2;
+    const hornDrop = hornLower * half * 0.18 + chargeLean * half * 0.08;
+    const headY = screenY - half * (0.42 - chargeLean * 0.08);
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.84, half * 1.08, half * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(255, 125, 82, ${chargeGlow})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.18, half * 1.12, half * 0.8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#5c311f";
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.28, screenY + half * 0.54);
+    ctx.lineTo(screenX - half * 0.38, screenY + half * 1.0 - legSwing);
+    ctx.moveTo(screenX + half * 0.28, screenY + half * 0.54);
+    ctx.lineTo(screenX + half * 0.38, screenY + half * 1.0 + legSwing);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#74442b";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.5, screenY + half * 0.04);
+    ctx.lineTo(screenX - half * 0.86, screenY + half * 0.34 + armSwing);
+    ctx.moveTo(screenX + half * 0.5, screenY + half * 0.04);
+    ctx.lineTo(screenX + half * 0.86, screenY + half * 0.34 - armSwing);
+    ctx.stroke();
+
+    ctx.fillStyle = "#6e4128";
+    ctx.fillRect(screenX - half * 0.5, screenY - half * 0.12 + chargeLean * 2, half, half * 1.02);
+    ctx.fillStyle = "#8a5738";
+    ctx.beginPath();
+    ctx.arc(screenX, headY, half * 0.44, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#dcc59a";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.15, headY - half * 0.38 + hornDrop);
+    ctx.quadraticCurveTo(screenX - half * 0.6, headY - half * 0.7 + hornDrop, screenX - half * 0.72, headY - half * 0.05 + hornDrop);
+    ctx.moveTo(screenX + half * 0.15, headY - half * 0.38 + hornDrop);
+    ctx.quadraticCurveTo(screenX + half * 0.6, headY - half * 0.7 + hornDrop, screenX + half * 0.72, headY - half * 0.05 + hornDrop);
+    ctx.stroke();
+
+    ctx.fillStyle = "#36261d";
+    ctx.fillRect(screenX - 5, headY - half * 0.06, 3, 3);
+    ctx.fillRect(screenX + 2, headY - half * 0.06, 3, 3);
+    ctx.strokeStyle = "#2a1a14";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.12, headY + half * 0.18);
+    ctx.lineTo(screenX + half * 0.12, headY + half * 0.18);
+    ctx.stroke();
   },
 
   drawExitPortal(portal, screenX, screenY, time = 0) {

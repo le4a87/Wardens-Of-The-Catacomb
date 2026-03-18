@@ -57,20 +57,228 @@ let netPendingInputs = [], netMapSignature = "", netPendingSnapshot = null;
 const NET_INPUT_DT = 1 / 60;
 const NET_CLOCK_OFFSET_SMOOTHING = 0.12;
 const netDelayParams = new URLSearchParams(window.location.search);
-const parsedControllerDelay = Number.parseInt(netDelayParams.get("netDelayController") || "22", 10);
-const parsedSpectatorDelay = Number.parseInt(netDelayParams.get("netDelaySpectator") || "64", 10);
-const NET_RENDER_DELAY_MS_CONTROLLER = Number.isFinite(parsedControllerDelay) ? Math.max(0, parsedControllerDelay) : 22;
-const NET_RENDER_DELAY_MS_SPECTATOR = Number.isFinite(parsedSpectatorDelay) ? Math.max(0, parsedSpectatorDelay) : 64;
+function parseDelayParam(key, fallback) {
+  const raw = netDelayParams.get(key);
+  if (raw == null || raw === "") return fallback;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? Math.max(0, value) : fallback;
+}
+const NET_RENDER_DELAY_MS_CONTROLLER = parseDelayParam("netDelayController", 36);
+const NET_RENDER_DELAY_MS_SPECTATOR = parseDelayParam("netDelaySpectator", 72);
 const NET_MAX_SNAPSHOT_BUFFER = 20;
-const NET_MIN_SEND_MS = 12;
-const NET_FORCE_SEND_IDLE_MS = 66;
+const NET_MIN_SEND_MS = 28;
+const NET_FORCE_SEND_IDLE_MS = 100;
 let netSnapshotBuffer = [], netLastInputSendAt = 0, netLastSentInput = null, netLastInputProcessAt = 0;
 let netMapChunksReceived = 0, netMapChunkSize = 24;
 let netRequiredChunkKeys = new Set(), netReceivedChunkKeys = new Set(), netLastServerPlayer = null;
 const netClockState = { offsetMs: 0, ready: false };
 let netPredictedProjectiles = new Map(), netNextHeldPrimaryPredictAtMs = 0;
 let netLastSnapshotRecvAtMs = 0, netSnapshotIntervalMeanMs = 33, netSnapshotJitterMs = 0, netLastSnapshotGapMs = 33;
+let netInitialSnapshotApplied = false;
 let splashActive = true, splashDismissed = false, splashRaf = 0, splashStartedAt = 0, splashReady = false;
+
+if (typeof window !== "undefined") {
+  window.__WOTC_DEBUG__ = {
+    getState() {
+      const game = currentGame;
+      if (!game) return null;
+      const tileSize = game.config?.map?.tile || 32;
+      const playerX = Number.isFinite(game.player?.x) ? game.player.x : 0;
+      const playerY = Number.isFinite(game.player?.y) ? game.player.y : 0;
+      const tileX = Math.floor(playerX / tileSize);
+      const tileY = Math.floor(playerY / tileSize);
+      const tile =
+        Array.isArray(game.map) && tileY >= 0 && tileX >= 0 && tileY < game.map.length && tileX < game.map[0].length
+          ? (typeof game.map[tileY] === "string" ? game.map[tileY][tileX] : game.map[tileY][tileX])
+          : null;
+      const radius = Math.max(4, (game.player?.size || 20) * 0.5);
+      const walkable =
+        typeof game.isPositionWalkable === "function"
+          ? game.isPositionWalkable(playerX, playerY, radius, true)
+          : null;
+      const camera = typeof game.getCamera === "function" ? game.getCamera() : { x: 0, y: 0 };
+      const hostiles = Array.isArray(game.enemies)
+        ? game.enemies
+            .filter((enemy) => enemy && (!game.isEnemyFriendlyToPlayer || !game.isEnemyFriendlyToPlayer(enemy)) && (enemy.hp || 0) > 0)
+            .map((enemy) => ({
+              id: enemy.id || null,
+              type: enemy.type || "",
+              x: enemy.x,
+              y: enemy.y,
+              hp: enemy.hp,
+              maxHp: enemy.maxHp,
+              size: enemy.size || 0,
+              distToPlayer: Math.hypot((enemy.x || 0) - playerX, (enemy.y || 0) - playerY),
+              screenX: (enemy.x || 0) - camera.x,
+              screenY: (enemy.y || 0) - camera.y
+            }))
+            .sort((a, b) => a.distToPlayer - b.distToPlayer)
+            .slice(0, 12)
+        : [];
+      return {
+        networkReady: !!game.networkReady,
+        networkHasMap: !!game.networkHasMap,
+        networkHasChunks: !!game.networkHasChunks,
+        networkRole: game.networkRole || "",
+        floor: game.floor,
+        player: {
+          x: playerX,
+          y: playerY,
+          size: game.player?.size || 0,
+          health: game.player?.health || 0,
+          classType: game.player?.classType || game.classType || "",
+          dirX: game.player?.dirX || 0,
+          dirY: game.player?.dirY || 0,
+          fireCooldown: game.player?.fireCooldown || 0,
+          fireArrowCooldown: game.player?.fireArrowCooldown || 0
+        },
+        aim: {
+          x: Number.isFinite(game.input?.mouse?.worldX) ? game.input.mouse.worldX : null,
+          y: Number.isFinite(game.input?.mouse?.worldY) ? game.input.mouse.worldY : null,
+          hasAim: !!game.input?.mouse?.hasAim
+        },
+        camera,
+        tile: {
+          x: tileX,
+          y: tileY,
+          value: tile
+        },
+        walkable,
+        hostiles,
+        combat: {
+          meleeSwingCount: Array.isArray(game.meleeSwings) ? game.meleeSwings.length : 0,
+          bulletCount: Array.isArray(game.bullets) ? game.bullets.length : 0,
+          fireArrowCount: Array.isArray(game.fireArrows) ? game.fireArrows.length : 0,
+          floatingTextCount: Array.isArray(game.floatingTexts) ? game.floatingTexts.length : 0,
+          recentFloatingTexts: Array.isArray(game.floatingTexts)
+            ? game.floatingTexts.slice(-6).map((entry) => ({
+                text: entry.text,
+                color: entry.color,
+                x: entry.x,
+                y: entry.y,
+                life: entry.life
+              }))
+            : [],
+          ownedProjectiles: [
+            ...((Array.isArray(game.bullets) ? game.bullets : [])
+              .filter((projectile) => !netPlayerId || projectile.ownerId === netPlayerId)
+              .slice(-8)
+              .map((projectile) => ({
+                source: "authoritative",
+                kind: "bullet",
+                x: projectile.x,
+                y: projectile.y,
+                vx: projectile.vx || 0,
+                vy: projectile.vy || 0,
+                angle: projectile.angle,
+                spawnSeq: projectile.spawnSeq || 0,
+                projectileType: projectile.projectileType || "bullet"
+              }))),
+            ...((game.networkPredictedProjectiles instanceof Map
+              ? Array.from(game.networkPredictedProjectiles.values()).flat()
+              : [])
+              .filter((projectile) => projectile && projectile.type === "bullet")
+              .slice(-8)
+              .map((projectile) => ({
+                source: "predicted",
+                kind: projectile.type,
+                x: projectile.x,
+                y: projectile.y,
+                vx: projectile.vx || 0,
+                vy: projectile.vy || 0,
+                angle: projectile.angle,
+                spawnSeq: projectile.seq || 0,
+                projectileType: projectile.type || "bullet",
+                createdAt: projectile.createdAt || 0
+              })))
+          ],
+          recentPlayerShots: Array.isArray(game.recentPlayerShots)
+            ? game.recentPlayerShots.slice(-8).map((shot) => ({
+                atMs: shot.atMs,
+                source: shot.source || "",
+                moving: !!shot.moving,
+                playerX: shot.playerX,
+                playerY: shot.playerY,
+                aimX: shot.aimX,
+                aimY: shot.aimY,
+                intendedAngle: shot.intendedAngle,
+                volleyAngles: Array.isArray(shot.volleyAngles) ? shot.volleyAngles.slice() : [],
+                multishotCount: shot.multishotCount || 0,
+                projectileSpeed: shot.projectileSpeed || 0,
+                fireCooldown: shot.fireCooldown || 0,
+                seq: shot.seq || 0
+              }))
+            : []
+        },
+        net: {
+          controllerId: netControllerId,
+          playerId: netPlayerId,
+          lastAckSeq: netLastAckSeq,
+          pendingInputs: netPendingInputs.length,
+          snapshotBuffer: netSnapshotBuffer.length,
+          pendingSnapshot: !!netPendingSnapshot,
+          jitterMs: netSnapshotJitterMs,
+          gapMs: netLastSnapshotGapMs
+        },
+        networkPerf: game.networkPerf && typeof game.networkPerf === "object"
+          ? {
+              appliedSnapshotCount: game.networkPerf.appliedSnapshotCount || 0,
+              lastCorrectionPx: game.networkPerf.lastCorrectionPx || 0,
+              maxCorrectionPx: game.networkPerf.maxCorrectionPx || 0,
+              hardSnapCount: game.networkPerf.hardSnapCount || 0,
+              softCorrectionCount: game.networkPerf.softCorrectionCount || 0,
+              settleCorrectionCount: game.networkPerf.settleCorrectionCount || 0,
+              blockedSnapCount: game.networkPerf.blockedSnapCount || 0
+            }
+          : null,
+        ui: {
+          shopOpen: !!game.shopOpen,
+          skillTreeOpen: !!game.skillTreeOpen,
+          statsPanelOpen: !!game.statsPanelOpen,
+          gold: Number.isFinite(game.gold) ? game.gold : 0,
+          skillPoints: Number.isFinite(game.skillPoints) ? game.skillPoints : 0,
+          shopButton: game.uiRects?.shopButton || null,
+          skillTreeButton: game.uiRects?.skillTreeButton || null,
+          shopClose: game.uiRects?.shopClose || null,
+          skillTreeClose: game.uiRects?.skillTreeClose || null,
+          shopItems: Array.isArray(game.uiRects?.shopItems)
+            ? game.uiRects.shopItems.slice(0, 4).map((entry) => ({
+                key: entry.key,
+                rect: entry.rect
+              }))
+            : [],
+          skillNodes: {
+            fireArrow: game.uiRects?.skillFireArrowNode || null,
+            piercingStrike: game.uiRects?.skillPiercingNode || null,
+            multiarrow: game.uiRects?.skillMultiarrowNode || null,
+            warriorMomentum: game.uiRects?.skillWarriorMomentumNode || null,
+            warriorRage: game.uiRects?.skillWarriorRageNode || null,
+            warriorExecute: game.uiRects?.skillWarriorExecuteNode || null,
+            undeadMastery: game.uiRects?.skillUndeadMasteryNode || null,
+            deathBolt: game.uiRects?.skillDeathBoltNode || null,
+            explodingDeath: game.uiRects?.skillExplodingDeathNode || null
+          },
+          recentUiClicks: Array.isArray(game.input?.mouse?.recentUiLeftClicks)
+            ? game.input.mouse.recentUiLeftClicks.slice(-8)
+            : [],
+          networkUiDebug: game.networkUiDebug && typeof game.networkUiDebug === "object"
+            ? {
+                lastClick: game.networkUiDebug.lastClick || null,
+                lastHit: game.networkUiDebug.lastHit || "",
+                lastActionKind: game.networkUiDebug.lastActionKind || "",
+                recentActions: Array.isArray(game.networkUiDebug.recentActions)
+                  ? game.networkUiDebug.recentActions.slice(-8)
+                  : []
+              }
+            : null
+        },
+        audio: typeof music.getDebugState === "function" ? music.getDebugState() : null,
+        documentHasFocus: typeof document.hasFocus === "function" ? document.hasFocus() : null,
+        documentVisibilityState: typeof document.visibilityState === "string" ? document.visibilityState : ""
+      };
+    }
+  };
+}
 
 splashLogo.addEventListener("load", () => { splashReady = true; });
 splashLogo.addEventListener("error", () => { splashReady = false; });
@@ -101,12 +309,14 @@ function stopNetworkSession() {
   netPlayerId = null; netControllerId = null;
   netInputSeq = 0; netLastAckSeq = 0;
   netPendingInputs = []; netMapSignature = ""; netPendingSnapshot = null;
-  netSnapshotBuffer = []; netLastInputSendAt = 0; netLastSentInput = null; netLastInputProcessAt = 0;
+  netSnapshotBuffer.length = 0; netLastInputSendAt = 0; netLastSentInput = null; netLastInputProcessAt = 0;
   netMapChunksReceived = 0; netMapChunkSize = 24;
   netRequiredChunkKeys = new Set(); netReceivedChunkKeys = new Set(); netLastServerPlayer = null;
   netClockState.offsetMs = 0; netClockState.ready = false;
-  netPredictedProjectiles = new Map(); netNextHeldPrimaryPredictAtMs = 0;
+  netPredictedProjectiles.clear(); netNextHeldPrimaryPredictAtMs = 0;
   netLastSnapshotRecvAtMs = 0; netSnapshotIntervalMeanMs = 33; netSnapshotJitterMs = 0; netLastSnapshotGapMs = 33;
+  netInitialSnapshotApplied = false;
+  if (currentGame) currentGame.networkPredictedProjectiles = null;
   if (networkSession) networkSession.hidden = true;
 }
 
@@ -214,6 +424,7 @@ function applySnapshot(game, state, controller = false, ackSeq = 0) {
   });
   netPendingInputs = next.netPendingInputs;
   netLastAckSeq = next.netLastAckSeq;
+  netInitialSnapshotApplied = true;
 }
 
 function startNetworkRenderLoop(game) {
@@ -221,7 +432,7 @@ function startNetworkRenderLoop(game) {
     game,
     getCurrentGame: () => currentGame,
     handleNetworkUiActions,
-    netClient,
+    getNetClient: () => netClient,
     isNetworkController,
     getRenderDelayMs: () => getRenderDelayForRole(isNetworkController, NET_RENDER_DELAY_MS_CONTROLLER, NET_RENDER_DELAY_MS_SPECTATOR),
     estimateServerNowMs: () => estimateServerNowMsFromState(netClockState),
@@ -230,6 +441,8 @@ function startNetworkRenderLoop(game) {
     maxSnapshotBuffer: NET_MAX_SNAPSHOT_BUFFER,
     applySnapshot,
     collectInput,
+    predictFromInput,
+    canRunPredictedCollision: () => canRunPredictedCollision(game, isKnownMapTileAt),
     prunePredictedProjectiles,
     netPredictedProjectiles,
     setNetRenderRaf: (value) => {
@@ -275,6 +488,33 @@ function startNetworkGame() {
   game.networkHasChunks = false;
   game.networkChunkSync = true;
   game.networkLoadingMessage = "Connecting...";
+  game.networkPerf = {
+    appliedSnapshotCount: 0,
+    lastCorrectionPx: 0,
+    maxCorrectionPx: 0,
+    hardSnapCount: 0,
+    softCorrectionCount: 0,
+    settleCorrectionCount: 0,
+    blockedSnapCount: 0
+  };
+  game.networkPredictedProjectiles = netPredictedProjectiles;
+  game.map = [];
+  game.mapWidth = 0;
+  game.mapHeight = 0;
+  game.worldWidth = 0;
+  game.worldHeight = 0;
+  game.enemies = [];
+  game.drops = [];
+  game.breakables = [];
+  game.wallTraps = [];
+  game.bullets = [];
+  game.fireArrows = [];
+  game.fireZones = [];
+  game.meleeSwings = [];
+  game.armorStands = [];
+  game.explored = [];
+  game.navDistance = [];
+  game.navPlayerTile = { x: -1, y: -1 };
   currentGame = game;
   syncMusicForGame(game);
   updateNetworkStatusRuntime(networkStatus, currentGame, `Connecting to ${wsUrl}...`);
@@ -313,8 +553,20 @@ function startNetworkGame() {
     if (!game.networkHasMap || !game.networkHasChunks) return;
     if (netPendingSnapshot && (!netPendingSnapshot.mapSignature || netPendingSnapshot.mapSignature === netMapSignature)) {
       observeServerTimeIntoState(netClockState, netPendingSnapshot.serverTime, NET_CLOCK_OFFSET_SMOOTHING);
-      netSnapshotBuffer.push({ recvTime: performance.now(), ...netPendingSnapshot });
+      const initialPending = netPendingSnapshot;
+      applySnapshot(
+        game,
+        initialPending.state,
+        isNetworkController(),
+        Number.isFinite(initialPending.lastInputSeq) ? initialPending.lastInputSeq : 0
+      );
       netPendingSnapshot = null;
+    }
+    if (!netInitialSnapshotApplied) {
+      updateNetworkRole(game, isNetworkController(), networkTakeControl);
+      updateNetworkStatusRuntime(networkStatus, currentGame, "Waiting for first snapshot...");
+      game.networkReady = false;
+      return;
     }
     updateNetworkRole(game, isNetworkController(), networkTakeControl);
     updateNetworkStatusRuntime(networkStatus, currentGame, `Room synced | Role: ${game.networkRole}`);
@@ -325,13 +577,14 @@ function startNetworkGame() {
     netMapSignature = applyMapMetaToGame(game, msg) || netMapSignature;
     netPendingInputs = [];
     netLastAckSeq = 0;
-    netSnapshotBuffer = [];
+    netSnapshotBuffer.length = 0;
     netMapChunksReceived = 0;
     netMapChunkSize = 24;
     netRequiredChunkKeys = new Set();
     netReceivedChunkKeys = new Set();
     netLastServerPlayer = null;
-    netPredictedProjectiles = new Map();
+    netPredictedProjectiles.clear();
+    netInitialSnapshotApplied = false;
     game.networkHasMap = true;
     game.networkHasChunks = false;
     game.networkChunkSync = true;
@@ -355,11 +608,12 @@ function startNetworkGame() {
     netMapSignature = applyMapStateToGame(game, msg) || netMapSignature;
     netPendingInputs = [];
     netLastAckSeq = 0;
-    netSnapshotBuffer = [];
+    netSnapshotBuffer.length = 0;
     netRequiredChunkKeys = new Set();
     netReceivedChunkKeys = new Set();
     netLastServerPlayer = null;
-    netPredictedProjectiles = new Map();
+    netPredictedProjectiles.clear();
+    netInitialSnapshotApplied = false;
     game.networkHasMap = true;
     game.networkHasChunks = true;
     game.networkChunkSync = false;
@@ -370,9 +624,24 @@ function startNetworkGame() {
     observeServerTimeIntoState(netClockState, msg.serverTime, NET_CLOCK_OFFSET_SMOOTHING);
     const metaSig = typeof msg.mapSignature === "string" ? msg.mapSignature : "";
     if (metaSig && netMapSignature && metaSig !== netMapSignature) return;
+    const prevFloor = game.floor;
+    const prevGameOver = !!game.gameOver;
+    const prevPaused = !!game.paused;
+    const prevTrackTitle = game.musicTrack?.title || "";
+    const prevTrackSrc = game.musicTrack?.src || "";
     const meta = msg && msg.meta && typeof msg.meta === "object" ? msg.meta : msg;
     applyMetaStateToGame(game, meta);
-    syncMusicForGame(game);
+    const nextTrackTitle = game.musicTrack?.title || "";
+    const nextTrackSrc = game.musicTrack?.src || "";
+    if (
+      prevFloor !== game.floor ||
+      prevGameOver !== !!game.gameOver ||
+      prevPaused !== !!game.paused ||
+      prevTrackTitle !== nextTrackTitle ||
+      prevTrackSrc !== nextTrackSrc
+    ) {
+      syncMusicForGame(game);
+    }
   });
   netClient.on("state.snapshot", (msg) => {
     const recvAt = performance.now();
@@ -398,7 +667,9 @@ function startNetworkGame() {
       netRequiredChunkKeys = new Set();
       netReceivedChunkKeys = new Set();
       netLastServerPlayer = null;
-      netPredictedProjectiles = new Map();
+      netSnapshotBuffer.length = 0;
+      netPredictedProjectiles.clear();
+      netInitialSnapshotApplied = false;
       updateNetworkStatusRuntime(networkStatus, currentGame, "Synchronizing floor data...");
       updateNetworkRole(game, isNetworkController(), networkTakeControl);
       return;
@@ -408,9 +679,24 @@ function startNetworkGame() {
       game.networkReady = false;
       game.networkHasChunks = false;
       netLastServerPlayer = null;
-      netPredictedProjectiles = new Map();
+      netSnapshotBuffer.length = 0;
+      netPredictedProjectiles.clear();
+      netInitialSnapshotApplied = false;
       updateNetworkStatusRuntime(networkStatus, currentGame, "Waiting for map meta...");
       updateNetworkRole(game, isNetworkController(), networkTakeControl);
+      return;
+    }
+    if (game.networkHasMap && game.networkHasChunks && !game.networkReady && netSnapshotBuffer.length === 0) {
+      applySnapshot(game, msg.state, isNetworkController(), Number.isFinite(msg.lastInputSeq) ? msg.lastInputSeq : 0);
+      if (netInitialSnapshotApplied) {
+        updateNetworkRole(game, isNetworkController(), networkTakeControl);
+        updateNetworkStatusRuntime(networkStatus, currentGame, `Room synced | Role: ${game.networkRole}`);
+        game.networkReady = true;
+      } else {
+        updateNetworkRole(game, isNetworkController(), networkTakeControl);
+        updateNetworkStatusRuntime(networkStatus, currentGame, "Waiting for first snapshot...");
+        game.networkReady = false;
+      }
       return;
     }
     const p = msg?.state?.player;
@@ -459,6 +745,8 @@ function startNetworkGame() {
       hasAim: input.hasAim,
       aimX: input.aimX,
       aimY: input.aimY,
+      aimDirX: input.aimDirX,
+      aimDirY: input.aimDirY,
       firePrimaryQueued: input.firePrimaryQueued,
       fireAltQueued: input.fireAltQueued
     };
@@ -475,9 +763,6 @@ function startNetworkGame() {
         netPredictedProjectiles,
         netNextHeldPrimaryPredictAtMs
       );
-      if (netMapSignature && game.networkReady) {
-        predictFromInput(game, input, inputDt, canRunPredictedCollision(game, isKnownMapTileAt));
-      }
       netPendingInputs.push({
         seq: input.seq,
         dt: inputDt,
@@ -485,14 +770,16 @@ function startNetworkGame() {
         moveY: input.moveY,
         hasAim: input.hasAim,
         aimX: input.aimX,
-        aimY: input.aimY
+        aimY: input.aimY,
+        aimDirX: input.aimDirX,
+        aimDirY: input.aimDirY
       });
       if (netPendingInputs.length > 120) {
         netPendingInputs.splice(0, netPendingInputs.length - 120);
       }
     }
     netClient.sendInput(input);
-  }, 16);
+  }, 33);
 }
 
 if (!canvas) {

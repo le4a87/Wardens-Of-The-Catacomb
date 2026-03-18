@@ -52,7 +52,7 @@ export function drawHud(renderer, game, layout) {
     ctx.fillStyle = "#f7e8ff";
     ctx.font = "bold 12px Trebuchet MS";
     ctx.textAlign = "center";
-    ctx.fillText(`Necromancer ${Math.ceil(Math.max(0, boss.hp))}/${boss.maxHp}`, layout.playW / 2, barY - 4 + 12);
+    ctx.fillText(`${boss.bossName || boss.type || "Boss"} ${Math.ceil(Math.max(0, boss.hp))}/${boss.maxHp}`, layout.playW / 2, barY - 4 + 12);
     ctx.textAlign = "left";
   }
 }

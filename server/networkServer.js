@@ -11,9 +11,9 @@ import { buildMapChunkRows } from "./net/mapChunkStreaming.js";
 import { chooseGameplayTrack } from "./musicCatalog.js";
 
 const PORT = Number.parseInt(process.env.PORT || "8090", 10);
-const TICK_RATE = Number.parseInt(process.env.TICK_RATE || "72", 10);
-const SNAPSHOT_RATE = Number.parseInt(process.env.SNAPSHOT_RATE || "28", 10);
-const META_BROADCAST_MIN_MS = Number.parseInt(process.env.META_BROADCAST_MIN_MS || "160", 10);
+const TICK_RATE = Number.parseInt(process.env.TICK_RATE || "60", 10);
+const SNAPSHOT_RATE = Number.parseInt(process.env.SNAPSHOT_RATE || "20", 10);
+const META_BROADCAST_MIN_MS = Number.parseInt(process.env.META_BROADCAST_MIN_MS || "320", 10);
 const MAP_CHUNK_SIZE = Number.parseInt(process.env.MAP_CHUNK_SIZE || "24", 10);
 const MAP_CHUNK_RADIUS = Number.parseInt(process.env.MAP_CHUNK_RADIUS || "2", 10);
 const MAP_CHUNK_PUSH_MS = Number.parseInt(process.env.MAP_CHUNK_PUSH_MS || "120", 10);

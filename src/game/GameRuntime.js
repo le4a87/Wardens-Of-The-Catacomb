@@ -18,6 +18,12 @@ export class Game extends GameRuntimeSystems {
     if (keys.has("arrowdown") || keys.has("s")) my += 1;
 
     const mouse = this.input.mouse;
+    if (typeof this.input.refreshAimWorldPosition === "function" && mouse.hasAim) {
+      this.input.refreshAimWorldPosition();
+    }
+    const rawAimX = mouse.worldX - this.player.x;
+    const rawAimY = mouse.worldY - this.player.y;
+    const rawAimLen = Math.hypot(rawAimX, rawAimY) || 1;
     stepGame(this, dt, {
       processUi: true,
       moveX: mx,
@@ -25,6 +31,8 @@ export class Game extends GameRuntimeSystems {
       hasAim: !!mouse.hasAim,
       aimX: mouse.worldX,
       aimY: mouse.worldY,
+      aimDirX: mouse.hasAim ? rawAimX / rawAimLen : (Number.isFinite(this.player?.dirX) ? this.player.dirX : 1),
+      aimDirY: mouse.hasAim ? rawAimY / rawAimLen : (Number.isFinite(this.player?.dirY) ? this.player.dirY : 0),
       firePrimaryQueued: this.input.consumeLeftQueued(),
       firePrimaryHeld: !!mouse.leftDown,
       fireAltQueued: this.input.consumeRightQueued()

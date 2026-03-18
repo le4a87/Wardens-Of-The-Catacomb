@@ -16,6 +16,7 @@ This document summarizes the current high-level architecture and validation work
 - Notable extracted module groups include:
   - `src/game/enemySpawnFactories.js`
   - `src/game/enemyAi.js`
+  - `src/game/enemyTactics.js`
   - `src/game/enemyRewards.js`
   - `src/game/stepCombatResolution.js`
   - `src/bootstrap/gameUiRuntime.js`
@@ -34,32 +35,77 @@ This document summarizes the current high-level architecture and validation work
   - prediction for controller input
   - map chunk readiness
   - projectile reconciliation
+- The network render/runtime path now reads the active `netClient` dynamically instead of capturing a stale pre-connect reference, which keeps controller-only UI actions working after live room join.
+- The browser debug surface in `game.js` now exposes enough live state for Playwright-based network validation and perf harnesses.
+
+## Enemy Runtime Notes
+- Enemy behavior now routes through `src/game/enemyTactics.js`, which provides:
+  - stable `tacticKey` assignment
+  - lightweight phase state on each enemy
+  - a central dispatch seam for per-enemy behavior
+- Shared movement/pathing now uses target-point steering plus corner-assist probes in `src/game/world/navigationCollision.js`.
+- Floor-boss state in `src/game/runtimeFloorBossMethods.js` is now boss-type aware instead of necromancer-specific, which allows the same progression flow to drive both necromancer and minotaur encounters.
+- Safe spawn and teleport placement now validate full movement footprints instead of trusting tile centers, which hardens player starts and boss teleports against blocked placements.
 
 ## Validation and Quality Gates
-- `npm run check`
-  - syntax validation across the repo
-- `npm run validate:boss`
-  - verifies floor-boss progression and encounter lockout behavior
-- `npm run perf:test`
-  - runs the local+network scripted perf flow and writes `artifacts/perf/latest.json`
+- `npm run validate:core`
+  - syntax and LOC validation
+- `npm run validate:gameplay`
+  - boss, tactics, and minotaur gameplay regressions
+- `npm run validate:network`
+  - browser-driven network join, combat, hit-confirmation, archer, audio, and UI regressions
+- `npm run perf:all`
+  - local+network perf plus browser perf
+- `npm run validate:pre-commit`
+  - recommended pre-commit gate
+- `npm run validate:closeout`
+  - branch closeout gate that runs all grouped validation suites
+
+### Browser Validation Coverage
+- `validate:network-join`
+  - verifies real browser room join, authoritative spawn adoption, and post-join movement
+- `validate:network-combat`
+  - verifies controller attack input produces combat objects in a live room
+- `validate:network-combat-hit`
+  - measures attack emission, enemy HP confirmation, and floating-text confirmation in browser play
+  - now uses reliable target-selection and repositioning so misses on drifting enemies do not masquerade as combat-feedback regressions
+- `validate:network-archer`
+  - checks moving archer shots against live projectile direction/alignment
+  - now retries moving-shot samples and records skipped attempts so authoritative-visibility timing noise does not make the suite flaky
+- `validate:network-audio`
+  - records focused-tab music diagnostics during live network play
+- `validate:network-audio:focus`
+  - runs the audio validator in explicit focus-cycle mode and records focus/visibility telemetry; use `--headed` when a real desktop session is available and strict blur/focus assertions are desired
+- `validate:network-ui`
+  - verifies that controller clients can open and interact with skill/shop UI paths in live network sessions
+- `perf:network-browser`
+  - captures active-tab frame cadence, snapshot backlog, correction pressure, and movement-latency proxies
 
 ## Performance Workflow
-- Baseline metrics are stored in `artifacts/perf/baseline.json`.
-- Latest test output is written to `artifacts/perf/latest.json`.
+- Baseline metrics are stored in:
+  - `artifacts/perf/baseline.json` for the corrected local+network perf runner
+  - `artifacts/perf/network-browser-baseline.json` for the browser network harness
+- Latest test output is written to:
+  - `artifacts/perf/latest.json`
+  - `artifacts/perf/network-browser-latest.json`
 - Current tracked comparison metrics include:
   - snapshot payload size
   - frame gap and jitter
   - correction distance
   - projectile origin error and snap events
   - server tick / serialize / broadcast timing
+- For server-side performance comparisons, treat `serverMetrics.tickDurationMs` as the authoritative server tick metric.
+- Treat `avgSnapshotIntervalMs` / `p95SnapshotIntervalMs` as client-observed delivery cadence, not raw server simulation cost.
 
 ## Current Validation Notes
 - Repo scripts were updated to resolve from the project root in UNC-path environments.
 - `server/perfRunner.js` was hardened to resolve its root from `import.meta.url`, matching the other tooling fixes.
-- The latest perf artifact should be compared against the baseline before merge if enemy density, spawning, or network payload size changed.
+- `server/run-validation-suite.js` now groups the growing validation surface into maintainable suites instead of requiring every workflow step to list individual commands manually.
+- The perf baselines were refreshed from post-fix runs on 2026-03-17/18, so future comparisons should use the current baseline files instead of the earlier pre-correction artifacts.
+- `server/validate-floor-boss.js` now validates the generalized floor-boss flow rather than assuming only the necromancer boss exists.
+- If network startup or render regressions return, inspect snapshot-buffer identity and snapshot-consumption paths before changing interpolation or prediction. A real branch regression came from replacing the live snapshot buffer after the render loop had already captured it.
+- If controller-only network UI regressions return, inspect the active `netClient` wiring first. A real regression came from the render loop capturing `null` before connection completed, which silently drained shop/skill clicks through the no-client path.
 
-## Current Follow-Ups
-- Revisit enemy-density tuning after the recent active-enemy-cap increase.
-- Re-check the level-only spawn-rate curve in live play.
-- Confirm the floor-boss XP lockout feels correct during active encounters.
-- Review whether the current binary asset changes belong in the same branch before merge.
+## Operational Notes
+- Revisit enemy-density tuning if the active-enemy-cap curve changes again.
+- If manual active-tab audio issues return, rerun `validate:network-audio:focus` in a headed desktop session so the harness can assert real blur/focus/visibility transitions instead of headless continuity only.

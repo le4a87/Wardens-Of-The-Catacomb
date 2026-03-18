@@ -167,7 +167,15 @@ export const runtimeSceneDrawMethods = {
       ctx.beginPath();
       ctx.ellipse(screenX, screenY + half * 0.7, half, half * 0.34, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "#d7d9de";
+      const reviveGlow = enemy.reviveAtEnd ? (enemy.reanimating ? 0.85 : 0.45) : 0;
+      if (reviveGlow > 0) {
+        ctx.strokeStyle = `rgba(145, 220, 255, ${reviveGlow})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.ellipse(screenX, screenY + half * 0.2, half * 0.9, half * 0.55, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = enemy.reviveAtEnd ? "#bfe8ff" : "#d7d9de";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(screenX - 7, screenY + 2);
@@ -177,6 +185,13 @@ export const runtimeSceneDrawMethods = {
       ctx.moveTo(screenX - 2, screenY - 7);
       ctx.lineTo(screenX + 2, screenY + 7);
       ctx.stroke();
+      if (enemy.reanimating) {
+        ctx.fillStyle = "#dff8ff";
+        ctx.font = "bold 10px Trebuchet MS";
+        ctx.textAlign = "center";
+        ctx.fillText("REVIVING", screenX, screenY - 12);
+        ctx.textAlign = "left";
+      }
       return;
     }
 

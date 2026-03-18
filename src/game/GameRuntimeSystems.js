@@ -8,13 +8,15 @@ import {
   updateRatArcher as updateRatArcherEntity,
   updateSkeletonWarrior as updateSkeletonWarriorEntity,
   updateNecromancer as updateNecromancerEntity,
-  xpFromEnemy as xpFromEnemyEntity,
-  maybeSpawnDrop as maybeSpawnDropEntity,
-  dropTreasureBag as dropTreasureBagEntity,
-  dropArmorLoot as dropArmorLootEntity,
-  dropNecromancerLoot as dropNecromancerLootEntity
+  updateMinotaur as updateMinotaurEntity,
+  getEnemyTacticKey as getEnemyTacticKeyEntity,
+  getEnemyTacticDefinition as getEnemyTacticDefinitionEntity,
+  ensureEnemyTacticsState as ensureEnemyTacticsStateEntity,
+  setEnemyTacticPhase as setEnemyTacticPhaseEntity,
+  updateEnemyTactics as updateEnemyTacticsEntity
 } from "./enemySystems.js";
 import { GameRuntimeWorld } from "./GameRuntimeWorld.js";
+import { runtimePlayerCombatMethods } from "./runtimePlayerCombatMethods.js";
 
 export class GameRuntimeSystems extends GameRuntimeWorld {
   getControlledUndeadFormationPoint(enemy) {
@@ -92,16 +94,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   moveEnemyTowardTarget(enemy, target, speedScale, dt, minDistance = 0) {
     if (!enemy || !target) return;
-    const enemySpeed = Number.isFinite(enemy.speed) ? enemy.speed : 70;
     const appliedScale = this.isEnemyFriendlyToPlayer(enemy) ? 1 : (Number.isFinite(speedScale) ? speedScale : 1);
-    const step = enemySpeed * appliedScale * Math.max(0, Number.isFinite(dt) ? dt : 0);
-    if (step <= 0) return;
-    const dx = target.x - enemy.x;
-    const dy = target.y - enemy.y;
-    const len = vecLength(dx, dy) || 1;
-    if (len <= minDistance) return;
-    const moveStep = Math.min(step, len - minDistance);
-    this.moveWithCollision(enemy, (dx / len) * moveStep, (dy / len) * moveStep);
+    if (typeof this.moveEnemyTowardTargetPoint === "function") {
+      this.moveEnemyTowardTargetPoint(enemy, target, appliedScale, dt, minDistance);
+    }
   }
 
   updateGenericEnemy(enemy, dt, speedScale) {
@@ -185,60 +181,28 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
     updateNecromancerEntity(this, enemy, dt, speedScale);
   }
 
-  xpFromEnemy(enemy) {
-    return xpFromEnemyEntity(this, enemy);
+  updateMinotaur(enemy, dt, speedScale) {
+    updateMinotaurEntity(this, enemy, dt, speedScale);
   }
 
-  gainExperience(amount) {
-    if (typeof this.isFloorBossActive === "function" && this.isFloorBossActive()) return;
-    this.experience += amount;
-    while (this.experience >= this.expToNextLevel) {
-      this.experience -= this.expToNextLevel;
-      this.level += 1;
-      this.skillPoints += 1;
-      const hpGain = Number.isFinite(this.classSpec.levelHpGain) ? this.classSpec.levelHpGain : 10;
-      this.player.maxHealth += hpGain;
-      this.player.health = Math.min(this.player.maxHealth, this.player.health + hpGain);
-      this.markPlayerHealthBarVisible();
-      this.spawnFloatingText(this.player.x, this.player.y - 46, `+${hpGain} Max HP`, "#ff9f9f", 0.95, 14);
-      const baseMin = Number.isFinite(this.classSpec.primaryDamageMin)
-        ? this.classSpec.primaryDamageMin
-        : Number.isFinite(this.classSpec.primaryDamage)
-        ? this.classSpec.primaryDamage
-        : 1;
-      const baseMax = Number.isFinite(this.classSpec.primaryDamageMax)
-        ? this.classSpec.primaryDamageMax
-        : Number.isFinite(this.classSpec.primaryDamage)
-        ? this.classSpec.primaryDamage
-        : baseMin;
-      const baseAvg = (Math.min(baseMin, baseMax) + Math.max(baseMin, baseMax)) * 0.5;
-      const dmgPct = Number.isFinite(this.classSpec.levelWeaponDamagePct) ? this.classSpec.levelWeaponDamagePct : 0.05;
-      const dmgGain = Math.max(1, baseAvg * Math.max(0, dmgPct));
-      this.levelWeaponDamageBonus += dmgGain;
-      this.spawnFloatingText(this.player.x, this.player.y - 62, `+${dmgGain.toFixed(1)} Weapon Dmg`, "#f3d18b", 0.95, 13);
-      this.expToNextLevel = Math.floor(this.expToNextLevel * this.config.progression.xpLevelScaling);
-      this.spawnFloatingText(this.player.x, this.player.y - 30, `Level ${this.level}! +1 SP`, "#9be18a", 1.2, 16);
-      if (this.updateFloorBossTrigger()) {
-        const target = this.floorBoss?.triggerLevel || this.getFloorBossTriggerLevel();
-        this.spawnFloatingText(this.player.x, this.player.y - 80, `Boss Ready: Lv ${target}`, "#c78bff", 1.4, 16);
-      }
-    }
+  getEnemyTacticKey(enemy) {
+    return getEnemyTacticKeyEntity(enemy);
   }
 
-  maybeSpawnDrop(x, y) {
-    maybeSpawnDropEntity(this, x, y);
+  getEnemyTacticDefinition(enemy) {
+    return getEnemyTacticDefinitionEntity(enemy);
   }
 
-  dropTreasureBag(x, y, goldEaten) {
-    dropTreasureBagEntity(this, x, y, goldEaten);
+  ensureEnemyTacticsState(enemy) {
+    return ensureEnemyTacticsStateEntity(enemy);
   }
 
-  dropArmorLoot(x, y) {
-    dropArmorLootEntity(this, x, y);
+  setEnemyTacticPhase(enemy, phase) {
+    return setEnemyTacticPhaseEntity(enemy, phase);
   }
 
-  dropNecromancerLoot(x, y) {
-    dropNecromancerLootEntity(this, x, y);
+  updateEnemyTactics(enemy, dt, speedScale) {
+    return updateEnemyTacticsEntity(this, enemy, dt, speedScale);
   }
 
   fire(dx, dy) {
@@ -251,17 +215,31 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
     }
     const origin = this.getBowMuzzleOrigin(dx, dy);
     const baseAngle = Math.atan2(origin.dirY, origin.dirX);
-    const count = this.getMultiarrowCount();
-    const spreadDeg = this.getMultiarrowSpreadDeg();
-    const spreadRad = (spreadDeg * Math.PI) / 180;
+    const volleyAngles = this.getMultiarrowAngles(baseAngle);
+    const count = volleyAngles.length;
     // Arrow sprite tail sits ~7px behind its local origin; push spawn forward so tail aligns with bow center.
     const releaseTailOffset = 7;
     const damageMultipliers = this.getMultiarrowArrowDamageMultipliers();
+    if (typeof this.recordPlayerShotTelemetry === "function") {
+      const liveAimX = Number.isFinite(this.input?.mouse?.worldX) ? this.input.mouse.worldX : null;
+      const liveAimY = Number.isFinite(this.input?.mouse?.worldY) ? this.input.mouse.worldY : null;
+      this.recordPlayerShotTelemetry({
+        source: "primary",
+        playerX: this.player.x,
+        playerY: this.player.y,
+        moving: !!this.player.moving,
+        aimX: liveAimX,
+        aimY: liveAimY,
+        intendedAngle: baseAngle,
+        volleyAngles: volleyAngles.map((angle) => Number(angle.toFixed(6))),
+        multishotCount: count,
+        projectileSpeed: this.getProjectileSpeed(),
+        fireCooldown: this.player.fireCooldown
+      });
+    }
 
     for (let i = 0; i < count; i++) {
-      const t = count <= 1 ? 0 : i / (count - 1);
-      const offset = count <= 1 ? 0 : (t - 0.5) * spreadRad;
-      const a = baseAngle + offset;
+      const a = volleyAngles[i];
       const speed = this.getProjectileSpeed();
       const vx = Math.cos(a) * speed;
       const vy = Math.sin(a) * speed;
@@ -281,9 +259,39 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   performMeleeAttack(dx, dy) {
     const range = this.classSpec.meleeRange || 42;
+    const hitPadding = Number.isFinite(this.classSpec.meleeHitPadding) ? Math.max(0, this.classSpec.meleeHitPadding) : 0;
     const arcDeg = this.classSpec.meleeArcDeg || 95;
     const arc = (arcDeg * Math.PI) / 180;
-    const angle = Math.atan2(dy, dx);
+    let aimX = dx;
+    let aimY = dy;
+    let angle = Math.atan2(dy, dx);
+    const halfArc = arc * 0.5;
+    let snapTarget = null;
+    let bestSnapScore = Number.POSITIVE_INFINITY;
+    for (const enemy of this.enemies || []) {
+      if (!enemy || (enemy.hp || 0) <= 0) continue;
+      if (this.isEnemyFriendlyToPlayer(enemy)) continue;
+      const ex = enemy.x - this.player.x;
+      const ey = enemy.y - this.player.y;
+      const dist = vecLength(ex, ey);
+      const effectiveRange = range + hitPadding + (enemy.size || 20) * 0.55;
+      if (dist > effectiveRange + 14) continue;
+      const enemyAngle = Math.atan2(ey, ex);
+      let diff = enemyAngle - angle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) > halfArc + 0.38) continue;
+      const score = Math.abs(diff) * 100 + dist;
+      if (score < bestSnapScore) {
+        bestSnapScore = score;
+        snapTarget = enemy;
+      }
+    }
+    if (snapTarget) {
+      aimX = snapTarget.x - this.player.x;
+      aimY = snapTarget.y - this.player.y;
+      angle = Math.atan2(aimY, aimX);
+    }
     let executeProc = false;
     this.meleeSwings.push({
       x: this.player.x,
@@ -296,12 +304,11 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
       maxLife: this.config.effects.meleeSwingLife
     });
 
-    const halfArc = arc * 0.5;
     for (const enemy of this.enemies) {
       const ex = enemy.x - this.player.x;
       const ey = enemy.y - this.player.y;
       const dist = vecLength(ex, ey);
-      if (dist > range + enemy.size * 0.45) continue;
+      if (dist > range + hitPadding + enemy.size * 0.45) continue;
       const enemyAngle = Math.atan2(ey, ex);
       let diff = enemyAngle - angle;
       while (diff > Math.PI) diff -= Math.PI * 2;
@@ -442,3 +449,5 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
   }
 
 }
+
+Object.assign(GameRuntimeSystems.prototype, runtimePlayerCombatMethods);

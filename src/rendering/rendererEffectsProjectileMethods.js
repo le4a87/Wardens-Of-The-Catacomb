@@ -28,18 +28,15 @@ export const rendererEffectsProjectileMethods = {
       }
     }
 
-    for (const b of game.bullets) {
-      if (b.kind === "necroticBolt") {
-        this.drawNecroticBolt(b, cameraX, cameraY, game.time);
-        continue;
-      }
-      const x = b.x - cameraX;
-      const y = b.y - cameraY;
-      const isTrapArrow = b.projectileType === "trapArrow";
-      const isDeathBolt = b.projectileType === "deathBolt";
+    const drawArrowLikeProjectile = (projectile, alpha = 1) => {
+      const x = projectile.x - cameraX;
+      const y = projectile.y - cameraY;
+      const isTrapArrow = projectile.projectileType === "trapArrow";
+      const isDeathBolt = projectile.projectileType === "deathBolt";
       ctx.save();
+      ctx.globalAlpha = alpha;
       ctx.translate(x, y);
-      ctx.rotate(b.angle);
+      ctx.rotate(projectile.angle);
       if (isDeathBolt) {
         const orb = ctx.createRadialGradient(0, 0, 1, 0, 0, 10);
         orb.addColorStop(0, "rgba(203, 255, 205, 0.95)");
@@ -71,8 +68,15 @@ export const rendererEffectsProjectileMethods = {
         ctx.fill();
       }
       ctx.restore();
-    }
+    };
 
+    for (const b of game.bullets) {
+      if (b.kind === "necroticBolt") {
+        this.drawNecroticBolt(b, cameraX, cameraY, game.time);
+        continue;
+      }
+      drawArrowLikeProjectile(b, 1);
+    }
     for (const arrow of game.fireArrows) {
       const x = arrow.x - cameraX;
       const y = arrow.y - cameraY;
@@ -194,6 +198,32 @@ export const rendererEffectsProjectileMethods = {
     const ctx = this.ctx;
     const x = zone.x - cameraX;
     const y = zone.y - cameraY;
+    if (zone.zoneType === "ghostSiphon") {
+      const tx = (Number.isFinite(zone.targetX) ? zone.targetX : zone.x) - cameraX;
+      const ty = (Number.isFinite(zone.targetY) ? zone.targetY : zone.y) - cameraY;
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / 0.35));
+      const grad = ctx.createLinearGradient(x, y, tx, ty);
+      grad.addColorStop(0, `rgba(180, 122, 255, ${0.18 * lifeFrac})`);
+      grad.addColorStop(0.5, `rgba(156, 88, 255, ${0.72 * lifeFrac})`);
+      grad.addColorStop(1, `rgba(231, 196, 255, ${0.2 * lifeFrac})`);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x, y - 4);
+      ctx.lineTo(tx, ty - 4);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(190, 126, 255, ${0.22 * lifeFrac})`;
+      for (let i = 0; i < 4; i++) {
+        const t = i / 3;
+        const px = x + (tx - x) * t;
+        const py = y + (ty - y) * t + Math.sin(time * 10 + i) * 3;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5 - t, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
     if (zone.zoneType === "deathBolt" || zone.zoneType === "deathBurst") {
       const lifeFrac = Math.max(0, Math.min(1, zone.life / (this.config.deathBolt?.visualLife || 0.35)));
       const outer = ctx.createRadialGradient(x, y, 2, x, y, zone.radius);

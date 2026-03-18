@@ -9,8 +9,11 @@ export const runtimeFloorBossMethods = {
 
   createFloorBossState(floor = this.floor) {
     const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    const bossType = this.getFloorBossType(safeFloor);
     return {
       floor: safeFloor,
+      bossType,
+      bossName: this.getFloorBossName(bossType),
       triggerLevel: this.getFloorBossTriggerLevel(safeFloor),
       phase: "idle",
       spawnPending: false,
@@ -28,8 +31,19 @@ export const runtimeFloorBossMethods = {
       this.lastFloorBossFeedbackPhase = null;
       return this.floorBoss;
     }
+    this.floorBoss.bossType = this.getFloorBossType(this.floorBoss.floor);
+    this.floorBoss.bossName = this.getFloorBossName(this.floorBoss.bossType);
     this.floorBoss.triggerLevel = this.getFloorBossTriggerLevel(this.floorBoss.floor);
     return this.floorBoss;
+  },
+
+  getFloorBossType(floor = this.floor) {
+    const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    return safeFloor % 2 === 0 ? "minotaur" : "necromancer";
+  },
+
+  getFloorBossName(type = this.getFloorBossType()) {
+    return type === "minotaur" ? "Minotaur" : "Necromancer";
   },
 
   updateFloorBossTrigger() {
@@ -48,6 +62,8 @@ export const runtimeFloorBossMethods = {
     boss.spawnPending = false;
     return {
       floor: boss.floor,
+      bossType: boss.bossType,
+      bossName: boss.bossName,
       triggerLevel: boss.triggerLevel,
       spawnTriggeredAtLevel: boss.spawnTriggeredAtLevel
     };
@@ -102,26 +118,45 @@ export const runtimeFloorBossMethods = {
   },
 
   getActiveFloorBossEnemy() {
-    return (this.enemies || []).find((enemy) => enemy && enemy.type === "necromancer" && enemy.isFloorBoss && enemy.hp > 0) || null;
+    return (this.enemies || []).find((enemy) => enemy && enemy.isFloorBoss && enemy.hp > 0) || null;
   },
 
   getFloorObjectiveText() {
     const boss = this.syncFloorBossState();
+    const bossName = boss.bossName || this.getFloorBossName(boss.bossType);
     if (this.portal?.active || boss.phase === "portal") return "Objective: Enter the portal";
-    if (boss.phase === "active" || boss.phase === "defeated") return "Objective: Defeat the necromancer";
+    if (boss.phase === "active" || boss.phase === "defeated") return `Objective: Defeat the ${bossName.toLowerCase()}`;
     const targetLevel = Number.isFinite(boss.triggerLevel) ? boss.triggerLevel : this.getFloorBossTriggerLevel();
     const levelsRemaining = Math.max(0, targetLevel - (Number.isFinite(this.level) ? this.level : 1));
-    if (boss.phase === "queued") return "Objective: Survive the necromancer encounter";
+    if (boss.phase === "queued") return `Objective: Survive the ${bossName.toLowerCase()} encounter`;
     return levelsRemaining > 0
-      ? `Objective: Reach Lv ${targetLevel} to summon the necromancer`
-      : "Objective: Prepare for the necromancer";
+      ? `Objective: Reach Lv ${targetLevel} to summon the ${bossName.toLowerCase()}`
+      : `Objective: Prepare for the ${bossName.toLowerCase()}`;
   },
 
   getFloorObjectiveDetail() {
     const boss = this.syncFloorBossState();
+    const bossName = boss.bossName || this.getFloorBossName(boss.bossType);
     if (this.portal?.active || boss.phase === "portal") return "Portal open. Step into it to descend.";
-    if (boss.phase === "active") return "Mini-boss active. Avoid volleys and skeleton summons.";
-    if (boss.phase === "queued") return "The ritual is complete. The necromancer is arriving.";
+    if (boss.phase === "active") {
+      const activeBoss = this.getActiveFloorBossEnemy();
+      if (activeBoss) {
+        const dx = activeBoss.x - this.player.x;
+        const dy = activeBoss.y - this.player.y;
+        const distTiles = Math.max(0, Math.round(Math.hypot(dx, dy) / this.config.map.tile));
+        const horizontal = Math.abs(dx) >= this.config.map.tile * 0.75 ? (dx > 0 ? "E" : "W") : "";
+        const vertical = Math.abs(dy) >= this.config.map.tile * 0.75 ? (dy > 0 ? "S" : "N") : "";
+        const dir = `${vertical}${horizontal}` || "HERE";
+        const hint = boss.bossType === "minotaur"
+          ? "Avoid charges and stomp range."
+          : "Avoid volleys and skeleton summons.";
+        return `${bossName} ${distTiles} tiles ${dir}. ${hint}`;
+      }
+      return boss.bossType === "minotaur"
+        ? "Mini-boss active. Avoid charges and stomp range."
+        : "Mini-boss active. Avoid volleys and skeleton summons.";
+    }
+    if (boss.phase === "queued") return `The ritual is complete. The ${bossName.toLowerCase()} is arriving.`;
     const targetLevel = Number.isFinite(boss.triggerLevel) ? boss.triggerLevel : this.getFloorBossTriggerLevel();
     const currentLevel = Number.isFinite(this.level) ? this.level : 1;
     return `Floor ${this.floor} trigger: Lv ${currentLevel}/${targetLevel}`;

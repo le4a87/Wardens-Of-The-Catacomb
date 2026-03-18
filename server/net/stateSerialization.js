@@ -8,7 +8,6 @@ function shallowPlayerState(simPlayer) {
     dirX: simPlayer.dirX,
     dirY: simPlayer.dirY,
     facing: simPlayer.facing,
-    moving: simPlayer.moving,
     classType: simPlayer.classType
   };
 }
@@ -23,44 +22,56 @@ export function getStableId(room, domain, prefix, obj) {
 }
 
 function serializeBullet(room, b, domain = "bullet", prefix = "b") {
-  return {
+  const payload = {
     id: getStableId(room, domain, prefix, b),
-    ownerId: typeof b.ownerId === "string" ? b.ownerId : null,
-    spawnSeq: Number.isFinite(b.spawnSeq) ? Math.floor(b.spawnSeq) : 0,
     x: b.x,
     y: b.y,
     vx: b.vx,
     vy: b.vy,
     angle: b.angle,
     life: b.life,
-    size: b.size,
-    kind: typeof b.kind === "string" ? b.kind : "arrow",
-    faction: typeof b.faction === "string" ? b.faction : "player",
-    damage: b.damage,
-    projectileType: typeof b.projectileType === "string" ? b.projectileType : "bullet"
+    size: b.size
   };
+  if (Number.isFinite(b.spawnSeq) && b.spawnSeq > 0) payload.spawnSeq = Math.floor(b.spawnSeq);
+  if (typeof b.ownerId === "string" && b.ownerId) payload.ownerId = b.ownerId;
+  if (typeof b.kind === "string" && b.kind !== "arrow") payload.kind = b.kind;
+  if (typeof b.faction === "string" && b.faction !== "player") payload.faction = b.faction;
+  if (Number.isFinite(b.damage)) payload.damage = b.damage;
+  if (typeof b.projectileType === "string" && b.projectileType !== "bullet") payload.projectileType = b.projectileType;
+  return payload;
 }
 
 function serializeEnemy(room, e) {
-  return {
+  const base = {
     id: getStableId(room, "enemy", "e", e),
     type: e.type,
     isFloorBoss: !!e.isFloorBoss,
     x: e.x,
     y: e.y,
     size: e.size,
-    dirX: e.dirX,
-    dirY: e.dirY,
     hp: e.hp,
     maxHp: e.maxHp,
-    hpBarTimer: e.hpBarTimer || 0,
-    shotWindupTimer: e.shotWindupTimer || 0,
-    collapsed: !!e.collapsed,
-    collapseTimer: e.collapseTimer || 0,
-    goldEaten: e.goldEaten || 0,
-    damageMin: e.damageMin,
-    damageMax: e.damageMax
+    hpBarTimer: e.hpBarTimer || 0
   };
+  switch (e.type) {
+    case "rat_archer":
+      base.dirX = e.dirX;
+      base.dirY = e.dirY;
+      base.shotWindupTimer = e.shotWindupTimer || 0;
+      break;
+    case "skeleton_warrior":
+      base.dirX = e.dirX;
+      base.dirY = e.dirY;
+      base.collapsed = !!e.collapsed;
+      base.collapseTimer = e.collapseTimer || 0;
+      break;
+    case "treasure_goblin":
+      base.goldEaten = e.goldEaten || 0;
+      break;
+    default:
+      break;
+  }
+  return base;
 }
 
 function serializeDrop(room, d) {
@@ -160,7 +171,7 @@ export function serializeMetaState(source) {
 
 export function serializeState(room) {
   const sim = room.sim;
-  const activeBounds = makeActiveBounds(sim, 10);
+  const activeBounds = makeActiveBounds(sim, 8);
   const floorBoss =
     sim.floorBoss && typeof sim.floorBoss === "object"
       ? {
@@ -169,15 +180,14 @@ export function serializeState(room) {
           phase: sim.floorBoss.phase
         }
       : null;
-  const activeEnemies = sim.enemies.filter((e) => isInsideBounds(e, activeBounds, 72));
-  const activeDrops = sim.drops.filter((d) => isInsideBounds(d, activeBounds, 64));
-  const activeBreakables = (sim.breakables || []).filter((b) => isInsideBounds(b, activeBounds, 72));
-  const activeWallTraps = (sim.wallTraps || []).filter((t) => isInsideBounds(t, activeBounds, 72));
-  const activeBullets = sim.bullets.filter((b) => isInsideBounds(b, activeBounds, 160));
-  const activeFireArrows = sim.fireArrows.filter((a) => isInsideBounds(a, activeBounds, 180));
-  const activeFireZones = sim.fireZones.filter((z) => isInsideBounds(z, activeBounds, (Number.isFinite(z.radius) ? z.radius : 0) + 42));
-  const activeMeleeSwings = sim.meleeSwings.filter((s) => isInsideBounds(s, activeBounds, (Number.isFinite(s.range) ? s.range : 0) + 32));
-  const activeTexts = sim.floatingTexts.filter((t) => isInsideBounds(t, activeBounds, 36));
+  const activeEnemies = sim.enemies.filter((e) => isInsideBounds(e, activeBounds, 56));
+  const activeDrops = sim.drops.filter((d) => isInsideBounds(d, activeBounds, 40));
+  const activeBreakables = (sim.breakables || []).filter((b) => isInsideBounds(b, activeBounds, 48));
+  const activeWallTraps = (sim.wallTraps || []).filter((t) => isInsideBounds(t, activeBounds, 48));
+  const activeBullets = sim.bullets.filter((b) => isInsideBounds(b, activeBounds, 128));
+  const activeFireArrows = sim.fireArrows.filter((a) => isInsideBounds(a, activeBounds, 144));
+  const activeFireZones = sim.fireZones.filter((z) => isInsideBounds(z, activeBounds, (Number.isFinite(z.radius) ? z.radius : 0) + 28));
+  const activeMeleeSwings = sim.meleeSwings.filter((s) => isInsideBounds(s, activeBounds, (Number.isFinite(s.range) ? s.range : 0) + 24));
   return {
     mapSignature: `${sim.floor}:${sim.mapWidth}x${sim.mapHeight}`,
     time: sim.time,
@@ -202,17 +212,6 @@ export function serializeState(room) {
       arc: s.arc,
       range: s.range,
       life: s.life
-    })),
-    floatingTexts: activeTexts.slice(-8).map((t) => ({
-      id: getStableId(room, "floatingText", "ft", t),
-      x: t.x,
-      y: t.y,
-      text: t.text,
-      color: t.color,
-      life: t.life,
-      size: t.size,
-      maxLife: t.maxLife,
-      vy: t.vy
     }))
   };
 }

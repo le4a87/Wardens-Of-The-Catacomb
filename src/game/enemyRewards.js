@@ -28,12 +28,18 @@ export function applyGoblinGrowth(game, goblin, goldAmount) {
   goblin.damageMax = Math.min(36, baseMax + growth * 2);
   goblin.size = Math.min(30, 16 + Math.floor(goblin.goldEaten / 5));
   goblin.aggression = Math.min(1, 0.12 + goblin.goldEaten / 60);
+  const strongThreshold = Number.isFinite(game?.config?.enemy?.goblinStrongGoldThreshold)
+    ? game.config.enemy.goblinStrongGoldThreshold
+    : 20;
+  goblin.growthStage = goblin.goldEaten >= strongThreshold ? "enraged" : "feeding";
 }
 
 export function xpFromEnemy(game, enemy) {
   const baseXp =
     enemy.type === "necromancer"
       ? 90
+      : enemy.type === "minotaur"
+      ? 120
       : enemy.type === "skeleton"
       ? 10
       : enemy.type === "rat_archer"
@@ -44,6 +50,8 @@ export function xpFromEnemy(game, enemy) {
       ? 24
       : enemy.type === "mimic"
       ? 18
+      : enemy.type === "mummy"
+      ? 16
       : enemy.type === "goblin"
       ? 12 + Math.floor(enemy.goldEaten * 0.6)
       : 6;
@@ -141,6 +149,31 @@ export function dropNecromancerLoot(game, x, y) {
     type: "health",
     x: x + 16,
     y: y - 10,
+    size: 12,
+    amount: healthAmount,
+    life: game.config.drops.life + 4
+  });
+}
+
+export function dropMinotaurLoot(game, x, y) {
+  const amountMult = game.getGoldDropAmountMultiplier ? game.getGoldDropAmountMultiplier() : 1;
+  const healthAmount = typeof game.getHealthPickupAmount === "function" ? game.getHealthPickupAmount() : 1;
+  const c = game.config.enemy;
+  const baseAmount =
+    Math.min(c.minotaurRewardGoldMin, c.minotaurRewardGoldMax) +
+    Math.floor(Math.random() * (Math.abs(c.minotaurRewardGoldMax - c.minotaurRewardGoldMin) + 1));
+  game.drops.push({
+    type: "gold_bag",
+    x,
+    y,
+    size: 22,
+    amount: Math.max(1, Math.floor(baseAmount * amountMult)),
+    life: game.config.drops.life + 10
+  });
+  game.drops.push({
+    type: "health",
+    x: x - 16,
+    y: y - 8,
     size: 12,
     amount: healthAmount,
     life: game.config.drops.life + 4

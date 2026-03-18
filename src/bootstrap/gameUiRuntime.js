@@ -6,6 +6,7 @@ export function syncIdleSoundState(music, splashActive, game) {
   }
   const idleGameplayActive = !!(
     game &&
+    !game.networkEnabled &&
     !game.paused &&
     !game.gameOver &&
     !game.shopOpen &&
@@ -117,6 +118,12 @@ export function consumeSnapshotForRender(netSnapshotBuffer, targetServerTime, ta
   if (netSnapshotBuffer.length === 0) return null;
   if (netSnapshotBuffer.length > maxSnapshotBuffer) {
     netSnapshotBuffer.splice(0, netSnapshotBuffer.length - maxSnapshotBuffer);
+  }
+  const backlogFallbackDepth = Math.max(6, Math.floor(maxSnapshotBuffer * 0.75));
+  if (netSnapshotBuffer.length >= backlogFallbackDepth) {
+    const latest = netSnapshotBuffer[netSnapshotBuffer.length - 1];
+    netSnapshotBuffer.length = 0;
+    return latest;
   }
   const useServerClock = Number.isFinite(targetServerTime);
   let chosenIndex = -1;

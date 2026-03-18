@@ -10,6 +10,7 @@
       leftQueued: false,
       rightQueued: false,
       uiLeftClicks: [],
+      recentUiLeftClicks: [],
       wheelDelta: 0,
       screenX: 0,
       screenY: 0,
@@ -30,6 +31,12 @@
       if (e.button === 0) {
         const screen = this.getScreenPosition(e);
         this.mouse.uiLeftClicks.push(screen);
+        this.mouse.recentUiLeftClicks.push({
+          x: screen.x,
+          y: screen.y,
+          atMs: Math.round(performance.now())
+        });
+        if (this.mouse.recentUiLeftClicks.length > 12) this.mouse.recentUiLeftClicks.splice(0, this.mouse.recentUiLeftClicks.length - 12);
       }
       if (!this.isActive()) return;
       this.updateAim(e);
@@ -72,10 +79,14 @@
     const screen = this.getScreenPosition(event);
     this.mouse.screenX = screen.x;
     this.mouse.screenY = screen.y;
-    const camera = this.getCamera();
-    this.mouse.worldX = screen.x + camera.x;
-    this.mouse.worldY = screen.y + camera.y;
+    this.refreshAimWorldPosition();
     this.mouse.hasAim = true;
+  }
+
+  refreshAimWorldPosition() {
+    const camera = this.getCamera();
+    this.mouse.worldX = this.mouse.screenX + camera.x;
+    this.mouse.worldY = this.mouse.screenY + camera.y;
   }
 
   getScreenPosition(event) {

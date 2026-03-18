@@ -3,7 +3,7 @@ import { GameSim } from "../src/sim/GameSim.js";
 import { stepGame } from "../src/game/gameStep.js";
 import { serializeState } from "./net/stateSerialization.js";
 import { buildJoinKeyframeState } from "./net/deltaProtocol.js";
-import { applySnapshotToGame } from "../src/net/clientStateSync.js";
+import { applyMapStateToGame, applySnapshotToGame } from "../src/net/clientStateSync.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -40,7 +40,7 @@ function makeRoom(sim) {
 }
 
 function killFloorBoss(game) {
-  const boss = game.enemies.find((enemy) => enemy.type === "necromancer" && enemy.isFloorBoss);
+  const boss = game.enemies.find((enemy) => enemy.isFloorBoss);
   assert(boss, "expected floor boss to exist");
   boss.hp = 0;
   stepGame(game, 0.016, { processUi: false });
@@ -63,6 +63,20 @@ function validateTriggerLevels() {
   return floors;
 }
 
+function validateSafePlayerSpawn() {
+  const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
+  const playerRadius = (game.player.size || 20) * 0.5;
+  assert(
+    typeof game.isPositionWalkable === "function" && game.isPositionWalkable(game.player.x, game.player.y, playerRadius, true),
+    "player spawned inside blocked space"
+  );
+  return {
+    x: Math.round(game.player.x),
+    y: Math.round(game.player.y),
+    radius: playerRadius
+  };
+}
+
 function validateLocalProgression() {
   const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
   const startingFloor = game.floor;
@@ -75,7 +89,9 @@ function validateLocalProgression() {
 
   game.level = game.getFloorBossTriggerLevel();
   assert(game.updateFloorBossTrigger() === true, "boss did not queue locally");
-  const boss = game.spawnNecromancer(game.player.x + 96, game.player.y);
+  const boss = game.floorBoss?.bossType === "minotaur"
+    ? game.spawnMinotaur(game.player.x + 96, game.player.y)
+    : game.spawnNecromancer(game.player.x + 96, game.player.y);
   game.enemies.push(boss);
   game.markFloorBossActive();
   killFloorBoss(game);
@@ -99,7 +115,9 @@ function validateNetworkReconciliation() {
   const sim = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
   sim.level = sim.getFloorBossTriggerLevel();
   assert(sim.updateFloorBossTrigger() === true, "network sim boss did not queue");
-  const boss = sim.spawnNecromancer(sim.player.x + 96, sim.player.y);
+  const boss = sim.floorBoss?.bossType === "minotaur"
+    ? sim.spawnMinotaur(sim.player.x + 96, sim.player.y)
+    : sim.spawnNecromancer(sim.player.x + 96, sim.player.y);
   sim.enemies.push(boss);
   sim.markFloorBossActive();
 
@@ -108,7 +126,7 @@ function validateNetworkReconciliation() {
   const joinState = buildJoinKeyframeState(serializeState(room));
   applySnapshotToGame({ game: client, state: joinState, controller: false });
   assert(client.floorBoss?.phase === "active", `join phase expected active, got ${client.floorBoss?.phase}`);
-  assert(client.enemies.some((enemy) => enemy.type === "necromancer" && enemy.isFloorBoss), "joining client missed boss");
+  assert(client.enemies.some((enemy) => enemy.isFloorBoss), "joining client missed boss");
 
   killFloorBoss(sim);
   applySnapshotToGame({ game: client, state: serializeState(room), controller: false });
@@ -128,11 +146,38 @@ function validateNetworkReconciliation() {
   };
 }
 
+function validateControllerJoinSpawnSync() {
+  const sim = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
+  const room = makeRoom(sim);
+  const client = new Game(null, { headless: true });
+  applyMapStateToGame(client, {
+    map: sim.map,
+    mapWidth: sim.mapWidth,
+    mapHeight: sim.mapHeight,
+    mapSignature: room.sim ? `${sim.floor}:${sim.mapWidth}x${sim.mapHeight}` : ""
+  });
+  client.player.x += sim.config.map.tile * 3;
+  client.player.y += sim.config.map.tile * 2;
+  const joinState = buildJoinKeyframeState(serializeState(room));
+  applySnapshotToGame({ game: client, state: joinState, controller: true, ackSeq: 0, isNetworkController: true });
+  assert(Math.abs(client.player.x - sim.player.x) < 0.001, "controller join did not snap x to authoritative spawn");
+  assert(Math.abs(client.player.y - sim.player.y) < 0.001, "controller join did not snap y to authoritative spawn");
+  const playerRadius = (client.player.size || 20) * 0.5;
+  assert(client.isPositionWalkable(client.player.x, client.player.y, playerRadius, true), "controller join spawn landed in blocked space");
+  return {
+    x: Math.round(client.player.x),
+    y: Math.round(client.player.y)
+  };
+}
+
 function validateBossLocksAmbientSpawns() {
   const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
+  while (game.floor < 2) game.advanceToNextFloor();
   game.level = game.getFloorBossTriggerLevel();
   assert(game.updateFloorBossTrigger() === true, "boss lockout test did not queue boss");
-  const boss = game.spawnNecromancer(game.player.x + 96, game.player.y);
+  const boss = game.floorBoss?.bossType === "minotaur"
+    ? game.spawnMinotaur(game.player.x + 96, game.player.y)
+    : game.spawnNecromancer(game.player.x + 96, game.player.y);
   game.enemies.push(boss);
   game.markFloorBossActive();
 
@@ -151,6 +196,25 @@ function validateBossLocksAmbientSpawns() {
   return {
     enemyCountBefore,
     enemyCountAfter: game.enemies.length
+  };
+}
+
+function validateNecromancerTeleportSafety() {
+  const game = new GameSim({ classType: "fighter", viewportWidth: 960, viewportHeight: 640 });
+  const boss = game.spawnNecromancer(game.player.x + 360, game.player.y + 220);
+  boss.isFloorBoss = true;
+  boss.hp = Math.max(1, Math.floor(boss.maxHp * 0.45));
+  boss.teleportCooldown = 0;
+  game.enemies.push(boss);
+  const before = { x: boss.x, y: boss.y };
+  game.updateEnemyTactics(boss, 0.16, 1);
+  const moved = Math.hypot(boss.x - before.x, boss.y - before.y) > game.config.map.tile;
+  assert(moved, "necromancer did not teleport when anti-kite conditions were met");
+  const bossRadius = Math.max(6, (boss.size || 24) * 0.5);
+  assert(game.isPositionWalkable(boss.x, boss.y, bossRadius, true), "necromancer teleported into blocked space");
+  return {
+    from: before,
+    to: { x: Math.round(boss.x), y: Math.round(boss.y) }
   };
 }
 
@@ -176,9 +240,12 @@ function validateRegressionSurface() {
 function main() {
   const results = {
     triggerLevels: validateTriggerLevels(),
+    safePlayerSpawn: validateSafePlayerSpawn(),
     localProgression: validateLocalProgression(),
     networkReconciliation: validateNetworkReconciliation(),
+    controllerJoinSpawnSync: validateControllerJoinSpawnSync(),
     bossSpawnLockout: validateBossLocksAmbientSpawns(),
+    necromancerTeleportSafety: validateNecromancerTeleportSafety(),
     regressionSurface: validateRegressionSurface()
   };
   console.log(JSON.stringify(results, null, 2));

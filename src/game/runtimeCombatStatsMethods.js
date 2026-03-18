@@ -1,4 +1,23 @@
 export const runtimeCombatStatsMethods = {
+  getPlayerResistancePct(damageType = "physical") {
+    const normalized = typeof damageType === "string" ? damageType.toLowerCase() : "physical";
+    const resistances = this.classSpec?.baseResistances || {};
+    const direct = Number.isFinite(resistances[normalized]) ? resistances[normalized] : null;
+    if (direct != null) return Math.max(0, Math.min(0.9, direct));
+    if ((normalized === "necrotic" || normalized === "death") && Number.isFinite(resistances.unholy)) {
+      return Math.max(0, Math.min(0.9, resistances.unholy));
+    }
+    return 0;
+  },
+
+  getPlayerDamageTaken(rawDamage, damageType = "physical") {
+    const safeDamage = Math.max(0, Number.isFinite(rawDamage) ? rawDamage : 0);
+    const resistancePct = this.getPlayerResistancePct(damageType);
+    const resisted = Math.max(1, Math.round(safeDamage * (1 - resistancePct)));
+    const reducedByDefense = Math.max(1, Math.round(resisted - this.getDefenseFlatReduction()));
+    return this.getWarriorRageDamageTaken(reducedByDefense);
+  },
+
   getPlayerFireCooldown() {
     const levelAttackBonusPct = Number.isFinite(this.classSpec.levelAttackSpeedPct)
       ? Math.max(0, this.classSpec.levelAttackSpeedPct) * Math.max(0, this.level - 1)
@@ -138,6 +157,21 @@ export const runtimeCombatStatsMethods = {
     if (count <= 1) return 0;
     const p = Number.isFinite(points) ? points : 0;
     return 8 + 6.2 * Math.log1p(1.1 * Math.max(0, p));
+  },
+
+  getMultiarrowAngles(baseAngle, points = this.skills.multiarrow.points) {
+    const safeBaseAngle = Number.isFinite(baseAngle) ? baseAngle : 0;
+    const count = this.getMultiarrowCount(points);
+    if (count <= 1) return [safeBaseAngle];
+    const spreadDeg = this.getMultiarrowSpreadDeg(points);
+    const spreadRad = (spreadDeg * Math.PI) / 180;
+    const angles = [];
+    for (let i = 0; i < count; i++) {
+      const t = count <= 1 ? 0.5 : i / (count - 1);
+      const offset = count <= 1 ? 0 : (t - 0.5) * spreadRad;
+      angles.push(safeBaseAngle + offset);
+    }
+    return angles;
   },
 
   isFireArrowUnlocked() {
