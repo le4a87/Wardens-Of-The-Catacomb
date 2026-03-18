@@ -17,11 +17,13 @@ import {
   spawnGhost,
   spawnTreasureGoblin,
   spawnAnimatedArmor,
+  spawnMummy,
   spawnPrisoner,
   spawnMimic,
   spawnRatArcher,
   spawnSkeletonWarrior,
   spawnNecromancer,
+  spawnMinotaur,
   spawnLeprechaunBoss,
   spawnSkeleton,
   applyEnemyDamage,
@@ -61,6 +63,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   isWalkableTile(tx, ty) {
     return isWalkableTile(this, tx, ty);
+  }
+
+  isPositionWalkable(x, y, radius = 0, blockBreakables = true) {
+    return super.isPositionWalkable(x, y, radius, blockBreakables);
   }
 
   updateNavigationField(force = false) {
@@ -107,6 +113,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
     return spawnAnimatedArmor(this, x, y);
   }
 
+  spawnMummy(x, y) {
+    return spawnMummy(this, x, y);
+  }
+
   spawnPrisoner(x, y) {
     return spawnPrisoner(this, x, y);
   }
@@ -125,6 +135,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   spawnNecromancer(x, y) {
     return spawnNecromancer(this, x, y);
+  }
+
+  spawnMinotaur(x, y) {
+    return spawnMinotaur(this, x, y);
   }
 
   spawnLeprechaunBoss(x, y) {

@@ -1,18 +1,20 @@
 # Task Board
 
-Branch: `feature/<branch-name-here>`
+Branch: `feature/minotaur-enemy-tactics`
 
-Use this file as the working board for the current branch. Keep tasks finite, testable, and tied to concrete validation steps. When a feature is complete, roll the lasting summary into the relevant project docs and reset this file again.
+Use this file as the working board for the current branch. Keep tasks finite, testable, and tied to concrete validation steps. When the feature is complete, roll durable summaries into the long-lived docs and reset this file to a clean state.
 
 ## Active Tasks
-- [ ] Add the next scoped task here.
-  Scope:
-  Validation:
+- None.
 
 ## Follow-Ups
-- None recorded.
+- None.
 
 ## Validation Commands
-- `npm run check`
-- `npm run validate:boss`
-- `npm run perf:test`
+- `npm run validate:core`
+- `npm run validate:gameplay`
+- `npm run validate:dev-start`
+- `npm run validate:network`
+- `npm run validate:pre-commit`
+- `npm run validate:closeout`
+- `npm run perf:all`

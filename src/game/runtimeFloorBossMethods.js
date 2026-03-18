@@ -1,4 +1,15 @@
 export const runtimeFloorBossMethods = {
+  getResolvedFloorBossVariant(floor = this.floor) {
+    const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    if (!this._floorBossVariantByFloor || typeof this._floorBossVariantByFloor !== "object") {
+      this._floorBossVariantByFloor = {};
+    }
+    if (typeof this._floorBossVariantByFloor[safeFloor] !== "string" || this._floorBossVariantByFloor[safeFloor].length === 0) {
+      this._floorBossVariantByFloor[safeFloor] = this.rollFloorBossVariant(safeFloor);
+    }
+    return this._floorBossVariantByFloor[safeFloor];
+  },
+
   isStPatricksWeek(date = new Date()) {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false;
     const year = date.getFullYear();
@@ -11,8 +22,10 @@ export const runtimeFloorBossMethods = {
     return date >= start && date <= end;
   },
 
-  getFloorBossVariant(floor = this.floor) {
+  rollFloorBossVariant(floor = this.floor) {
     const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    const bossType = this.getFloorBossType(safeFloor);
+    if (bossType === "minotaur") return "minotaur";
     if (safeFloor === 1 && this.isStPatricksWeek()) {
       const chance = Number.isFinite(this.config?.progression?.floorOneLeprechaunBossChance)
         ? Math.max(0, Math.min(1, this.config.progression.floorOneLeprechaunBossChance))
@@ -22,8 +35,14 @@ export const runtimeFloorBossMethods = {
     return "necromancer";
   },
 
+  getFloorBossVariant(floor = this.floor) {
+    return this.getResolvedFloorBossVariant(floor);
+  },
+
   getFloorBossDisplayName(variant = this.floorBoss?.variant || this.getFloorBossVariant()) {
-    return variant === "leprechaun" ? "Leprechaun" : "Necromancer";
+    if (variant === "leprechaun") return "Leprechaun";
+    if (variant === "minotaur") return "Minotaur";
+    return "Necromancer";
   },
 
   getFloorBossTriggerLevel(floor = this.floor) {
@@ -36,11 +55,14 @@ export const runtimeFloorBossMethods = {
 
   createFloorBossState(floor = this.floor) {
     const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    const bossType = this.getFloorBossType(safeFloor);
+    const variant = this.getResolvedFloorBossVariant(safeFloor);
     return {
       floor: safeFloor,
+      bossType,
+      variant,
+      bossName: this.getFloorBossDisplayName(variant),
       triggerLevel: this.getFloorBossTriggerLevel(safeFloor),
-      variant: this.getFloorBossVariant(safeFloor),
-      bossName: this.getFloorBossDisplayName(this.getFloorBossVariant(safeFloor)),
       phase: "idle",
       encounterPhase: "idle",
       spawnPending: false,
@@ -63,10 +85,22 @@ export const runtimeFloorBossMethods = {
       this.lastFloorBossFeedbackPhase = null;
       return this.floorBoss;
     }
+    this.floorBoss.bossType = this.getFloorBossType(this.floorBoss.floor);
     this.floorBoss.triggerLevel = this.getFloorBossTriggerLevel(this.floorBoss.floor);
-    this.floorBoss.variant = this.getFloorBossVariant(this.floorBoss.floor);
+    if (typeof this.floorBoss.variant !== "string" || this.floorBoss.variant.length === 0) {
+      this.floorBoss.variant = this.getResolvedFloorBossVariant(this.floorBoss.floor);
+    }
     this.floorBoss.bossName = this.getFloorBossDisplayName(this.floorBoss.variant);
     return this.floorBoss;
+  },
+
+  getFloorBossType(floor = this.floor) {
+    const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    return safeFloor % 2 === 0 ? "minotaur" : "necromancer";
+  },
+
+  getFloorBossName(type = this.getFloorBossType()) {
+    return type === "minotaur" ? "Minotaur" : "Necromancer";
   },
 
   updateFloorBossTrigger() {
@@ -85,6 +119,8 @@ export const runtimeFloorBossMethods = {
     boss.spawnPending = false;
     return {
       floor: boss.floor,
+      bossType: boss.bossType,
+      bossName: boss.bossName,
       variant: boss.variant,
       triggerLevel: boss.triggerLevel,
       spawnTriggeredAtLevel: boss.spawnTriggeredAtLevel
@@ -200,8 +236,10 @@ export const runtimeFloorBossMethods = {
 
   getFloorObjectiveDetail() {
     const boss = this.syncFloorBossState();
+    const bossName = boss.bossName || this.getFloorBossName(boss.bossType);
     if (this.portal?.active || boss.phase === "portal") return "Portal open. Step into it to descend.";
     if (boss.phase === "active") {
+      const activeBoss = this.getActiveFloorBossEnemy();
       if (boss.variant === "leprechaun") {
         const timer = this.getRemainingFloorBossTimer();
         if (boss.encounterPhase === "intro") return "He rushes in first, just to bait the chase.";
@@ -211,9 +249,27 @@ export const runtimeFloorBossMethods = {
         if (Number.isFinite(timer)) return `Enraged. Defeat him in ${Math.ceil(timer)}s or die.`;
         return "The leprechaun is enraged. Watch the punches and lucky charms.";
       }
-      return "Mini-boss active. Avoid volleys and skeleton summons.";
+      if (activeBoss) {
+        const dx = activeBoss.x - this.player.x;
+        const dy = activeBoss.y - this.player.y;
+        const distTiles = Math.max(0, Math.round(Math.hypot(dx, dy) / this.config.map.tile));
+        const horizontal = Math.abs(dx) >= this.config.map.tile * 0.75 ? (dx > 0 ? "E" : "W") : "";
+        const vertical = Math.abs(dy) >= this.config.map.tile * 0.75 ? (dy > 0 ? "S" : "N") : "";
+        const dir = `${vertical}${horizontal}` || "HERE";
+        const hint = boss.bossType === "minotaur"
+          ? "Avoid charges and stomp range."
+          : "Avoid volleys and skeleton summons.";
+        return `${bossName} ${distTiles} tiles ${dir}. ${hint}`;
+      }
+      return boss.bossType === "minotaur"
+        ? "Mini-boss active. Avoid charges and stomp range."
+        : "Mini-boss active. Avoid volleys and skeleton summons.";
     }
-    if (boss.phase === "queued") return boss.variant === "leprechaun" ? "You hear jingling gold in the distance." : "The ritual is complete. The necromancer is arriving.";
+    if (boss.phase === "queued") {
+      return boss.variant === "leprechaun"
+        ? "You hear jingling gold in the distance."
+        : `The ritual is complete. The ${bossName.toLowerCase()} is arriving.`;
+    }
     const targetLevel = Number.isFinite(boss.triggerLevel) ? boss.triggerLevel : this.getFloorBossTriggerLevel();
     const currentLevel = Number.isFinite(this.level) ? this.level : 1;
     return `Floor ${this.floor} trigger: Lv ${currentLevel}/${targetLevel}`;

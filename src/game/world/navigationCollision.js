@@ -23,14 +23,14 @@ function isBreakableBlockingTile(game, tx, ty) {
 
 export function parseMap(game) {
   const tile = game.config.map.tile;
+  let spawnPoint = null;
   for (let y = 0; y < game.map.length; y++) {
     for (let x = 0; x < game.map[0].length; x++) {
       const c = game.map[y][x];
       const px = x * tile + tile / 2;
       const py = y * tile + tile / 2;
       if (c === "P") {
-        game.player.x = px;
-        game.player.y = py;
+        spawnPoint = { x: px, y: py };
       } else if (c === "D") {
         game.door.x = px;
         game.door.y = py;
@@ -39,6 +39,14 @@ export function parseMap(game) {
         game.pickup.y = py;
       }
     }
+  }
+  if (spawnPoint) {
+    const safeSpawn =
+      typeof game.findNearestSafePoint === "function"
+        ? game.findNearestSafePoint(spawnPoint.x, spawnPoint.y, 10)
+        : spawnPoint;
+    game.player.x = safeSpawn.x;
+    game.player.y = safeSpawn.y;
   }
   revealAroundPlayer(game);
 }
@@ -268,38 +276,16 @@ export function getPathDirectionToTarget(game, entity, targetX, targetY, options
   return { x: dx / len, y: dy / len, reached: false };
 }
 
-export function moveEnemyTowardPlayer(game, enemy, speedScale, dt) {
-  if (!enemy || !Number.isFinite(enemy.x) || !Number.isFinite(enemy.y)) {
-    return;
-  }
-  const enemySpeed = Number.isFinite(enemy.speed) ? enemy.speed : 70;
-  const sScale = Number.isFinite(speedScale) ? speedScale : 1;
-  const delta = Number.isFinite(dt) ? dt : 0;
-  const speedStep = enemySpeed * sScale * delta;
-  if (!Number.isFinite(speedStep) || speedStep <= 0) return;
-  const dx = game.player.x - enemy.x;
-  const dy = game.player.y - enemy.y;
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
-  const len = vecLength(dx, dy) || 1;
-  const playerRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
-    ? game.getPlayerEnemyCollisionRadius()
-    : ((game.config?.player?.enemyCollisionSize ?? game.player?.size ?? 0) * 0.5);
-  const minDistance = playerRadius + enemy.size * 0.5;
-  if (len <= minDistance) return;
-  const moveStep = Math.min(speedStep, len - minDistance);
-  if (!Number.isFinite(moveStep) || moveStep <= 0) return;
-  const dirX = dx / len;
-  const dirY = dy / len;
+function moveEntityWithCornerAssist(game, entity, dirX, dirY, moveStep) {
   const perpX = -dirY;
   const perpY = dirX;
 
-  const beforeX = enemy.x;
-  const beforeY = enemy.y;
-  moveWithCollision(game, enemy, dirX * moveStep, dirY * moveStep);
-  const movedDirect = vecLength(enemy.x - beforeX, enemy.y - beforeY) > moveStep * 0.12;
+  const beforeX = entity.x;
+  const beforeY = entity.y;
+  moveWithCollision(game, entity, dirX * moveStep, dirY * moveStep);
+  const movedDirect = vecLength(entity.x - beforeX, entity.y - beforeY) > moveStep * 0.12;
   if (movedDirect) return;
 
-  // If direct path is blocked, probe around corners.
   const probes = [
     { x: perpX, y: perpY },
     { x: -perpX, y: -perpY },
@@ -311,29 +297,62 @@ export function moveEnemyTowardPlayer(game, enemy, speedScale, dt) {
     const plen = vecLength(p.x, p.y) || 1;
     const sx = (p.x / plen) * moveStep;
     const sy = (p.y / plen) * moveStep;
-    const px = enemy.x;
-    const py = enemy.y;
-    moveWithCollision(game, enemy, sx, sy);
-    if (vecLength(enemy.x - px, enemy.y - py) > moveStep * 0.12) return;
+    const px = entity.x;
+    const py = entity.y;
+    moveWithCollision(game, entity, sx, sy);
+    if (vecLength(entity.x - px, entity.y - py) > moveStep * 0.12) return;
   }
 }
 
 export function moveEnemyTowardTargetPoint(game, enemy, targetX, targetY, speedScale, dt, minDistance = 0, usePathfinding = false) {
-  if (!enemy || !Number.isFinite(targetX) || !Number.isFinite(targetY)) return;
+  if (!enemy || !Number.isFinite(targetX) || !Number.isFinite(targetY) || !Number.isFinite(enemy.x) || !Number.isFinite(enemy.y)) return;
   const enemySpeed = Number.isFinite(enemy.speed) ? enemy.speed : 70;
-  const appliedScale = Number.isFinite(speedScale) ? speedScale : 1;
+  const sScale = Number.isFinite(speedScale) ? speedScale : 1;
   const delta = Number.isFinite(dt) ? dt : 0;
-  const step = enemySpeed * appliedScale * delta;
-  if (step <= 0) return;
+  const speedStep = enemySpeed * sScale * delta;
+  if (!Number.isFinite(speedStep) || speedStep <= 0) return;
   const dx = targetX - enemy.x;
   const dy = targetY - enemy.y;
-  const dist = vecLength(dx, dy) || 1;
-  if (dist <= minDistance) return;
-  const dir = usePathfinding
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+  const len = vecLength(dx, dy) || 1;
+  if (len <= minDistance) return;
+  const moveStep = Math.min(speedStep, len - minDistance);
+  if (!Number.isFinite(moveStep) || moveStep <= 0) return;
+  const directX = dx / len;
+  const directY = dy / len;
+  const pathDir = usePathfinding || len > game.config.map.tile
     ? getPathDirectionToTarget(game, enemy, targetX, targetY, { dt: delta, minDistance })
-    : { x: dx / dist, y: dy / dist };
-  const moveStep = Math.min(step, dist - minDistance);
-  moveWithCollision(game, enemy, dir.x * moveStep, dir.y * moveStep);
+    : null;
+  const biasX = pathDir && Number.isFinite(pathDir.x) ? directX * 0.35 + pathDir.x * 0.65 : directX;
+  const biasY = pathDir && Number.isFinite(pathDir.y) ? directY * 0.35 + pathDir.y * 0.65 : directY;
+  const biasLen = vecLength(biasX, biasY) || 1;
+  moveEntityWithCornerAssist(game, enemy, biasX / biasLen, biasY / biasLen, moveStep);
+}
+
+export function moveEnemyTowardPlayer(game, enemy, speedScale, dt) {
+  if (!enemy || !game?.player) return;
+  const playerRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
+    ? game.getPlayerEnemyCollisionRadius()
+    : ((game.config?.player?.enemyCollisionSize ?? game.player?.size ?? 0) * 0.5);
+  const minDistance = playerRadius + enemy.size * 0.5;
+  const enemySpeed = Number.isFinite(enemy.speed) ? enemy.speed : 70;
+  const sScale = Number.isFinite(speedScale) ? speedScale : 1;
+  const delta = Number.isFinite(dt) ? dt : 0;
+  const speedStep = enemySpeed * sScale * delta;
+  if (!Number.isFinite(speedStep) || speedStep <= 0) return;
+  const dx = game.player.x - enemy.x;
+  const dy = game.player.y - enemy.y;
+  const len = vecLength(dx, dy) || 1;
+  if (len <= minDistance) return;
+  const moveStep = Math.min(speedStep, len - minDistance);
+  if (!Number.isFinite(moveStep) || moveStep <= 0) return;
+  const directX = dx / len;
+  const directY = dy / len;
+  const pathDir = getPathDirectionToPlayer(game, enemy);
+  const biasX = Number.isFinite(pathDir?.x) ? directX * 0.35 + pathDir.x * 0.65 : directX;
+  const biasY = Number.isFinite(pathDir?.y) ? directY * 0.35 + pathDir.y * 0.65 : directY;
+  const biasLen = vecLength(biasX, biasY) || 1;
+  moveEntityWithCornerAssist(game, enemy, biasX / biasLen, biasY / biasLen, moveStep);
 }
 
 export function separateEnemyFromPlayer(game, enemy) {

@@ -1,8 +1,11 @@
 export function spawnGhost(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.ghostHpMin, game.config.enemy.ghostHpMax);
-  const speed = 85 + Math.random() * 35;
+  const speedMin = Number.isFinite(game.config.enemy.ghostSpeedMin) ? game.config.enemy.ghostSpeedMin : 110;
+  const speedMax = Number.isFinite(game.config.enemy.ghostSpeedMax) ? game.config.enemy.ghostSpeedMax : 150;
+  const speed = speedMin + Math.random() * Math.max(0, speedMax - speedMin);
   return {
     type: "ghost",
+    tacticKey: "ghost",
     x,
     y,
     size: 20,
@@ -16,7 +19,13 @@ export function spawnGhost(game, x, y) {
     damageMax: game.config.enemy.ghostDamageMax,
     baseDamageMin: game.config.enemy.ghostDamageMin,
     baseDamageMax: game.config.enemy.ghostDamageMax,
-    contactAttackCooldown: 0
+    contactAttackCooldown: 0,
+    siphonTickTimer: 0,
+    siphoning: false,
+    diveTimer: 1.2 + Math.random() * 1.6,
+    diveDuration: 0,
+    orbitDir: Math.random() < 0.5 ? -1 : 1,
+    orbitSwapTimer: 0.8 + Math.random() * 1.4
   };
 }
 
@@ -24,6 +33,7 @@ export function spawnTreasureGoblin(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.goblinHpMin, game.config.enemy.goblinHpMax);
   return {
     type: "goblin",
+    tacticKey: "goblin",
     x,
     y,
     size: 16,
@@ -36,7 +46,8 @@ export function spawnTreasureGoblin(game, x, y) {
     goldEaten: 0,
     aggression: 0.12,
     wanderAngle: Math.random() * Math.PI * 2,
-    wanderTimer: 0.5 + Math.random() * 0.8
+    wanderTimer: 0.5 + Math.random() * 0.8,
+    growthStage: "scared"
   };
 }
 
@@ -44,6 +55,7 @@ export function spawnAnimatedArmor(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.armorHpMin, game.config.enemy.armorHpMax);
   return {
     type: "armor",
+    tacticKey: "armor",
     x,
     y,
     size: 24,
@@ -53,6 +65,29 @@ export function spawnAnimatedArmor(game, x, y) {
     hpBarTimer: 0,
     damageMin: game.config.enemy.armorDamageMin,
     damageMax: game.config.enemy.armorDamageMax
+  };
+}
+
+export function spawnMummy(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.mummyHpMin, game.config.enemy.mummyHpMax);
+  return {
+    type: "mummy",
+    tacticKey: "mummy",
+    x,
+    y,
+    size: 24,
+    speed: game.config.enemy.mummySpeed,
+    hp,
+    maxHp: hp,
+    baseMaxHp: hp,
+    baseSpeed: game.config.enemy.mummySpeed,
+    hpBarTimer: 0,
+    damageMin: game.config.enemy.mummyDamageMin,
+    damageMax: game.config.enemy.mummyDamageMax,
+    baseDamageMin: game.config.enemy.mummyDamageMin,
+    baseDamageMax: game.config.enemy.mummyDamageMax,
+    contactAttackCooldown: 0,
+    auraPulseTimer: 0
   };
 }
 
@@ -81,6 +116,7 @@ export function spawnMimic(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.mimicHpMin, game.config.enemy.mimicHpMax);
   return {
     type: "mimic",
+    tacticKey: "mimic",
     x,
     y,
     homeX: x,
@@ -106,6 +142,7 @@ export function spawnRatArcher(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.ratArcherHpMin, game.config.enemy.ratArcherHpMax);
   return {
     type: "rat_archer",
+    tacticKey: "rat_archer",
     x,
     y,
     size: 20,
@@ -129,7 +166,8 @@ export function spawnRatArcher(game, x, y) {
     shotsRemaining: game.config.enemy.ratArcherBurstShots,
     coverTargetX: x,
     coverTargetY: y,
-    repositionTimer: 0
+    repositionTimer: 0,
+    rangeStage: "hold"
   };
 }
 
@@ -137,6 +175,7 @@ export function spawnSkeletonWarrior(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.skeletonWarriorHpMin, game.config.enemy.skeletonWarriorHpMax);
   return {
     type: "skeleton_warrior",
+    tacticKey: "skeleton_warrior",
     x,
     y,
     size: 20,
@@ -154,7 +193,9 @@ export function spawnSkeletonWarrior(game, x, y) {
     contactAttackCooldown: 0,
     collapsed: false,
     collapseTimer: 0,
-    reviveAtEnd: false
+    reviveAtEnd: false,
+    reanimateTimer: 0,
+    reanimating: false
   };
 }
 
@@ -170,6 +211,7 @@ export function spawnNecromancer(game, x, y) {
   const speed = game.config.enemy.necromancerSpeed * speedMultiplier;
   return {
     type: "necromancer",
+    tacticKey: "necromancer",
     x,
     y,
     size: 28,
@@ -185,7 +227,37 @@ export function spawnNecromancer(game, x, y) {
     strafeDir: Math.random() < 0.5 ? -1 : 1,
     strafeTimer: 1.1 + Math.random() * 1.2,
     summonCooldown: 0,
-    castCooldown: 0
+    castCooldown: 0,
+    teleportCooldown: 1.8,
+    teleportFlashTimer: 0
+  };
+}
+
+export function spawnMinotaur(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.minotaurHpMin, game.config.enemy.minotaurHpMax);
+  return {
+    type: "minotaur",
+    tacticKey: "minotaur",
+    x,
+    y,
+    size: 34,
+    speed: game.config.enemy.minotaurSpeed,
+    hp,
+    maxHp: hp,
+    baseMaxHp: hp,
+    baseSpeed: game.config.enemy.minotaurSpeed,
+    hpBarTimer: 9999,
+    damageMin: game.config.enemy.minotaurDamageMin,
+    damageMax: game.config.enemy.minotaurDamageMax,
+    isFloorBoss: true,
+    bossName: "Minotaur",
+    chargeCooldown: 0.8,
+    chargeTimer: 0,
+    chargeDirX: 0,
+    chargeDirY: 0,
+    chargeWindupTimer: 0,
+    stompCooldown: 0.8,
+    chargeImpactCooldown: 0
   };
 }
 
@@ -234,6 +306,7 @@ export function spawnSkeleton(game, x, y, options = {}) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.skeletonHpMin, game.config.enemy.skeletonHpMax);
   return {
     type: "skeleton",
+    tacticKey: "skeleton",
     x,
     y,
     size: 18,

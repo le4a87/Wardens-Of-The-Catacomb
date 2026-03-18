@@ -3,6 +3,8 @@ import { clamp } from "../utils.js";
 import { createCastleMap } from "../mapGenerator.js";
 import { InputController } from "../InputController.js";
 import { Renderer } from "../Renderer.js";
+import { runtimeBasePlacementMethods } from "./runtimeBasePlacementMethods.js";
+import { runtimeBaseSupportMethods } from "./runtimeBaseSupportMethods.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
 import { runtimeCombatStatsMethods } from "./runtimeCombatStatsMethods.js";
 import { runtimeFloorBossMethods } from "./runtimeFloorBossMethods.js";
@@ -77,6 +79,7 @@ export class GameRuntimeBase {
     this.uiRects = {};
     this.uiScroll = { skillTree: 0, shop: 0 };
     this.floatingTexts = [];
+    this.recentPlayerShots = [];
     this.skills = createSkillState();
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
@@ -192,7 +195,6 @@ export class GameRuntimeBase {
   spawnFloatingText(x, y, text, color, life = 0.75, size = 14) {
     this.floatingTexts.push({ x, y, text, color, life, maxLife: life, vy: 22, size });
   }
-
   generateFloor(width, height) {
     this.mapWidth = width;
     this.mapHeight = height;
@@ -210,6 +212,7 @@ export class GameRuntimeBase {
     this.breakables = [];
     this.wallTraps = [];
     this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
+    this.recentPlayerShots = [];
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
     this.warriorRageCooldownTimer = 0;
@@ -227,6 +230,7 @@ export class GameRuntimeBase {
     this.placeArmorStands();
     this.placeWallTraps();
     this.placeBreakables();
+    this.ensurePlayerSafePosition(12);
   }
 
   advanceToNextFloor() {
@@ -240,9 +244,9 @@ export class GameRuntimeBase {
       maxHealth: this.player.maxHealth
     };
     this.floor += 1;
-    const growth = this.config.progression.mapGrowthFactorPerFloor;
-    const nextWidth = Math.max(this.mapWidth + 1, Math.floor(this.mapWidth * growth));
-    const nextHeight = Math.max(this.mapHeight + 1, Math.floor(this.mapHeight * growth));
+    const nextMapSize = this.getMapSizeForFloor(this.floor);
+    const nextWidth = nextMapSize.width;
+    const nextHeight = nextMapSize.height;
     this.generateFloor(nextWidth, nextHeight);
     this.gold = persisted.gold;
     this.skillPoints = persisted.skillPoints;
@@ -301,14 +305,8 @@ export class GameRuntimeBase {
     this.experience = 0;
     this.floatingTexts = [];
 
-    let nextWidth = this.config.map.width;
-    let nextHeight = this.config.map.height;
-    const growth = this.config.progression.mapGrowthFactorPerFloor;
-    for (let currentFloor = 1; currentFloor < safeFloor; currentFloor++) {
-      nextWidth = Math.max(nextWidth + 1, Math.floor(nextWidth * growth));
-      nextHeight = Math.max(nextHeight + 1, Math.floor(nextHeight * growth));
-    }
-    this.generateFloor(nextWidth, nextHeight);
+    const nextMapSize = this.getMapSizeForFloor(safeFloor);
+    this.generateFloor(nextMapSize.width, nextMapSize.height);
     this.syncFloorBossState();
     if (typeof this.onFloorChanged === "function") this.onFloorChanged(this.floor, this);
   }
@@ -489,88 +487,10 @@ export class GameRuntimeBase {
     }
   }
 
-  findNearestSafePoint(x, y, maxRadiusTiles = 8) {
-    const tile = this.config.map.tile;
-    const tx = Math.floor(x / tile);
-    const ty = Math.floor(y / tile);
-    const isSafe = (cx, cy) => {
-      const px = cx * tile + tile * 0.5;
-      const py = cy * tile + tile * 0.5;
-      if (typeof this.isWalkableTile === "function") return this.isWalkableTile(cx, cy);
-      if (typeof this.isWallAt === "function") {
-        const r = Math.max(4, tile * 0.3);
-        return !this.isWallAt(px - r, py - r, true) && !this.isWallAt(px + r, py - r, true) &&
-          !this.isWallAt(px - r, py + r, true) && !this.isWallAt(px + r, py + r, true);
-      }
-      return true;
-    };
-    if (isSafe(tx, ty)) return { x: tx * tile + tile * 0.5, y: ty * tile + tile * 0.5 };
-    for (let radius = 1; radius <= maxRadiusTiles; radius++) {
-      for (let oy = -radius; oy <= radius; oy++) {
-        for (let ox = -radius; ox <= radius; ox++) {
-          if (Math.abs(ox) !== radius && Math.abs(oy) !== radius) continue;
-          const cx = tx + ox;
-          const cy = ty + oy;
-          if (!isSafe(cx, cy)) continue;
-          return { x: cx * tile + tile * 0.5, y: cy * tile + tile * 0.5 };
-        }
-      }
-    }
-    return { x: this.player.x, y: this.player.y };
-  }
-
-  getPlayerEnemyCollisionRadius() {
-    const size = Number.isFinite(this.config.player.enemyCollisionSize)
-      ? this.config.player.enemyCollisionSize
-      : this.player.size;
-    return Math.max(0, size) * 0.5;
-  }
-
-  getTrapDetectionBonus() {
-    return 0;
-  }
-
-  getActiveBounds(padTiles = 8) {
-    const cam = this.getCamera();
-    const tile = this.config.map.tile;
-    const pad = Math.max(0, padTiles) * tile;
-    const playW = this.getPlayAreaWidth();
-    return {
-      left: cam.x - pad,
-      top: cam.y - pad,
-      right: cam.x + playW + pad,
-      bottom: cam.y + this.canvas.height + pad
-    };
-  }
-
-  isInsideBounds(x, y, radius = 0, bounds = null) {
-    if (!bounds || !Number.isFinite(x) || !Number.isFinite(y)) return false;
-    const r = Number.isFinite(radius) ? Math.max(0, radius) : 0;
-    return x + r >= bounds.left && x - r <= bounds.right && y + r >= bounds.top && y - r <= bounds.bottom;
-  }
-
-  getPickupRadius() {
-    return this.config.player.pickupRadius;
-  }
-
-  isPlayerAtDoor() {
-    if (!this.door.open) return false;
-    const tileHalf = this.config.map.tile / 2;
-    const left = this.door.x - tileHalf;
-    const right = this.door.x + tileHalf;
-    const top = this.door.y - tileHalf;
-    const bottom = this.door.y + tileHalf;
-    const px = this.player.x;
-    const py = this.player.y;
-    const pr = this.player.size * 0.5;
-    const closestX = Math.max(left, Math.min(px, right));
-    const closestY = Math.max(top, Math.min(py, bottom));
-    const dx = px - closestX;
-    const dy = py - closestY;
-    return dx * dx + dy * dy <= (pr + 4) * (pr + 4);
-  }
 }
 
+Object.assign(GameRuntimeBase.prototype, runtimeBasePlacementMethods);
+Object.assign(GameRuntimeBase.prototype, runtimeBaseSupportMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeBaseDifficultyMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeFloorBossMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeCombatStatsMethods);

@@ -114,7 +114,11 @@ export function createCastleMap(width, height) {
   const center = { x: Math.floor(width / 2), y: Math.floor(height / 2) };
   let playerTile = floors[0];
   let closest = Number.POSITIVE_INFINITY;
-  for (const tile of floors) {
+  const roomSpawnCandidates = rooms
+    .map((room) => ({ x: room.cx, y: room.cy }))
+    .filter((tile) => tile.y >= 0 && tile.x >= 0 && tile.y < height && tile.x < width && grid[tile.y][tile.x] === ".");
+  const playerCandidates = roomSpawnCandidates.length > 0 ? roomSpawnCandidates : floors;
+  for (const tile of playerCandidates) {
     const d = vecLength(tile.x - center.x, tile.y - center.y);
     if (d < closest) {
       closest = d;

@@ -29,7 +29,6 @@ export function applyNetworkSnapshot({
   if (game.gameOver && !game.deathTransition?.active && typeof game.triggerGameOver === "function") {
     game.triggerGameOver();
   }
-  syncMusicForGame(game);
   return next;
 }
 
@@ -37,7 +36,7 @@ export function startNetworkRenderLoopRuntime({
   game,
   getCurrentGame,
   handleNetworkUiActions,
-  netClient,
+  getNetClient,
   isNetworkController,
   getRenderDelayMs,
   estimateServerNowMs,
@@ -46,17 +45,33 @@ export function startNetworkRenderLoopRuntime({
   maxSnapshotBuffer,
   applySnapshot,
   collectInput,
+  predictFromInput,
+  canRunPredictedCollision,
   prunePredictedProjectiles,
   netPredictedProjectiles,
   setNetRenderRaf
 }) {
   let lastFrameAt = performance.now();
+  const stepClientFloatingTexts = (texts, dt) => {
+    if (!Array.isArray(texts) || texts.length === 0) return texts;
+    for (const ft of texts) {
+      if (!ft) continue;
+      ft.life = Math.max(0, (Number.isFinite(ft.life) ? ft.life : 0) - dt);
+      ft.y -= (Number.isFinite(ft.vy) ? ft.vy : 22) * dt;
+    }
+    return texts.filter((ft) => ft && ft.life > 0);
+  };
 
   const loop = (now) => {
     if (!getCurrentGame() || getCurrentGame() !== game) return;
+    const targetFrameMs = isNetworkController() ? 0 : 1000 / 45;
+    if (targetFrameMs > 0 && now - lastFrameAt < targetFrameMs) {
+      setNetRenderRaf(requestAnimationFrame(loop));
+      return;
+    }
     const dt = Math.min((now - lastFrameAt) / 1000, 0.05);
     lastFrameAt = now;
-    handleNetworkUiActions(game, netClient, isNetworkController());
+    handleNetworkUiActions(game, typeof getNetClient === "function" ? getNetClient() : null, isNetworkController());
     const renderDelay = getRenderDelayMs();
     const targetRecvTime = performance.now() - renderDelay;
     const estimatedServerNow = estimateServerNowMs();
@@ -67,16 +82,26 @@ export function startNetworkRenderLoopRuntime({
     }
     if (isNetworkController()) {
       const input = collectInput(game, false);
+      if (game.networkReady && typeof predictFromInput === "function") {
+        predictFromInput(game, input, dt, typeof canRunPredictedCollision === "function" ? canRunPredictedCollision() : false);
+      }
       if (input.hasAim) {
-        const ax = input.aimX - game.player.x;
-        const ay = input.aimY - game.player.y;
-        const alen = Math.hypot(ax, ay) || 1;
-        game.player.dirX = ax / alen;
-        game.player.dirY = ay / alen;
+        if (Number.isFinite(input.aimDirX) && Number.isFinite(input.aimDirY)) {
+          const alen = Math.hypot(input.aimDirX, input.aimDirY) || 1;
+          game.player.dirX = input.aimDirX / alen;
+          game.player.dirY = input.aimDirY / alen;
+        } else {
+          const ax = input.aimX - game.player.x;
+          const ay = input.aimY - game.player.y;
+          const alen = Math.hypot(ax, ay) || 1;
+          game.player.dirX = ax / alen;
+          game.player.dirY = ay / alen;
+        }
       }
     }
     if (typeof game.updateDeathTransition === "function") game.updateDeathTransition(dt);
     if (Array.isArray(game.map) && game.map.length > 0) game.revealAroundPlayer();
+    game.floatingTexts = stepClientFloatingTexts(game.floatingTexts, dt);
     prunePredictedProjectiles(netPredictedProjectiles);
     game.renderer.draw(game);
     setNetRenderRaf(requestAnimationFrame(loop));

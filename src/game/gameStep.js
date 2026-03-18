@@ -52,6 +52,7 @@ export function stepGame(game, dt, controls = {}) {
   if (typeof game.isActive === "function" && !game.isActive()) return;
 
   game.time += dt;
+  if (typeof game.updateNavigationField === "function") game.updateNavigationField();
   if (typeof game.updateFloorBossTrigger === "function") game.updateFloorBossTrigger();
   if (typeof game.syncFloorBossFeedback === "function") game.syncFloorBossFeedback();
   if (game.floorBoss?.speechExpiresAt && game.time >= game.floorBoss.speechExpiresAt) {
@@ -164,14 +165,24 @@ export function stepGame(game, dt, controls = {}) {
     }
   }
 
-  if (controls.hasAim && Number.isFinite(controls.aimX) && Number.isFinite(controls.aimY)) {
-    const aimDx = controls.aimX - game.player.x;
-    const aimDy = controls.aimY - game.player.y;
-    const aimLen = vecLength(aimDx, aimDy);
-    if (aimLen > 1) {
-      game.player.dirX = aimDx / aimLen;
-      game.player.dirY = aimDy / aimLen;
-      game.player.facing = directionIndexFromVector(game.player.dirX, game.player.dirY);
+  if (controls.hasAim) {
+    const hasAimDir = Number.isFinite(controls.aimDirX) && Number.isFinite(controls.aimDirY);
+    if (hasAimDir) {
+      const aimLen = vecLength(controls.aimDirX, controls.aimDirY);
+      if (aimLen > 0.001) {
+        game.player.dirX = controls.aimDirX / aimLen;
+        game.player.dirY = controls.aimDirY / aimLen;
+        game.player.facing = directionIndexFromVector(game.player.dirX, game.player.dirY);
+      }
+    } else if (Number.isFinite(controls.aimX) && Number.isFinite(controls.aimY)) {
+      const aimDx = controls.aimX - game.player.x;
+      const aimDy = controls.aimY - game.player.y;
+      const aimLen = vecLength(aimDx, aimDy);
+      if (aimLen > 1) {
+        game.player.dirX = aimDx / aimLen;
+        game.player.dirY = aimDy / aimLen;
+        game.player.facing = directionIndexFromVector(game.player.dirX, game.player.dirY);
+      }
     }
   }
 
@@ -308,7 +319,9 @@ export function stepGame(game, dt, controls = {}) {
     }
   } else {
     if (controls.firePrimaryQueued) game.fire(game.player.dirX, game.player.dirY);
-    if (controls.firePrimaryHeld && controls.hasAim) game.fire(game.player.dirX, game.player.dirY);
+    if (!controls.firePrimaryQueued && controls.firePrimaryHeld && controls.hasAim) {
+      game.fire(game.player.dirX, game.player.dirY);
+    }
   }
   if (controls.fireAltQueued) game.fireFireArrow(game.player.dirX, game.player.dirY);
 
@@ -328,7 +341,11 @@ export function stepGame(game, dt, controls = {}) {
     const bossRequest = game.consumeFloorBossSpawnRequest();
     if (bossRequest) {
       const point = game.randomEnemySpawnPoint() || { x: game.door.x || game.player.x, y: game.door.y || game.player.y };
-      const boss = bossRequest.variant === "leprechaun" ? game.spawnLeprechaunBoss(point.x, point.y) : game.spawnNecromancer(point.x, point.y);
+      const boss = bossRequest.bossType === "minotaur"
+        ? game.spawnMinotaur(point.x, point.y)
+        : bossRequest.variant === "leprechaun"
+        ? game.spawnLeprechaunBoss(point.x, point.y)
+        : game.spawnNecromancer(point.x, point.y);
       game.enemies.push(boss);
       if (typeof game.markFloorBossActive === "function") game.markFloorBossActive();
       if (bossRequest.variant === "leprechaun" && game.floorBoss) {
@@ -336,7 +353,10 @@ export function stepGame(game, dt, controls = {}) {
         game.floorBoss.potY = null;
       }
       if (typeof game.spawnFloatingText === "function") {
-        const bossLabel = bossRequest.variant === "leprechaun" ? "Leprechaun Escapes" : "Necromancer Stirs";
+        const bossLabel =
+          bossRequest.variant === "leprechaun"
+            ? "Leprechaun Escapes"
+            : `${bossRequest.bossName || "Boss"} Stirs`;
         const bossColor = bossRequest.variant === "leprechaun" ? "#a2f06e" : "#d49dff";
         game.spawnFloatingText(game.player.x, game.player.y - 96, bossLabel, bossColor, 1.5, 18);
       }
@@ -353,10 +373,16 @@ export function stepGame(game, dt, controls = {}) {
       if (!point) continue;
       const activeGoblins = game.enemies.filter((enemy) => enemy.type === "goblin").length;
       const activePrisoners = game.enemies.filter((enemy) => enemy.type === "prisoner").length;
+      const activeMummies = game.enemies.filter((enemy) => enemy.type === "mummy").length;
       const activeRatArchers = game.enemies.filter((enemy) => enemy.type === "rat_archer").length;
       const prisonerMinFloor = Number.isFinite(game.config.enemy.prisonerMinFloor) ? game.config.enemy.prisonerMinFloor : 2;
       const skeletonMinFloor = Number.isFinite(game.config.enemy.skeletonWarriorMinFloor) ? game.config.enemy.skeletonWarriorMinFloor : 4;
       const spawnSkeleton = game.floor >= skeletonMinFloor && Math.random() < (game.config.enemy.skeletonWarriorSpawnChance || 0.25);
+      const mummyMinFloor = Number.isFinite(game.config.enemy.mummyMinFloor) ? game.config.enemy.mummyMinFloor : 4;
+      const spawnMummy =
+        game.floor >= mummyMinFloor &&
+        activeMummies < game.config.enemy.maxActiveMummies &&
+        Math.random() < (game.config.enemy.mummySpawnChance || 0.08);
       const ratArcherMinFloor = Number.isFinite(game.config.enemy.ratArcherMinFloor) ? game.config.enemy.ratArcherMinFloor : 3;
       if (
         game.floor >= prisonerMinFloor &&
@@ -370,6 +396,8 @@ export function stepGame(game, dt, controls = {}) {
         Math.random() < game.config.enemy.ratArcherSpawnChance
       ) {
         game.enemies.push(game.spawnRatArcher(point.x, point.y));
+      } else if (spawnMummy) {
+        game.enemies.push(game.spawnMummy(point.x, point.y));
       } else if (spawnSkeleton) {
         game.enemies.push(game.spawnSkeletonWarrior(point.x, point.y));
       } else if (activeGoblins < game.config.enemy.maxActiveGoblins && Math.random() < game.config.enemy.goblinSpawnChance) {
@@ -403,15 +431,10 @@ export function stepGame(game, dt, controls = {}) {
     enemy.hpBarTimer = Math.max(0, (enemy.hpBarTimer || 0) - dt);
     enemy.damageTextTimer = Math.max(0, (enemy.damageTextTimer || 0) - dt);
     enemy.damageBuffTimer = Math.max(0, (enemy.damageBuffTimer || 0) - dt);
-    if (!isActive(enemy, 72)) continue;
+    const alwaysActiveBoss = !!enemy?.isFloorBoss && (typeof game.isFloorBossActive !== "function" || game.isFloorBossActive());
+    if (!alwaysActiveBoss && !isActive(enemy, 72)) continue;
     activeEnemies.push(enemy);
-    if (enemy.type === "goblin") game.updateGoblin(enemy, dt, enemySpeedScale);
-    else if (enemy.type === "mimic") game.updateMimic(enemy, dt, enemySpeedScale);
-    else if (enemy.type === "prisoner") game.updatePrisoner(enemy, dt, enemySpeedScale);
-    else if (enemy.type === "rat_archer") game.updateRatArcher(enemy, dt, enemySpeedScale);
-    else if (enemy.type === "skeleton_warrior") game.updateSkeletonWarrior(enemy, dt, enemySpeedScale);
-    else if (enemy.type === "necromancer") game.updateNecromancer(enemy, dt, enemySpeedScale);
-    else if (enemy.type === "leprechaun") game.updateLeprechaunBoss(enemy, dt, enemySpeedScale);
+    if (typeof game.updateEnemyTactics === "function") game.updateEnemyTactics(enemy, dt, enemySpeedScale);
     else if (typeof game.updateGenericEnemy === "function") game.updateGenericEnemy(enemy, dt, enemySpeedScale);
     else game.moveEnemyTowardPlayer(enemy, enemySpeedScale, dt);
   }

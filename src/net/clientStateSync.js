@@ -17,6 +17,27 @@ export function applyMapStateToGame(game, payload) {
   game.explored = Array.from({ length: payload.map.length }, () => Array(rowLength).fill(false));
   game.navDistance = Array.from({ length: payload.map.length }, () => Array(rowLength).fill(-1));
   game.navPlayerTile = { x: -1, y: -1 };
+  for (let y = 0; y < payload.map.length; y++) {
+    const row = payload.map[y];
+    const chars = typeof row === "string" ? row : Array.isArray(row) ? row.join("") : "";
+    if (!chars) continue;
+    for (let x = 0; x < chars.length; x++) {
+      const ch = chars[x];
+      const px = x * tile + tile * 0.5;
+      const py = y * tile + tile * 0.5;
+      if (ch === "P") {
+        if (game.player) {
+          game.player.x = px;
+          game.player.y = py;
+        }
+      } else if (ch === "D") {
+        game.door = { ...(game.door || {}), x: px, y: py };
+      } else if (ch === "K") {
+        game.pickup = { ...(game.pickup || {}), x: px, y: py };
+      }
+    }
+  }
+  if (typeof game.ensurePlayerSafePosition === "function") game.ensurePlayerSafePosition(12);
   return typeof payload.mapSignature === "string" ? payload.mapSignature : `${game.floor}:${game.mapWidth}x${game.mapHeight}`;
 }
 
@@ -198,6 +219,37 @@ function syncFloorBossState(target, source, game) {
   return base;
 }
 
+function captureEnemyStateById(enemies) {
+  const byId = new Map();
+  for (const enemy of Array.isArray(enemies) ? enemies : []) {
+    if (!enemy || enemy.id == null) continue;
+    byId.set(enemy.id, {
+      hp: Number.isFinite(enemy.hp) ? enemy.hp : null,
+      x: Number.isFinite(enemy.x) ? enemy.x : null,
+      y: Number.isFinite(enemy.y) ? enemy.y : null,
+      size: Number.isFinite(enemy.size) ? enemy.size : 20
+    });
+  }
+  return byId;
+}
+
+function synthesizeEnemyDamageFloatingTexts(game, previousById, { skip = false } = {}) {
+  if (skip || typeof game?.spawnFloatingText !== "function") return;
+  for (const enemy of Array.isArray(game.enemies) ? game.enemies : []) {
+    if (!enemy || enemy.id == null) continue;
+    const prev = previousById.get(enemy.id);
+    if (!prev || !Number.isFinite(prev.hp) || !Number.isFinite(enemy.hp)) continue;
+    const damage = prev.hp - enemy.hp;
+    if (!(damage >= 0.5)) continue;
+    const textValue = Math.max(1, Math.round(damage));
+    const x = Number.isFinite(enemy.x) ? enemy.x : prev.x;
+    const y = Number.isFinite(enemy.y) ? enemy.y : prev.y;
+    const size = Number.isFinite(enemy.size) ? enemy.size : prev.size;
+    game.spawnFloatingText(x, y - (size || 20) * 0.65, `-${textValue}`, "#e85c5c");
+    enemy.hpBarTimer = Math.max(Number.isFinite(enemy.hpBarTimer) ? enemy.hpBarTimer : 0, game.config?.enemy?.hpBarDuration || 0.9);
+  }
+}
+
 export function applyMetaStateToGame(game, state) {
   if (!state || typeof state !== "object") return;
   if (Number.isFinite(state.time)) game.time = state.time;
@@ -242,6 +294,19 @@ export function applySnapshotToGame({
 }) {
   if (!state || typeof state !== "object") return { netPendingInputs, netLastAckSeq };
   applyMetaStateToGame(game, state);
+  if (!game.networkPerf || typeof game.networkPerf !== "object") {
+    game.networkPerf = {
+      appliedSnapshotCount: 0,
+      lastCorrectionPx: 0,
+      maxCorrectionPx: 0,
+      hardSnapCount: 0,
+      softCorrectionCount: 0,
+      settleCorrectionCount: 0,
+      blockedSnapCount: 0
+    };
+  }
+  game.networkPerf.appliedSnapshotCount += 1;
+  const isInitialControllerSync = !!controller && ackSeq <= 0 && !!state?.delta?.keyframe;
 
   if (state.player && typeof state.player === "object") {
     if (!controller) {
@@ -284,10 +349,20 @@ export function applySnapshotToGame({
       const hardSnapDist = 220 + adapt * 56;
       const softSnapDist = 24 + adapt * 20;
       const settleDist = 5 + adapt * 3;
-      if (errorDist > hardSnapDist) {
+      const localPlayerRadius = Math.max(4, (game.player?.size || 20) * 0.5);
+      const localPlayerBlocked =
+        typeof game.isPositionWalkable === "function"
+          ? !game.isPositionWalkable(game.player.x, game.player.y, localPlayerRadius, true)
+          : false;
+      game.networkPerf.lastCorrectionPx = errorDist;
+      if (errorDist > game.networkPerf.maxCorrectionPx) game.networkPerf.maxCorrectionPx = errorDist;
+      if (isInitialControllerSync || localPlayerBlocked || errorDist > hardSnapDist) {
+        game.networkPerf.hardSnapCount += 1;
+        if (localPlayerBlocked) game.networkPerf.blockedSnapCount += 1;
         game.player.x = correctedX;
         game.player.y = correctedY;
       } else if (ackSeq > 0 && errorDist > softSnapDist) {
+        game.networkPerf.softCorrectionCount += 1;
         const denom = Math.max(1, hardSnapDist - softSnapDist);
         const errorNorm = Math.max(0, Math.min(1, (errorDist - softSnapDist) / denom));
         const jitterDamping = Math.max(0.5, 1 - jitterMs / 26);
@@ -302,6 +377,7 @@ export function applySnapshotToGame({
           game.player.y += dy * inv * step;
         }
       } else if (ackSeq > 0 && errorDist > settleDist) {
+        game.networkPerf.settleCorrectionCount += 1;
         game.player.x += dx * 0.05;
         game.player.y += dy * 0.05;
       }
@@ -324,6 +400,7 @@ export function applySnapshotToGame({
   if (state.pickup && typeof state.pickup === "object") game.pickup = { ...state.pickup };
   if (state.portal && typeof state.portal === "object") game.portal = { ...state.portal };
   const snapAlpha = isNetworkController ? 0.72 : 0.62;
+  const previousEnemyStateById = captureEnemyStateById(game.enemies);
   const reconcileProjectileSpawn = (p, type) => {
     if (!p || !controller || !isNetworkController) return p;
     if (!netPredictedProjectiles || typeof netPredictedProjectiles.get !== "function") return p;
@@ -340,19 +417,34 @@ export function applySnapshotToGame({
       const dx = (Number.isFinite(candidate.x) ? candidate.x : 0) - (Number.isFinite(p.x) ? p.x : 0);
       const dy = (Number.isFinite(candidate.y) ? candidate.y : 0) - (Number.isFinite(p.y) ? p.y : 0);
       const d2 = dx * dx + dy * dy;
-      if (d2 < bestDistSq) {
-        bestDistSq = d2;
+      let score = d2;
+      if (Number.isFinite(candidate.angle) && Number.isFinite(p.angle)) {
+        let angleDiff = candidate.angle - p.angle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        const anglePenalty = Math.abs(angleDiff) * 180;
+        score += anglePenalty * anglePenalty;
+      }
+      if (score < bestDistSq) {
+        bestDistSq = score;
         bestIdx = i;
       }
     }
     if (bestIdx < 0) return p;
     const matched = bucket.splice(bestIdx, 1)[0];
     if (bucket.length === 0) netPredictedProjectiles.delete(seq);
-    const blend = Number.isFinite(p.life) && p.life > 0.85 ? 0.82 : 0.58;
+    const blend = Number.isFinite(p.life) && p.life > 0.85 ? 0.86 : 0.62;
+    const leadSeconds = Math.max(0, Math.min(0.06, frameGapMs / 1000));
+    const predictedAngle = Number.isFinite(matched.angle) ? matched.angle : p.angle;
+    const predictedDriftX = Number.isFinite(matched.vx) ? matched.vx * leadSeconds : 0;
+    const predictedDriftY = Number.isFinite(matched.vy) ? matched.vy * leadSeconds : 0;
+    const serverLeadX = Number.isFinite(p.vx) ? p.vx * leadSeconds : 0;
+    const serverLeadY = Number.isFinite(p.vy) ? p.vy * leadSeconds : 0;
     return {
       ...p,
-      x: matched.x * blend + p.x * (1 - blend),
-      y: matched.y * blend + p.y * (1 - blend)
+      x: (matched.x + predictedDriftX) * blend + (p.x + serverLeadX) * (1 - blend),
+      y: (matched.y + predictedDriftY) * blend + (p.y + serverLeadY) * (1 - blend),
+      angle: Number.isFinite(predictedAngle) ? predictedAngle : p.angle
     };
   };
   if (state.delta && typeof state.delta === "object") {
@@ -373,14 +465,7 @@ export function applySnapshotToGame({
     });
     game.fireZones = applyDeltaCollection(game.fireZones, state.delta.fireZones, { keyframe, positionAlpha: 1 });
     game.meleeSwings = applyDeltaCollection(game.meleeSwings, state.delta.meleeSwings, { keyframe, positionAlpha: 1 });
-    game.floatingTexts = applyDeltaCollection(game.floatingTexts, state.delta.floatingTexts, {
-      keyframe,
-      positionAlpha: 1,
-      decorate: (t) => {
-        t.maxLife = t.maxLife || t.life;
-        t.vy = t.vy || 22;
-      }
-    });
+    synthesizeEnemyDamageFloatingTexts(game, previousEnemyStateById, { skip: keyframe });
   } else {
     game.armorStands = syncByIdLerp(game.armorStands, state.armorStands, 1);
     game.enemies = syncByIdLerp(game.enemies, state.enemies, snapAlpha);
@@ -391,10 +476,7 @@ export function applySnapshotToGame({
     game.fireArrows = syncByIdLerp(game.fireArrows, (state.fireArrows || []).map((p) => reconcileProjectileSpawn(p, "fireArrow")), 1);
     game.fireZones = syncByIdLerp(game.fireZones, state.fireZones, 1);
     game.meleeSwings = syncByIdLerp(game.meleeSwings, state.meleeSwings, 1);
-    game.floatingTexts = syncByIdLerp(game.floatingTexts, state.floatingTexts, 1, (t) => {
-      t.maxLife = t.maxLife || t.life;
-      t.vy = t.vy || 22;
-    });
+    synthesizeEnemyDamageFloatingTexts(game, previousEnemyStateById, { skip: false });
   }
 
   return { netPendingInputs, netLastAckSeq };

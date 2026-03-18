@@ -93,9 +93,7 @@ export function resolveCombatAndDrops({
       if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerEnemyRadius + b.size * 0.5) {
         const rawDamage = game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-        const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
-        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
-        game.applyPlayerDamage(damageTaken);
+        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, "arrow"));
         b.life = 0;
       }
       continue;
@@ -136,9 +134,7 @@ export function resolveCombatAndDrops({
           ? game.rollWallTrapDamage()
           : game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
         const scaledTrapDamage = rawDamage * game.getEnemyDamageScale();
-        const reducedByDefense = Math.max(1, Math.round(scaledTrapDamage - game.getDefenseFlatReduction()));
-        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
-        game.applyPlayerDamage(damageTaken);
+        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledTrapDamage, "arrow"));
         b.life = 0;
         continue;
       }
@@ -172,9 +168,7 @@ export function resolveCombatAndDrops({
       if (vecLength(b.x - game.player.x, b.y - game.player.y) < (game.player.size + b.size) * 0.5) {
         const rawDamage = Number.isFinite(b.damage) ? b.damage : game.config.enemy.necromancerProjectileDamage || 16;
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-        const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
-        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
-        game.applyPlayerDamage(damageTaken);
+        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, b.damageType || "necrotic"));
         b.life = 0;
       }
       continue;
@@ -270,6 +264,32 @@ export function resolveCombatAndDrops({
 
   for (const enemy of activeEnemies) {
     enemy.contactAttackCooldown = Math.max(0, (enemy.contactAttackCooldown || 0) - dt);
+    if (enemy.type === "mummy") enemy.auraPulseTimer = Math.max(0, (enemy.auraPulseTimer || 0) - dt);
+  }
+  for (const enemy of activeEnemies) {
+    if (enemy.type !== "mummy" || (enemy.hp || 0) <= 0) continue;
+    const auraRange = (game.config.enemy.mummyAuraRangeTiles || 1.8) * game.config.map.tile;
+    const auraDps = game.config.enemy.mummyAuraDps || 8;
+    let affected = false;
+    if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) {
+      if (vecLength(enemy.x - game.player.x, enemy.y - game.player.y) <= auraRange + playerEnemyRadius) {
+        const rawDamage = auraDps * dt * game.getEnemyDamageScale();
+        game.applyPlayerDamage(game.getPlayerDamageTaken(rawDamage, "poison"));
+        affected = true;
+      }
+      for (const ally of activeEnemies) {
+        if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(ally))) continue;
+        if (ally.type === "skeleton_warrior" && ally.collapsed) continue;
+        if (vecLength(enemy.x - ally.x, enemy.y - ally.y) <= auraRange + (ally.size || 20) * 0.4) {
+          game.applyEnemyDamage(ally, auraDps * dt * game.getEnemyDamageScale(), "poison");
+          affected = true;
+        }
+      }
+    }
+    if (affected && enemy.auraPulseTimer <= 0) {
+      enemy.hpBarTimer = Math.max(enemy.hpBarTimer || 0, game.config.enemy.hpBarDuration);
+      enemy.auraPulseTimer = 0.45;
+    }
   }
   for (let i = 0; i < activeEnemies.length; i++) {
     const a = activeEnemies[i];
@@ -325,7 +345,7 @@ export function resolveCombatAndDrops({
 
   let removeBossSummons = false;
   game.enemies = game.enemies.filter((enemy) => {
-    if (enemy.type === "skeleton_warrior" && enemy.collapsed && enemy.collapseTimer > 0) return true;
+    if (enemy.type === "skeleton_warrior" && enemy.collapsed && ((enemy.collapseTimer > 0) || (enemy.reanimateTimer > 0))) return true;
     if (enemy.hp <= 0) {
       const wasFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy);
       if (wasFriendly && typeof game.triggerExplodingDeath === "function") game.triggerExplodingDeath(enemy);
@@ -334,17 +354,21 @@ export function resolveCombatAndDrops({
       if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
       else if (enemy.type === "armor") game.score += 40;
       else if (enemy.type === "mimic") game.score += 35;
+      else if (enemy.type === "mummy") game.score += 22;
       else if (enemy.type === "prisoner") game.score += 22;
+      else if (enemy.type === "mummy") game.score += 22;
       else if (enemy.type === "rat_archer") game.score += 16;
       else if (enemy.type === "skeleton_warrior") game.score += 10;
       else if (enemy.type === "necromancer") game.score += 250;
       else if (enemy.type === "leprechaun") game.score += 500;
+      else if (enemy.type === "minotaur") game.score += 320;
       else if (enemy.type === "skeleton") game.score += 12;
       else game.score += 10;
       game.gainExperience(game.xpFromEnemy(enemy));
       if (enemy.type === "goblin") game.dropTreasureBag(enemy.x, enemy.y, enemy.goldEaten);
       else if (enemy.type === "armor") game.dropArmorLoot(enemy.x, enemy.y);
       else if (enemy.type === "mimic") game.dropTreasureBag(enemy.x, enemy.y, 24);
+      else if (enemy.type === "mummy") game.maybeSpawnDrop(enemy.x, enemy.y);
       else if (enemy.type === "prisoner" || enemy.type === "rat_archer" || enemy.type === "skeleton_warrior" || enemy.type === "skeleton") game.maybeSpawnDrop(enemy.x, enemy.y);
       else if (enemy.type === "necromancer" || enemy.type === "leprechaun") {
         if (typeof game.markFloorBossDefeated === "function") game.markFloorBossDefeated();
@@ -352,6 +376,12 @@ export function resolveCombatAndDrops({
         if (typeof game.spawnExitPortal === "function") game.spawnExitPortal(enemy.x, enemy.y);
         if (enemy.type === "leprechaun") game.dropLeprechaunLoot(enemy.x, enemy.y);
         else game.dropNecromancerLoot(enemy.x, enemy.y);
+        game.spawnFloatingText(enemy.x, enemy.y - 42, "Boss Defeated", "#f2bf7b", 1.5, 18);
+        game.spawnFloatingText(enemy.x, enemy.y - 62, "Portal Open", "#90f0ff", 1.5, 18);
+      } else if (enemy.type === "minotaur") {
+        if (typeof game.markFloorBossDefeated === "function") game.markFloorBossDefeated();
+        if (typeof game.spawnExitPortal === "function") game.spawnExitPortal(enemy.x, enemy.y);
+        game.dropMinotaurLoot(enemy.x, enemy.y);
         game.spawnFloatingText(enemy.x, enemy.y - 42, "Boss Defeated", "#f2bf7b", 1.5, 18);
         game.spawnFloatingText(enemy.x, enemy.y - 62, "Portal Open", "#90f0ff", 1.5, 18);
       } else game.maybeSpawnDrop(enemy.x, enemy.y);
@@ -412,9 +442,7 @@ export function resolveCombatAndDrops({
         game.player.hitCooldown = 1.0;
         const rawDamage = game.rollEnemyContactDamage(enemy);
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-        const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
-        const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
-        game.applyPlayerDamage(damageTaken);
+        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, "physical"));
         break;
       }
     }

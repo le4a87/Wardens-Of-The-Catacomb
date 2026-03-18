@@ -387,8 +387,10 @@ async function runNetworkPerfSample(port) {
   }
 
   return {
-    avgTickMs: mean(serverTickDeltas.length ? serverTickDeltas : snapshotIntervals),
-    p95TickMs: percentile(serverTickDeltas.length ? serverTickDeltas : snapshotIntervals, 95),
+    avgTickMs: serverMetrics?.tickDurationMs?.avg ?? mean(serverTickDeltas.length ? serverTickDeltas : snapshotIntervals),
+    p95TickMs: serverMetrics?.tickDurationMs?.p95 ?? percentile(serverTickDeltas.length ? serverTickDeltas : snapshotIntervals, 95),
+    avgSnapshotIntervalMs: mean(serverTickDeltas.length ? serverTickDeltas : snapshotIntervals),
+    p95SnapshotIntervalMs: percentile(serverTickDeltas.length ? serverTickDeltas : snapshotIntervals, 95),
     p95FrameGapMs: percentile(snapshotIntervals, 95),
     snapshotCatchupEvents,
     avgSnapshotBytes: mean(snapshotBytes),
@@ -427,6 +429,8 @@ async function main() {
     const baseline = readBaseline(BASELINE_PATH);
     const comparison = baseline
       ? {
+          avgTickMs: diffMetric(network.avgTickMs, baseline.serverMetrics?.tickDurationMs?.avg ?? baseline.avgTickMs),
+          p95TickMs: diffMetric(network.p95TickMs, baseline.serverMetrics?.tickDurationMs?.p95 ?? baseline.p95TickMs),
           avgSnapshotBytes: diffMetric(network.avgSnapshotBytes, baseline.avgSnapshotBytes),
           p95SnapshotBytes: diffMetric(network.p95SnapshotBytes, baseline.p95SnapshotBytes),
           p95FrameGapMs: diffMetric(network.p95FrameGapMs, baseline.p95FrameGapMs),

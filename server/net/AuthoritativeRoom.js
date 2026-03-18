@@ -46,8 +46,7 @@ export class AuthoritativeRoom {
       bullets: new Map(),
       fireArrows: new Map(),
       fireZones: new Map(),
-      meleeSwings: new Map(),
-      floatingTexts: new Map()
+      meleeSwings: new Map()
     };
     this.idCounters = {
       enemy: 1,
@@ -57,7 +56,6 @@ export class AuthoritativeRoom {
       fireZone: 1,
       meleeSwing: 1,
       armorStand: 1,
-      floatingText: 1,
       breakable: 1,
       wallTrap: 1
     };
@@ -69,7 +67,6 @@ export class AuthoritativeRoom {
       fireZone: new WeakMap(),
       meleeSwing: new WeakMap(),
       armorStand: new WeakMap(),
-      floatingText: new WeakMap(),
       breakable: new WeakMap(),
       wallTrap: new WeakMap()
     };
@@ -80,6 +77,7 @@ export class AuthoritativeRoom {
   }
 
   addClient(client) {
+    if (typeof this.sim.ensurePlayerSafePosition === "function") this.sim.ensurePlayerSafePosition(12);
     client.lastSnapshotAckSeq = 0;
     this.clients.set(client.id, client);
     this.clientChunkState.set(client.id, { sent: new Set() });
@@ -107,6 +105,7 @@ export class AuthoritativeRoom {
 
   tick(nowMs, scheduleDriftMs = 0) {
     this.sim.activePlayerCount = Math.max(1, this.clients.size);
+    if (typeof this.sim.ensurePlayerSafePosition === "function") this.sim.ensurePlayerSafePosition(12);
     this.tickDriftSampleCounter += 1;
     if (Number.isFinite(scheduleDriftMs)) {
       if (scheduleDriftMs > this.options.tickDriftEpsilonMs) {
@@ -127,6 +126,7 @@ export class AuthoritativeRoom {
     const dt = Math.min((nowMs - this.lastTickMs) / 1000, 0.05);
     this.lastTickMs = nowMs;
     this.sim.tick(dt, this.getControllerInput());
+    if (typeof this.sim.ensurePlayerSafePosition === "function") this.sim.ensurePlayerSafePosition(12);
     const controllerClient = this.clients.get(this.controllerId);
     const taggedSeq = controllerClient ? controllerClient.input?.seq || controllerClient.lastInputSeq || 0 : 0;
     const ownerId = this.controllerId || null;
@@ -207,6 +207,31 @@ export class AuthoritativeRoom {
     this.broadcast("state.mapMeta", payload);
   }
 
+  sendMapState(toClient = null) {
+    const payload = {
+      mapSignature: this.mapSignature(),
+      floor: this.sim.floor,
+      mapWidth: this.sim.mapWidth,
+      mapHeight: this.sim.mapHeight,
+      map: this.sim.map,
+      armorStands: this.sim.armorStands.map((stand) => ({
+        id: this.options.getStableId(this, "armorStand", "as", stand),
+        x: stand.x,
+        y: stand.y,
+        size: stand.size,
+        animated: !!stand.animated,
+        activated: !!stand.activated
+      }))
+    };
+    if (toClient) {
+      if (toClient.ws.readyState === toClient.ws.OPEN) {
+        toClient.ws.send(JSON.stringify({ type: "state.map", roomId: this.id, ...payload }));
+      }
+      return;
+    }
+    this.broadcast("state.map", payload);
+  }
+
   sendMapChunksToClient(client, nowMs = Date.now()) {
     if (!client || client.ws.readyState !== client.ws.OPEN) return;
     const chunkState = this.clientChunkState.get(client.id);
@@ -255,7 +280,7 @@ export class AuthoritativeRoom {
       this.snapshotCounter = 0;
       for (const cache of Object.values(this.deltaCache)) cache.clear();
       for (const state of this.clientChunkState.values()) state.sent.clear();
-      this.sendMapMeta();
+      this.sendMapState();
       this.maybeBroadcastMeta(nowMs, true);
     }
     for (const client of this.clients.values()) this.sendMapChunksToClient(client, nowMs);
@@ -284,7 +309,6 @@ export class AuthoritativeRoom {
     const fireArrowDelta = this.options.buildDeltaCollection(this.deltaCache.fireArrows, fullState.fireArrows, keyframe);
     const fireZoneDelta = this.options.buildDeltaCollection(this.deltaCache.fireZones, fullState.fireZones, keyframe);
     const meleeSwingDelta = this.options.buildDeltaCollection(this.deltaCache.meleeSwings, fullState.meleeSwings, keyframe);
-    const floatingTextDelta = this.options.buildDeltaCollection(this.deltaCache.floatingTexts, fullState.floatingTexts, keyframe);
     if (keyframe || enemyDelta) delta.enemies = enemyDelta || {};
     if (keyframe || dropDelta) delta.drops = dropDelta || {};
     if (keyframe || breakableDelta) delta.breakables = breakableDelta || {};
@@ -293,7 +317,6 @@ export class AuthoritativeRoom {
     if (keyframe || fireArrowDelta) delta.fireArrows = fireArrowDelta || {};
     if (keyframe || fireZoneDelta) delta.fireZones = fireZoneDelta || {};
     if (keyframe || meleeSwingDelta) delta.meleeSwings = meleeSwingDelta || {};
-    if (keyframe || floatingTextDelta) delta.floatingTexts = floatingTextDelta || {};
     const floorBossPhase = fullState.floorBoss?.phase || null;
     const floorStateChanged = fullState.floor !== this.lastSnapshotFloor;
     const bossPhaseChanged = floorBossPhase !== this.lastSnapshotBossPhase;
