@@ -136,7 +136,11 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   fireWallTrap(trap) {
     if (!trap) return;
-    const cfg = this.config?.traps?.wall || {};
+    const cfg = typeof this.getWallTrapConfig === "function" ? this.getWallTrapConfig() : this.config?.traps?.wall || {};
+    if (cfg.trapType === "poison") {
+      this.firePoisonTrap(trap, cfg);
+      return;
+    }
     const tile = this.config?.map?.tile || 32;
     const speed = Number.isFinite(cfg.projectileSpeed) ? cfg.projectileSpeed : 520;
     const life = Number.isFinite(cfg.projectileLife) ? cfg.projectileLife : 1.6;
@@ -156,6 +160,38 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
       damageMin: damageRange.min,
       damageMax: damageRange.max
     });
+    trap.cooldown = this.getWallTrapResetTime();
+  }
+
+  firePoisonTrap(trap, cfg = null) {
+    if (!trap) return;
+    const trapCfg = cfg || (typeof this.getWallTrapConfig === "function" ? this.getWallTrapConfig() : this.config?.traps?.wall || {});
+    const tile = this.config?.map?.tile || 32;
+    const sightTiles = Number.isFinite(trapCfg.sightRangeTiles) ? Math.max(1, trapCfg.sightRangeTiles) : 7;
+    const spacingTiles = Number.isFinite(trapCfg.acidSpacingTiles) ? Math.max(0.4, trapCfg.acidSpacingTiles) : 0.9;
+    const spacing = tile * spacingTiles;
+    const maxSegments = Number.isFinite(trapCfg.acidMaxSegments) ? Math.max(1, Math.floor(trapCfg.acidMaxSegments)) : Math.max(1, Math.floor(sightTiles / spacingTiles));
+    const radius = Number.isFinite(trapCfg.acidRadius) ? Math.max(8, trapCfg.acidRadius) : 12;
+    const duration = Number.isFinite(trapCfg.acidDuration) ? Math.max(0.5, trapCfg.acidDuration) : 5;
+    const startOffset = tile * 0.7;
+    trap.spotted = true;
+    for (let index = 0; index < maxSegments; index++) {
+      const distance = startOffset + spacing * index;
+      const x = trap.x + trap.dirX * distance;
+      const y = trap.y + trap.dirY * distance;
+      if (this.isWallAt(x, y, false)) break;
+      this.fireZones.push({
+        x,
+        y,
+        radius,
+        life: duration,
+        zoneType: "acid",
+        damageMin: Number.isFinite(this.config.enemy?.armorDamageMin) ? this.config.enemy.armorDamageMin : 20,
+        damageMax: Number.isFinite(this.config.enemy?.armorDamageMax) ? this.config.enemy.armorDamageMax : 32,
+        touches: new WeakSet(),
+        touchingPlayer: false
+      });
+    }
     trap.cooldown = this.getWallTrapResetTime();
   }
 

@@ -19,16 +19,23 @@ export function placeArmorStands(game) {
   const candidates = [];
   const mapH = game.map.length;
   const mapW = game.map[0].length;
+  const placementTiles = typeof game.getArmorStandPlacementTiles === "function" ? game.getArmorStandPlacementTiles() : null;
+  const standVariant = typeof game.getArmorStandVariant === "function" ? game.getArmorStandVariant() : null;
+  const standSize = Number.isFinite(game.getCurrentBiomeRules?.()?.armorStandSize) ? game.getCurrentBiomeRules().armorStandSize : 24;
   for (let y = 2; y < mapH - 2; y++) {
     for (let x = 2; x < mapW - 2; x++) {
       if (game.map[y][x] === "#") continue;
       if (game.map[y][x] === "D" || game.map[y][x] === "K" || game.map[y][x] === "P") continue;
-      const nearWall =
-        game.map[y - 1][x] === "#" ||
-        game.map[y + 1][x] === "#" ||
-        game.map[y][x - 1] === "#" ||
-        game.map[y][x + 1] === "#";
-      if (!nearWall) continue;
+      if (Array.isArray(placementTiles) && placementTiles.length > 0) {
+        if (!placementTiles.includes(game.map[y][x])) continue;
+      } else {
+        const nearWall =
+          game.map[y - 1][x] === "#" ||
+          game.map[y + 1][x] === "#" ||
+          game.map[y][x - 1] === "#" ||
+          game.map[y][x + 1] === "#";
+        if (!nearWall) continue;
+      }
       const wx = x * game.config.map.tile + game.config.map.tile / 2;
       const wy = y * game.config.map.tile + game.config.map.tile / 2;
       if (vecLength(wx - game.player.x, wy - game.player.y) < game.config.map.tile * 6) continue;
@@ -47,9 +54,10 @@ export function placeArmorStands(game) {
     game.armorStands.push({
       x: c.x,
       y: c.y,
-      size: 24,
+      size: standSize,
       animated: Math.random() < game.config.enemy.armorStandAnimatedChance,
-      activated: false
+      activated: false,
+      variant: standVariant
     });
   }
 }

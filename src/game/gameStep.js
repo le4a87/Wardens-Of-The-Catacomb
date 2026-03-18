@@ -119,7 +119,7 @@ export function stepGame(game, dt, controls = {}) {
   game.player.moving = !!(mx || my);
   game.revealAroundPlayer();
 
-  const trapCfg = game.config?.traps?.wall || {};
+  const trapCfg = typeof game.getWallTrapConfig === "function" ? game.getWallTrapConfig() : game.config?.traps?.wall || {};
   const moveLen = vecLength(mx, my) || 1;
   const moveDirX = mx ? mx / moveLen : 0;
   const moveDirY = my ? my / moveLen : 0;
@@ -384,6 +384,8 @@ export function stepGame(game, dt, controls = {}) {
         activeMummies < game.config.enemy.maxActiveMummies &&
         Math.random() < (game.config.enemy.mummySpawnChance || 0.08);
       const ratArcherMinFloor = Number.isFinite(game.config.enemy.ratArcherMinFloor) ? game.config.enemy.ratArcherMinFloor : 3;
+      const ratArcherCap = typeof game.getMaxActiveRatArchers === "function" ? game.getMaxActiveRatArchers() : game.config.enemy.maxActiveRatArchers;
+      const ratArcherSpawnChance = typeof game.getRatArcherSpawnChance === "function" ? game.getRatArcherSpawnChance() : game.config.enemy.ratArcherSpawnChance;
       if (
         game.floor >= prisonerMinFloor &&
         activePrisoners < game.config.enemy.maxActivePrisoners &&
@@ -392,8 +394,8 @@ export function stepGame(game, dt, controls = {}) {
         game.enemies.push(game.spawnPrisoner(point.x, point.y));
       } else if (
         game.floor >= ratArcherMinFloor &&
-        activeRatArchers < game.config.enemy.maxActiveRatArchers &&
-        Math.random() < game.config.enemy.ratArcherSpawnChance
+        activeRatArchers < ratArcherCap &&
+        Math.random() < ratArcherSpawnChance
       ) {
         game.enemies.push(game.spawnRatArcher(point.x, point.y));
       } else if (spawnMummy) {

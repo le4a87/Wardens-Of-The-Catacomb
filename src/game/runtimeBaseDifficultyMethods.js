@@ -158,7 +158,7 @@ export const runtimeBaseDifficultyMethods = {
   },
 
   getWallTrapResetTime() {
-    const cfg = this.config?.traps?.wall || {};
+    const cfg = typeof this.getWallTrapConfig === "function" ? this.getWallTrapConfig() : this.config?.traps?.wall || {};
     const min = Number.isFinite(cfg.resetMin) ? cfg.resetMin : 20;
     const max = Number.isFinite(cfg.resetMax) ? cfg.resetMax : 60;
     return this.rollRange(Math.min(min, max), Math.max(min, max));
@@ -177,7 +177,7 @@ export const runtimeBaseDifficultyMethods = {
   },
 
   placeWallTraps() {
-    const cfg = this.config?.traps?.wall;
+    const cfg = typeof this.getWallTrapConfig === "function" ? this.getWallTrapConfig() : this.config?.traps?.wall;
     if (!cfg || !Array.isArray(this.map) || this.map.length === 0) return;
     const tile = this.config.map.tile;
     const minCount = Number.isFinite(cfg.minCount) ? Math.max(0, Math.floor(cfg.minCount)) : 2;
@@ -259,24 +259,26 @@ export const runtimeBaseDifficultyMethods = {
   },
 
   placeBreakables() {
-    const cfg = this.config.breakables;
+    const cfg = typeof this.getBreakablesConfig === "function" ? this.getBreakablesConfig() : this.config.breakables;
     if (!cfg) return;
     const tile = this.config.map.tile;
     const minDistTiles = Number.isFinite(cfg.minDistanceFromPlayerTiles) ? cfg.minDistanceFromPlayerTiles : 5;
     const minDist = minDistTiles * tile;
     const mimicChance = this.getMimicChestChance();
+    const breakableTypes = typeof this.getBreakableSpawnTypes === "function" ? this.getBreakableSpawnTypes() : ["crate", "box"];
+    const mimicTypes = new Set(typeof this.getBreakableMimicSourceTypes === "function" ? this.getBreakableMimicSourceTypes() : ["box"]);
     for (let y = 2; y < this.map.length - 2; y++) {
       for (let x = 2; x < this.map[0].length - 2; x++) {
         if (this.breakables.length >= cfg.maxCount) return;
-        if (this.map[y][x] !== ".") continue;
+        if (typeof this.isBreakablePlacementTile === "function" ? !this.isBreakablePlacementTile(this.map[y][x]) : this.map[y][x] !== ".") continue;
         const wx = x * tile + tile / 2;
         const wy = y * tile + tile / 2;
         if (vecLength(wx - this.player.x, wy - this.player.y) < minDist) continue;
         if (vecLength(wx - this.door.x, wy - this.door.y) < tile * 2.5) continue;
         if (!this.pickup.taken && vecLength(wx - this.pickup.x, wy - this.pickup.y) < tile * 2.5) continue;
         if (Math.random() >= cfg.spawnChance) continue;
-        const type = Math.random() < 0.55 ? "crate" : "box";
-        if (type === "box" && mimicChance > 0 && Math.random() < mimicChance) {
+        const type = breakableTypes[Math.floor(Math.random() * breakableTypes.length)] || "crate";
+        if (mimicTypes.has(type) && mimicChance > 0 && Math.random() < mimicChance) {
           this.enemies.push(this.spawnMimic(wx, wy));
           continue;
         }
@@ -292,7 +294,7 @@ export const runtimeBaseDifficultyMethods = {
   },
 
   dropBreakableLoot(x, y) {
-    const cfg = this.config.breakables;
+    const cfg = typeof this.getBreakablesConfig === "function" ? this.getBreakablesConfig() : this.config.breakables;
     if (!cfg) return;
     const healthAmount = typeof this.getHealthPickupAmount === "function" ? this.getHealthPickupAmount() : 1;
     if (Math.random() < cfg.dropGoldRate) {

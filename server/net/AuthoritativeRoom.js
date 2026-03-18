@@ -73,7 +73,9 @@ export class AuthoritativeRoom {
   }
 
   mapSignature() {
-    return `${this.sim.floor}:${this.sim.mapWidth}x${this.sim.mapHeight}`;
+    return typeof this.sim.getMapSignature === "function"
+      ? this.sim.getMapSignature()
+      : `${this.sim.biomeKey}:${this.sim.floor}:${this.sim.mapWidth}x${this.sim.mapHeight}`;
   }
 
   addClient(client) {
@@ -186,6 +188,7 @@ export class AuthoritativeRoom {
     const payload = {
       mapSignature: this.mapSignature(),
       floor: this.sim.floor,
+      biomeKey: this.sim.biomeKey,
       mapWidth: this.sim.mapWidth,
       mapHeight: this.sim.mapHeight,
       tileSize: this.sim.config.map.tile,
@@ -195,7 +198,8 @@ export class AuthoritativeRoom {
         y: stand.y,
         size: stand.size,
         animated: !!stand.animated,
-        activated: !!stand.activated
+        activated: !!stand.activated,
+        variant: typeof stand.variant === "string" ? stand.variant : null
       }))
     };
     if (toClient) {

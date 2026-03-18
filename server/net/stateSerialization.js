@@ -52,6 +52,14 @@ function serializeEnemy(room, e) {
     hp: e.hp,
     maxHp: e.maxHp,
     hpBarTimer: e.hpBarTimer || 0
+    hpBarTimer: e.hpBarTimer || 0,
+    shotWindupTimer: e.shotWindupTimer || 0,
+    collapsed: !!e.collapsed,
+    collapseTimer: e.collapseTimer || 0,
+    goldEaten: e.goldEaten || 0,
+    variant: typeof e.variant === "string" ? e.variant : null,
+    damageMin: e.damageMin,
+    damageMax: e.damageMax
   };
   switch (e.type) {
     case "rat_archer":
@@ -145,6 +153,7 @@ export function serializeMetaState(source) {
   const floorBoss = sim.floorBoss && typeof sim.floorBoss === "object" ? { ...sim.floorBoss } : null;
   return {
     floor: sim.floor,
+    biomeKey: sim.biomeKey,
     level: sim.level,
     score: sim.score,
     gold: sim.gold,
@@ -187,9 +196,10 @@ export function serializeState(room) {
   const activeFireZones = sim.fireZones.filter((z) => isInsideBounds(z, activeBounds, (Number.isFinite(z.radius) ? z.radius : 0) + 28));
   const activeMeleeSwings = sim.meleeSwings.filter((s) => isInsideBounds(s, activeBounds, (Number.isFinite(s.range) ? s.range : 0) + 24));
   return {
-    mapSignature: `${sim.floor}:${sim.mapWidth}x${sim.mapHeight}`,
+    mapSignature: typeof sim.getMapSignature === "function" ? sim.getMapSignature() : `${sim.biomeKey}:${sim.floor}:${sim.mapWidth}x${sim.mapHeight}`,
     time: sim.time,
     floor: sim.floor,
+    biomeKey: sim.biomeKey,
     floorBoss,
     player: shallowPlayerState(sim.player),
     door: { ...sim.door },
@@ -201,7 +211,14 @@ export function serializeState(room) {
     wallTraps: activeWallTraps.map((t) => serializeWallTrap(room, t)),
     bullets: activeBullets.map((b) => serializeBullet(room, b, "bullet", "b")),
     fireArrows: activeFireArrows.map((a) => serializeBullet(room, a, "fireArrow", "fa")),
-    fireZones: activeFireZones.map((z) => ({ id: getStableId(room, "fireZone", "fz", z), x: z.x, y: z.y, radius: z.radius, life: z.life })),
+    fireZones: activeFireZones.map((z) => ({
+      id: getStableId(room, "fireZone", "fz", z),
+      x: z.x,
+      y: z.y,
+      radius: z.radius,
+      life: z.life,
+      zoneType: typeof z.zoneType === "string" ? z.zoneType : "fire"
+    })),
     meleeSwings: activeMeleeSwings.map((s) => ({
       id: getStableId(room, "meleeSwing", "ms", s),
       x: s.x,

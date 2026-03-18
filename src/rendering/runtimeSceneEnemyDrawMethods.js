@@ -307,17 +307,18 @@ export const runtimeSceneEnemyDrawMethods = {
     }
   },
 
-  drawBreakable(br, screenX, screenY) {
+  drawBreakable(game, br, screenX, screenY) {
     const ctx = this.ctx;
+    const palette = typeof game?.getBiomeAppearance === "function" ? game.getBiomeAppearance() : {};
     const half = (br.size || 20) * 0.5;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+    ctx.fillStyle = palette.breakableShadow || "rgba(0, 0, 0, 0.3)";
     ctx.beginPath();
     ctx.ellipse(screenX, screenY + half * 0.7, half * 0.9, half * 0.33, 0, 0, Math.PI * 2);
     ctx.fill();
     if (br.type === "crate") {
-      ctx.fillStyle = "#7d5634";
+      ctx.fillStyle = palette.crateFill || "#7d5634";
       ctx.fillRect(screenX - half, screenY - half, half * 2, half * 2);
-      ctx.strokeStyle = "#a57a4f";
+      ctx.strokeStyle = palette.crateStroke || "#a57a4f";
       ctx.strokeRect(screenX - half + 0.5, screenY - half + 0.5, half * 2 - 1, half * 2 - 1);
       ctx.beginPath();
       ctx.moveTo(screenX - half + 2, screenY - half + 2);
@@ -325,12 +326,24 @@ export const runtimeSceneEnemyDrawMethods = {
       ctx.moveTo(screenX + half - 2, screenY - half + 2);
       ctx.lineTo(screenX - half + 2, screenY + half - 2);
       ctx.stroke();
+    } else if (br.type === "trashcan") {
+      ctx.fillStyle = palette.trashcanBody || "#78868a";
+      ctx.fillRect(screenX - half * 0.7, screenY - half * 0.65, half * 1.4, half * 1.3);
+      ctx.strokeStyle = palette.trashcanRim || "#495459";
+      ctx.strokeRect(screenX - half * 0.7 + 0.5, screenY - half * 0.65 + 0.5, half * 1.4 - 1, half * 1.3 - 1);
+      ctx.fillStyle = palette.trashcanLid || "#95a3a7";
+      ctx.fillRect(screenX - half * 0.82, screenY - half * 0.82, half * 1.64, half * 0.24);
+      ctx.fillStyle = palette.trashcanRim || "#495459";
+      for (let i = -1; i <= 1; i++) {
+        const x = screenX + i * half * 0.28;
+        ctx.fillRect(x - 1, screenY - half * 0.5, 2, half * 1.0);
+      }
     } else {
-      ctx.fillStyle = "#6d4b2e";
+      ctx.fillStyle = palette.boxFill || "#6d4b2e";
       ctx.fillRect(screenX - half, screenY - half * 0.75, half * 2, half * 1.5);
-      ctx.strokeStyle = "#8f6a43";
+      ctx.strokeStyle = palette.boxStroke || "#8f6a43";
       ctx.strokeRect(screenX - half + 0.5, screenY - half * 0.75 + 0.5, half * 2 - 1, half * 1.5 - 1);
-      ctx.fillStyle = "#b38b5f";
+      ctx.fillStyle = palette.boxBand || "#b38b5f";
       ctx.fillRect(screenX - half * 0.9, screenY - 1, half * 1.8, 2);
     }
   }
