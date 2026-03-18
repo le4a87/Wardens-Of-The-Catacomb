@@ -167,6 +167,8 @@ export const runtimeSceneDrawMethods = {
     const windup = Math.max(0.01, this.config.enemy.prisonerWindup || 0.16);
     const swingRatio = 1 - Math.max(0, Math.min(1, (enemy.swingTimer || 0) / windup));
     const chainReach = (this.config.enemy.prisonerAttackRangeTiles || 2) * this.config.map.tile * 0.55;
+    const sweepRange = (this.config.enemy.prisonerAttackRangeTiles || 1.5) * this.config.map.tile;
+    const sweepArc = ((this.config.enemy.prisonerAttackArcDeg || 180) * Math.PI) / 180;
     const dragX = -aimX;
     const dragY = -aimY;
     const dragPerpX = -dragY;
@@ -206,18 +208,41 @@ export const runtimeSceneDrawMethods = {
       screenX + half * 0.34 + dragX * chainReach * 0.55,
       screenY + half * 0.24 + dragY * chainReach * 0.55
     );
-    if ((enemy.swingTimer || 0) > 0) {
-      const sweepReach = chainReach * (0.85 + swingRatio * 0.35);
-      const sweepPerp = 10 + swingRatio * 14;
-      ctx.moveTo(screenX - half * 0.12, screenY - half * 0.06);
-      ctx.quadraticCurveTo(
-        screenX + aimX * sweepReach * 0.5 + (-aimY) * sweepPerp,
-        screenY + aimY * sweepReach * 0.5 + aimX * sweepPerp,
-        screenX + aimX * sweepReach,
-        screenY + aimY * sweepReach
-      );
-    }
     ctx.stroke();
+
+    if ((enemy.swingTimer || 0) > 0) {
+      const sweepAngle = Math.atan2(aimY, aimX);
+      const sweepStart = sweepAngle - sweepArc * 0.5;
+      const sweepEnd = sweepAngle + sweepArc * 0.5;
+      const alpha = Math.max(0.18, Math.min(0.78, 0.22 + swingRatio * 0.56));
+      const arcRadius = sweepRange * (0.88 + swingRatio * 0.16);
+      const slashGrad = ctx.createRadialGradient(
+        screenX,
+        screenY,
+        arcRadius * 0.16,
+        screenX + aimX * arcRadius * 0.55,
+        screenY + aimY * arcRadius * 0.55,
+        arcRadius
+      );
+      slashGrad.addColorStop(0, `rgba(255, 228, 186, ${alpha})`);
+      slashGrad.addColorStop(0.65, `rgba(210, 118, 82, ${alpha * 0.72})`);
+      slashGrad.addColorStop(1, "rgba(120, 38, 22, 0)");
+
+      ctx.save();
+      ctx.fillStyle = slashGrad;
+      ctx.beginPath();
+      ctx.moveTo(screenX, screenY);
+      ctx.arc(screenX, screenY, arcRadius, sweepStart, sweepEnd);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(244, 216, 179, ${Math.min(0.95, alpha + 0.18)})`;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, arcRadius * 0.82, sweepStart, sweepEnd);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     ctx.fillStyle = "#5a463b";
     ctx.fillRect(screenX - half * 0.52, screenY + half * 0.92, half * 0.28, half * 0.42);
