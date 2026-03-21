@@ -225,6 +225,7 @@ export const rendererEffectsProjectileMethods = {
     const ctx = this.ctx;
     const x = zone.x - cameraX;
     const y = zone.y - cameraY;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     if (zone.zoneType === "ghostSiphon") {
       const tx = (Number.isFinite(zone.targetX) ? zone.targetX : zone.x) - cameraX;
       const ty = (Number.isFinite(zone.targetY) ? zone.targetY : zone.y) - cameraY;
@@ -264,10 +265,12 @@ export const rendererEffectsProjectileMethods = {
       return;
     }
     const lifeFrac = Math.max(0, Math.min(1, zone.life / this.config.fireArrow.lingerDuration));
+    const radius = Number.isFinite(zone.radius) ? Math.max(0, zone.radius) : 0;
+    if (radius <= 0) return;
     const pulse = 0.88 + Math.sin((time * 10 + zone.x * 0.02 + zone.y * 0.015)) * 0.09;
-    const coreR = zone.radius * 0.42 * pulse;
-    const midR = zone.radius * 0.72 * (0.96 + Math.sin(time * 7.8 + zone.y * 0.018) * 0.06);
-    const edgeR = zone.radius * (0.96 + Math.sin(time * 6.1 + zone.x * 0.013) * 0.05);
+    const coreR = radius * 0.42 * pulse;
+    const midR = radius * 0.72 * (0.96 + Math.sin(time * 7.8 + zone.y * 0.018) * 0.06);
+    const edgeR = radius * (0.96 + Math.sin(time * 6.1 + zone.x * 0.013) * 0.05);
 
     const outer = ctx.createRadialGradient(x, y, coreR * 0.15, x, y, edgeR);
     outer.addColorStop(0, `rgba(255, 224, 140, ${0.26 * lifeFrac + 0.12})`);
@@ -292,8 +295,8 @@ export const rendererEffectsProjectileMethods = {
     for (let i = 0; i < tongues; i++) {
       const a = (i / tongues) * Math.PI * 2 + time * 1.7;
       const wobble = Math.sin(time * 8 + i * 1.9 + zone.x * 0.01) * 0.1;
-      const r1 = zone.radius * (0.58 + wobble);
-      const r2 = zone.radius * (0.88 + wobble * 0.5);
+      const r1 = radius * (0.58 + wobble);
+      const r2 = radius * (0.88 + wobble * 0.5);
       const px = x + Math.cos(a) * r1;
       const py = y + Math.sin(a) * r1;
       const tx = x + Math.cos(a) * r2;

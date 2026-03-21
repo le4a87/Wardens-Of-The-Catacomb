@@ -16,6 +16,7 @@ const SCRIPT_TARGETS = {
   "validate:network-join": "server/validate-network-join.js",
   "validate:network-combat": "server/validate-network-combat.js",
   "validate:network-combat-hit": "server/validate-network-combat-hit.js",
+  "validate:network-two-client-damage": "server/validate-network-two-client-damage.js",
   "validate:network-archer": "server/validate-network-archer.js",
   "validate:network-audio": "server/validate-network-audio.js",
   "validate:network-ui": "server/validate-network-ui.js",
@@ -31,6 +32,7 @@ const SUITES = {
     "validate:network-join",
     "validate:network-combat",
     "validate:network-combat-hit",
+    "validate:network-two-client-damage",
     "validate:network-archer",
     "validate:network-audio",
     "validate:network-ui"
@@ -47,6 +49,7 @@ const SUITES = {
     "validate:network-join",
     "validate:network-combat",
     "validate:network-combat-hit",
+    "validate:network-two-client-damage",
     "validate:network-archer",
     "validate:network-audio",
     "validate:network-ui",

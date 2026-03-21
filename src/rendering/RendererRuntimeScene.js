@@ -118,7 +118,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       ctx.fillText("GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 18);
       ctx.fillStyle = `rgba(208, 203, 194, ${subtitleAlpha})`;
       ctx.font = "20px Trebuchet MS";
-      ctx.fillText("Leaderboard opened. Continue or wait to return to the menu.", this.canvas.width / 2, this.canvas.height / 2 + 28);
+      ctx.fillText("Run complete. Continue or wait to return to the menu.", this.canvas.width / 2, this.canvas.height / 2 + 28);
       ctx.textAlign = "left";
     }
   }

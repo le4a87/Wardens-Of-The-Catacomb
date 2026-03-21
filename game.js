@@ -128,15 +128,29 @@ const leaderboardState = {
   open: false
 };
 let currentPlayerHandle = loadStoredPlayerHandle();
+const runtimeConfig = window.__WOTC_CONFIG__ && typeof window.__WOTC_CONFIG__ === "object" ? window.__WOTC_CONFIG__ : {};
+
+function getConfiguredWsUrl() {
+  return typeof runtimeConfig.defaultWsUrl === "string" ? runtimeConfig.defaultWsUrl.trim() : "";
+}
+
+function getConfiguredLeaderboardApiUrl() {
+  return typeof runtimeConfig.leaderboardApiUrl === "string" ? runtimeConfig.leaderboardApiUrl.trim() : "";
+}
 
 if (playerNameInput) {
   playerNameInput.value = currentPlayerHandle;
   playerNameInput.required = true;
 }
-if (serverUrlInput && (!serverUrlInput.value || serverUrlInput.value.trim() === "ws://localhost:8090")) {
+if (serverUrlInput) {
+  const configuredWsUrl = getConfiguredWsUrl();
+  if (configuredWsUrl) {
+    serverUrlInput.value = configuredWsUrl;
+  } else if (!serverUrlInput.value || serverUrlInput.value.trim() === "ws://localhost:8090") {
   const hostname = window.location?.hostname || "localhost";
   const protocol = window.location?.protocol === "https:" ? "wss" : "ws";
   serverUrlInput.value = `${protocol}://${hostname}:8090`;
+  }
 }
 
 if (devStartOptions) devStartOptions.hidden = !isDevMode;
@@ -190,6 +204,8 @@ function showCharacterSelect(mode) {
 }
 
 function getLeaderboardApiUrl() {
+  const configuredApiUrl = getConfiguredLeaderboardApiUrl();
+  if (configuredApiUrl) return configuredApiUrl;
   return getDefaultLeaderboardApiUrl(window.location);
 }
 
@@ -246,10 +262,20 @@ function renderLeaderboardModal() {
   });
 }
 
+function syncDeathLeaderboardCanvasVisibility() {
+  if (!currentGame) return;
+  if (leaderboardState.open && leaderboardState.mode === "death") {
+    setCanvasVisible(false);
+    return;
+  }
+  if (menuPanel?.hidden) setCanvasVisible(true);
+}
+
 function closeLeaderboardModal() {
   leaderboardState.open = false;
   leaderboardState.mode = "menu";
   renderLeaderboardModal();
+  syncDeathLeaderboardCanvasVisibility();
 }
 
 function openLeaderboardModal(mode = "menu") {
@@ -257,6 +283,7 @@ function openLeaderboardModal(mode = "menu") {
   leaderboardState.activeTab = "global";
   leaderboardState.open = true;
   renderLeaderboardModal();
+  syncDeathLeaderboardCanvasVisibility();
 }
 
 async function refreshGlobalLeaderboard() {
@@ -291,6 +318,33 @@ async function submitCompletedLocalRun(game) {
     leaderboardState.loading = false;
     renderLeaderboardModal();
   }
+}
+
+async function showNetworkGameOverLeaderboard(game, { includeSessionRun = false } = {}) {
+  if (includeSessionRun && game) {
+    const handle = sanitizePlayerHandle(game.playerHandle || currentPlayerHandle || "Player", "Player");
+    const run = buildLocalRunSummary(game, handle);
+    leaderboardState.sessionRows = sortLeaderboardRows([...leaderboardState.sessionRows, run]);
+  }
+  openLeaderboardModal("death");
+  leaderboardState.loading = true;
+  leaderboardState.errorText = "";
+  renderLeaderboardModal();
+  try {
+    const response = await fetchGlobalLeaderboard(getLeaderboardApiUrl());
+    leaderboardState.globalRows = sortLeaderboardRows(response.rows);
+  } catch (error) {
+    leaderboardState.errorText = error instanceof Error ? error.message : String(error);
+  } finally {
+    leaderboardState.loading = false;
+    renderLeaderboardModal();
+  }
+}
+
+function showNetworkGameOverLeaderboardOnce(game, { includeSessionRun = false } = {}) {
+  if (!game || game.networkGameOverLeaderboardShown) return;
+  game.networkGameOverLeaderboardShown = true;
+  void showNetworkGameOverLeaderboard(game, { includeSessionRun });
 }
 
 if (typeof window !== "undefined") {
@@ -720,7 +774,12 @@ function startNetworkGame() {
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, nextGame) => syncMusicForGame(nextGame),
     onFloorChanged: (_floor, nextGame) => syncMusicForGame(nextGame),
-    onGameOverChanged: (_gameOver, nextGame) => syncMusicForGame(nextGame)
+    onGameOverChanged: (gameOver, nextGame) => {
+      syncMusicForGame(nextGame);
+      if (!gameOver) return;
+      const includeSessionRun = nextGame?.networkRole === "Controller";
+      showNetworkGameOverLeaderboardOnce(nextGame, { includeSessionRun });
+    }
   });
   game.playerHandle = name;
   game.networkEnabled = true;
@@ -739,6 +798,7 @@ function startNetworkGame() {
     settleCorrectionCount: 0,
     blockedSnapCount: 0
   };
+  game.networkGameOverLeaderboardShown = false;
   game.networkPredictedProjectiles = netPredictedProjectiles;
   game.map = [];
   game.mapWidth = 0;
@@ -883,6 +943,10 @@ function startNetworkGame() {
       prevTrackSrc !== nextTrackSrc
     ) {
       syncMusicForGame(game);
+    }
+    if (!prevGameOver && game.gameOver) {
+      const includeSessionRun = game.networkRole === "Controller";
+      showNetworkGameOverLeaderboardOnce(game, { includeSessionRun });
     }
   });
   netClient.on("state.snapshot", (msg) => {

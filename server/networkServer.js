@@ -14,6 +14,7 @@ import { handleLeaderboardApiRequest } from "./leaderboardApi.js";
 import { LeaderboardStore } from "./leaderboardStore.js";
 
 const PORT = Number.parseInt(process.env.PORT || "8090", 10);
+const HOST = typeof process.env.HOST === "string" && process.env.HOST.trim() ? process.env.HOST.trim() : "";
 const TICK_RATE = Number.parseInt(process.env.TICK_RATE || "60", 10);
 const SNAPSHOT_RATE = Number.parseInt(process.env.SNAPSHOT_RATE || "20", 10);
 const META_BROADCAST_MIN_MS = Number.parseInt(process.env.META_BROADCAST_MIN_MS || "320", 10);
@@ -138,8 +139,19 @@ startRoomSchedulers({
   monotonicNowMs
 });
 
-server.listen(PORT, () => {
-  console.log(`Authoritative server listening on port ${PORT}`);
-  console.log(`WebSocket gameplay endpoint available on ws://localhost:${PORT}`);
-  console.log(`Leaderboard REST endpoint available on http://localhost:${PORT}/api/leaderboard`);
+server.listen(PORT, HOST || undefined, () => {
+  const address = server.address();
+  const boundHost =
+    address && typeof address === "object" && typeof address.address === "string"
+      ? address.address === "::" || address.address === "0.0.0.0"
+        ? "all interfaces"
+        : address.address
+      : HOST || "all interfaces";
+  const endpointHost =
+    address && typeof address === "object" && typeof address.address === "string" && address.address && address.address !== "::" && address.address !== "0.0.0.0"
+      ? address.address
+      : HOST || "localhost";
+  console.log(`Authoritative server listening on ${boundHost}:${PORT}`);
+  console.log(`WebSocket gameplay endpoint available on ws://${endpointHost}:${PORT}`);
+  console.log(`Leaderboard REST endpoint available on http://${endpointHost}:${PORT}/api/leaderboard`);
 });

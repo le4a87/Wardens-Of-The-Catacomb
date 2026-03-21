@@ -1,6 +1,13 @@
+function normalizeMapRow(row) {
+  if (typeof row === "string") return Array.from(row);
+  if (Array.isArray(row)) return row.slice();
+  return [];
+}
+
 export function applyMapStateToGame(game, payload) {
   if (!Array.isArray(payload.map) || payload.map.length === 0) return "";
-  const firstRow = payload.map[0];
+  const normalizedMap = payload.map.map((row) => normalizeMapRow(row));
+  const firstRow = normalizedMap[0];
   const rowLength =
     typeof firstRow === "string"
       ? firstRow.length
@@ -9,16 +16,16 @@ export function applyMapStateToGame(game, payload) {
       : 0;
   if (rowLength <= 0) return "";
   const tile = game.config.map.tile;
-  game.map = payload.map;
+  game.map = normalizedMap;
   game.mapWidth = Number.isFinite(payload.mapWidth) ? payload.mapWidth : rowLength;
-  game.mapHeight = Number.isFinite(payload.mapHeight) ? payload.mapHeight : payload.map.length;
+  game.mapHeight = Number.isFinite(payload.mapHeight) ? payload.mapHeight : normalizedMap.length;
   game.worldWidth = rowLength * tile;
-  game.worldHeight = payload.map.length * tile;
-  game.explored = Array.from({ length: payload.map.length }, () => Array(rowLength).fill(false));
-  game.navDistance = Array.from({ length: payload.map.length }, () => Array(rowLength).fill(-1));
+  game.worldHeight = normalizedMap.length * tile;
+  game.explored = Array.from({ length: normalizedMap.length }, () => Array(rowLength).fill(false));
+  game.navDistance = Array.from({ length: normalizedMap.length }, () => Array(rowLength).fill(-1));
   game.navPlayerTile = { x: -1, y: -1 };
-  for (let y = 0; y < payload.map.length; y++) {
-    const row = payload.map[y];
+  for (let y = 0; y < normalizedMap.length; y++) {
+    const row = normalizedMap[y];
     const chars = typeof row === "string" ? row : Array.isArray(row) ? row.join("") : "";
     if (!chars) continue;
     for (let x = 0; x < chars.length; x++) {
@@ -88,6 +95,8 @@ export function applyMapChunkToGame(game, payload) {
     const y = startY + r;
     if (y < 0 || y >= game.map.length) continue;
     const chars = typeof rowData === "string" ? rowData : rowData.join("");
+    if (typeof game.map[y] === "string") game.map[y] = Array.from(game.map[y]);
+    else if (!Array.isArray(game.map[y])) game.map[y] = normalizeMapRow(game.map[y]);
     for (let c = 0; c < chars.length; c++) {
       const x = startX + c;
       if (x < 0 || x >= game.map[0].length) continue;
