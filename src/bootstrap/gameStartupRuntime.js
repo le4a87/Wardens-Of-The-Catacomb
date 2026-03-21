@@ -1,25 +1,11 @@
-export function createLocalGame({
-  Game,
-  canvas,
-  selectedClass,
-  playerHandle = "Player",
-  returnToMenu,
-  syncMusicForGame,
-  startingFloor = 1,
-  onGameOverChanged = null
-}) {
+export function createLocalGame({ Game, canvas, selectedClass, returnToMenu, syncMusicForGame, startingFloor = 1 }) {
   const game = new Game(canvas, {
     classType: selectedClass,
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, nextGame) => syncMusicForGame(nextGame),
     onFloorChanged: (_floor, nextGame) => syncMusicForGame(nextGame),
-    onGameOverChanged: (gameOver, nextGame) => {
-      syncMusicForGame(nextGame);
-      if (typeof onGameOverChanged === "function") onGameOverChanged(gameOver, nextGame);
-    }
+    onGameOverChanged: (_gameOver, nextGame) => syncMusicForGame(nextGame)
   });
-  game.playerHandle = playerHandle;
-  game.deathTransitionDuration = 10;
   if (startingFloor > 1 && typeof game.applyDebugStartingFloor === "function") {
     game.applyDebugStartingFloor(startingFloor);
   }

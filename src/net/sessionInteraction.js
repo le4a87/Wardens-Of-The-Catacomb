@@ -87,15 +87,6 @@ export function handleNetworkUiActions(game, netClient, isController) {
   if (game.input.consumeKeyQueued("escape")) {
     netClient.sendAction({ kind: "escape" });
   }
-  if (game.input.consumeKeyQueued("b") && !game.gameOver) {
-    netClient.sendAction({ kind: "toggleShop" });
-  }
-  if (game.input.consumeKeyQueued("k") && !game.gameOver) {
-    netClient.sendAction({ kind: "toggleSkillTree" });
-  }
-  if (game.input.consumeKeyQueued("c")) {
-    netClient.sendAction({ kind: "toggleStats" });
-  }
   const clicks = game.input.consumeUiLeftClicks();
   if (clicks.length === 0) return;
 
@@ -116,11 +107,6 @@ export function handleNetworkUiActions(game, netClient, isController) {
     }
   };
   for (const click of clicks) {
-    if (hit(click.x, click.y, game.uiRects.gameOverStatsButton)) {
-      recordAction(click, "gameOverStatsButton", "toggleStats");
-      netClient.sendAction({ kind: "toggleStats" });
-      continue;
-    }
     if (hit(click.x, click.y, game.uiRects.shopButton)) {
       recordAction(click, "shopButton", "toggleShop");
       netClient.sendAction({ kind: "toggleShop" });
@@ -149,16 +135,6 @@ export function handleNetworkUiActions(game, netClient, isController) {
     if (hit(click.x, click.y, game.uiRects.statsClose)) {
       recordAction(click, "statsClose", "closeStats");
       netClient.sendAction({ kind: "closeStats" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.statsRunTab)) {
-      recordAction(click, "statsRunTab", "setStatsView", "run");
-      netClient.sendAction({ kind: "setStatsView", view: "run" });
-      continue;
-    }
-    if (hit(click.x, click.y, game.uiRects.statsCharacterTab)) {
-      recordAction(click, "statsCharacterTab", "setStatsView", "character");
-      netClient.sendAction({ kind: "setStatsView", view: "character" });
       continue;
     }
     const itemRects = game.uiRects.shopItems || [];
