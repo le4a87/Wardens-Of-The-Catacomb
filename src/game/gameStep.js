@@ -2,8 +2,6 @@ import { vecLength, directionIndexFromVector } from "../utils.js";
 import { resolveCombatAndDrops } from "./stepCombatResolution.js";
 
 export function stepGame(game, dt, controls = {}) {
-  if (typeof game.updateDeathTransition === "function" && game.updateDeathTransition(dt)) return;
-
   const segmentRectHit = (x0, y0, x1, y1, left, top, right, bottom) => {
     // Liang-Barsky clipping against AABB.
     const dx = x1 - x0;
@@ -49,6 +47,7 @@ export function stepGame(game, dt, controls = {}) {
   if (controls.processUi !== false && typeof game.handleUiClicks === "function") {
     game.handleUiClicks();
   }
+  if (typeof game.updateDeathTransition === "function" && game.updateDeathTransition(dt)) return;
   if (typeof game.isActive === "function" && !game.isActive()) return;
 
   game.time += dt;
@@ -196,6 +195,7 @@ export function stepGame(game, dt, controls = {}) {
       healTickTimer: 0,
       targetEnemy: null
     });
+    for (const enemy of game.enemies || []) enemy.charmLocked = false;
     const beamRange = (game.config.necromancer?.controlRangeTiles || 10) * game.config.map.tile;
     const beamWidth = Number.isFinite(game.config.necromancer?.beamWidth) ? game.config.necromancer.beamWidth : 11;
     const held = !!controls.firePrimaryHeld && !!controls.hasAim;
@@ -301,6 +301,7 @@ export function stepGame(game, dt, controls = {}) {
           }
         } else {
           beam.healTickTimer = 0;
+          bestTarget.charmLocked = true;
           beam.progress += dt;
           if (beam.progress >= game.getNecromancerCharmDuration()) {
             if (game.markUndeadAsControlled(bestTarget)) {
@@ -434,6 +435,7 @@ export function stepGame(game, dt, controls = {}) {
     const alwaysActiveBoss = !!enemy?.isFloorBoss && (typeof game.isFloorBossActive !== "function" || game.isFloorBossActive());
     if (!alwaysActiveBoss && !isActive(enemy, 72)) continue;
     activeEnemies.push(enemy);
+    if (enemy.charmLocked) continue;
     if (typeof game.updateEnemyTactics === "function") game.updateEnemyTactics(enemy, dt, enemySpeedScale);
     else if (typeof game.updateGenericEnemy === "function") game.updateGenericEnemy(enemy, dt, enemySpeedScale);
     else game.moveEnemyTowardPlayer(enemy, enemySpeedScale, dt);

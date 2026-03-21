@@ -5,6 +5,7 @@ export function handleActionMessage(room, action) {
   if (kind === "escape") {
     if (sim.shopOpen) sim.toggleShop(false);
     else if (sim.skillTreeOpen) sim.toggleSkillTree(false);
+    else if (sim.statsPanelOpen) sim.toggleStatsPanel(false);
     else if (!sim.gameOver) sim.paused = !sim.paused;
     return;
   }
@@ -25,11 +26,15 @@ export function handleActionMessage(room, action) {
     return;
   }
   if (kind === "toggleStats") {
-    sim.statsPanelOpen = !sim.statsPanelOpen;
+    sim.toggleStatsPanel();
     return;
   }
   if (kind === "closeStats") {
-    sim.statsPanelOpen = false;
+    sim.toggleStatsPanel(false);
+    return;
+  }
+  if (kind === "setStatsView" && (action.view === "run" || action.view === "character")) {
+    sim.statsPanelView = action.view;
     return;
   }
   if (kind === "buyUpgrade" && typeof action.key === "string") {

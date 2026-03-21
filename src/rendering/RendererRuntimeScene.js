@@ -34,6 +34,10 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.skillExplodingDeathNode = null;
     game.uiRects.statsButton = null;
     game.uiRects.statsClose = null;
+    game.uiRects.statsRunTab = null;
+    game.uiRects.statsCharacterTab = null;
+    game.uiRects.gameOverStatsButton = null;
+    game.uiRects.hudAbilityWidget = null;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawSidebarBackground(layout);
@@ -96,10 +100,10 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     this.drawBossSpeechCallout(game, cameraX, cameraY, layout);
     this.drawHud(game, layout);
     const minimapBottom = this.drawMinimap(game, layout);
-    this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
+    if (!game.gameOver || !game.statsPanelOpen) this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
     if (game.shopOpen) this.drawShopMenu(game, layout);
     if (game.skillTreeOpen) this.drawSkillTreeMenu(game, layout);
-    if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.gameOver) this.drawPausedOverlay(layout);
+    if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.statsPanelOpen && !game.gameOver) this.drawPausedOverlay(layout);
 
     if (game.gameOver) {
       const progress = typeof game.getDeathTransitionProgress === "function" ? game.getDeathTransitionProgress() : 1;
@@ -115,7 +119,20 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       ctx.fillStyle = `rgba(208, 203, 194, ${subtitleAlpha})`;
       ctx.font = "20px Trebuchet MS";
       ctx.fillText("Returning to the main menu...", this.canvas.width / 2, this.canvas.height / 2 + 28);
+      const buttonW = 188;
+      const buttonH = 34;
+      const buttonX = this.canvas.width * 0.5 - buttonW * 0.5;
+      const buttonY = this.canvas.height * 0.5 + 54;
+      game.uiRects.gameOverStatsButton = { x: buttonX, y: buttonY, w: buttonW, h: buttonH };
+      ctx.fillStyle = `rgba(39, 53, 79, ${0.92 * subtitleAlpha})`;
+      ctx.fillRect(buttonX, buttonY, buttonW, buttonH);
+      ctx.strokeStyle = `rgba(232, 226, 211, ${0.8 * subtitleAlpha})`;
+      ctx.strokeRect(buttonX, buttonY, buttonW, buttonH);
+      ctx.fillStyle = `rgba(243, 239, 227, ${subtitleAlpha})`;
+      ctx.font = "bold 15px Trebuchet MS";
+      ctx.fillText(game.statsPanelOpen ? "Hide Run Stats" : "View Run Stats", this.canvas.width / 2, buttonY + 22);
       ctx.textAlign = "left";
+      if (game.statsPanelOpen) this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
     }
   }
 }

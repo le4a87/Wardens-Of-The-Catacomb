@@ -1,6 +1,6 @@
 # Task Board
 
-Branch: `feature/minotaur-enemy-tactics`
+Branch: `qol`
 
 Use this file as the working board for the current branch. Keep tasks finite, testable, and tied to concrete validation steps. When the feature is complete, roll durable summaries into the long-lived docs and reset this file to a clean state.
 

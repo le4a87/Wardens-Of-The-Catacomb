@@ -350,6 +350,14 @@ export function resolveCombatAndDrops({
       const wasFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy);
       if (wasFriendly && typeof game.triggerExplodingDeath === "function") game.triggerExplodingDeath(enemy);
       if (wasFriendly) return false;
+      if (typeof game.recordEnemyKill === "function") game.recordEnemyKill(enemy);
+      if (enemy.isFloorBoss && typeof game.recordRunBossKill === "function") game.recordRunBossKill();
+      if (enemy.lastDamageType === "fire" && typeof game.recordClassSpecificStat === "function") {
+        game.recordClassSpecificStat("ranger", "fireArrowKills", 1);
+      }
+      if (enemy.pendingExecuteKill && typeof game.recordClassSpecificStat === "function") {
+        game.recordClassSpecificStat("warrior", "executeKills", 1);
+      }
       game.triggerWarriorMomentumOnKill();
       if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
       else if (enemy.type === "armor") game.score += 40;
@@ -407,6 +415,7 @@ export function resolveCombatAndDrops({
       else if (game.isGoldDrop(drop)) {
         const amount = Math.max(1, Math.floor(drop.amount * game.getGoldFindMultiplier()));
         game.gold += amount;
+        if (typeof game.recordRunGoldEarned === "function") game.recordRunGoldEarned(amount);
         game.score += amount;
         game.spawnFloatingText(game.player.x, game.player.y - 30, `+${amount}g`, "#f2d76b", 0.75, 14);
       }
