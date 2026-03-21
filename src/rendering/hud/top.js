@@ -7,16 +7,11 @@ export function drawHud(renderer, game, layout) {
   ctx.fillStyle = "#f2efe3";
   ctx.font = "16px Trebuchet MS";
   ctx.fillText(`Score: ${game.score}`, 14, 24);
-  ctx.fillText(`Time: ${formatTime(game.time)}`, 200, 24);
-  ctx.fillText(`Floor: ${game.floor}`, 360, 24);
-  ctx.fillText(`Class: ${game.classSpec?.label || "Unknown"}`, 468, 24);
-  if (game.isNecromancerClass && game.isNecromancerClass()) {
-    ctx.fillStyle = "#8fc2ff";
-    ctx.fillText(`Pets: ${game.getControlledUndeadCount()}/${game.getNecromancerControlCap()}`, 690, 24);
-  }
+  ctx.fillText(`Time: ${formatTime(game.time)}`, 192, 24);
+  ctx.fillText(`Floor: ${game.floor}`, 340, 24);
   if (game.networkEnabled) {
     ctx.fillStyle = game.networkRole === "Controller" ? "#8fe3a2" : "#dfc670";
-    ctx.fillText(`Net: ${game.networkRole || "Connected"}`, game.isNecromancerClass && game.isNecromancerClass() ? 830 : 690, 24);
+    ctx.fillText(`Net: ${game.networkRole || "Connected"}`, 470, 24);
   }
 
   const objective = typeof game.getFloorObjectiveText === "function" ? game.getFloorObjectiveText() : "";

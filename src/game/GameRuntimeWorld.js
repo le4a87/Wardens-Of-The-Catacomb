@@ -44,6 +44,8 @@ import {
   buyUpgrade,
   toggleShop,
   toggleSkillTree,
+  toggleStatsPanel,
+  setStatsPanelView,
   pointInRect,
   handleUiClicks
 } from "./world/uiEconomy.js";
@@ -207,6 +209,14 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   toggleSkillTree(open) {
     toggleSkillTree(this, open);
+  }
+
+  toggleStatsPanel(open) {
+    toggleStatsPanel(this, open);
+  }
+
+  setStatsPanelView(view) {
+    return setStatsPanelView(this, view);
   }
 
   pointInRect(x, y, rect) {

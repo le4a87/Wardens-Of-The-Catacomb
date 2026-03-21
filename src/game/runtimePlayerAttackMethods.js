@@ -15,6 +15,7 @@ export const runtimePlayerAttackMethods = {
     const count = volleyAngles.length;
     const releaseTailOffset = 7;
     const damageMultipliers = this.getMultiarrowArrowDamageMultipliers();
+    if (typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("ranger", "shotsFired", count);
     if (typeof this.recordPlayerShotTelemetry === "function") {
       const liveAimX = Number.isFinite(this.input?.mouse?.worldX) ? this.input.mouse.worldX : null;
       const liveAimY = Number.isFinite(this.input?.mouse?.worldY) ? this.input.mouse.worldY : null;
@@ -105,6 +106,7 @@ export const runtimePlayerAttackMethods = {
         const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
         if (!enemy.isBoss && chance > 0 && enemy.hp > 0 && hpRatio > 0 && hpRatio <= threshold && Math.random() < chance) {
           enemy.hp = 0;
+          enemy.pendingExecuteKill = true;
           executeProc = true;
         }
         if (hpBefore > 0 && enemy.hp <= 0 && this.warriorRageActiveTimer > 0 && (!this.isEnemyFriendlyToPlayer || !this.isEnemyFriendlyToPlayer(enemy))) {
@@ -147,6 +149,7 @@ export const runtimePlayerAttackMethods = {
     }
     if (!this.isFireArrowUnlocked() || this.player.fireArrowCooldown > 0) return;
     this.player.fireArrowCooldown = this.config.fireArrow.cooldown;
+    if (typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("ranger", "shotsFired", 1);
     const origin = this.getBowMuzzleOrigin(dx, dy);
     const releaseTailOffset = 8;
     this.fireArrows.push({

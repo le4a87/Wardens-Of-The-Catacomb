@@ -34,6 +34,10 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.skillExplodingDeathNode = null;
     game.uiRects.statsButton = null;
     game.uiRects.statsClose = null;
+    game.uiRects.statsRunTab = null;
+    game.uiRects.statsCharacterTab = null;
+    game.uiRects.gameOverStatsButton = null;
+    game.uiRects.hudAbilityWidget = null;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawSidebarBackground(layout);
@@ -96,10 +100,10 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     this.drawBossSpeechCallout(game, cameraX, cameraY, layout);
     this.drawHud(game, layout);
     const minimapBottom = this.drawMinimap(game, layout);
-    this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
+    if (!game.gameOver || !game.statsPanelOpen) this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
     if (game.shopOpen) this.drawShopMenu(game, layout);
     if (game.skillTreeOpen) this.drawSkillTreeMenu(game, layout);
-    if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.gameOver) this.drawPausedOverlay(layout);
+    if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.statsPanelOpen && !game.gameOver) this.drawPausedOverlay(layout);
 
     if (game.gameOver) {
       const progress = typeof game.getDeathTransitionProgress === "function" ? game.getDeathTransitionProgress() : 1;
@@ -114,7 +118,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       ctx.fillText("GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 18);
       ctx.fillStyle = `rgba(208, 203, 194, ${subtitleAlpha})`;
       ctx.font = "20px Trebuchet MS";
-      ctx.fillText("Returning to the main menu...", this.canvas.width / 2, this.canvas.height / 2 + 28);
+      ctx.fillText("Run complete. Continue or wait to return to the menu.", this.canvas.width / 2, this.canvas.height / 2 + 28);
       ctx.textAlign = "left";
     }
   }
