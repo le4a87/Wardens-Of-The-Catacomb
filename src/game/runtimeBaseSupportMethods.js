@@ -1,105 +1,4 @@
 export const runtimeBaseSupportMethods = {
-  ensureRunStats() {
-    if (!this.runStats || typeof this.runStats !== "object") {
-      this.runStats = {
-        totalKills: 0,
-        bossKills: 0,
-        floorsCleared: 0,
-        damageDealt: 0,
-        damageTaken: 0,
-        healingReceived: 0,
-        goldEarned: 0,
-        goldSpent: 0,
-        killsByEnemyType: {},
-        killsByFloor: {},
-        classSpecific: {
-          ranger: { shotsFired: 0, fireArrowKills: 0 },
-          warrior: { executeKills: 0, frenzies: 0 },
-          necromancer: { undeadCharmed: 0, undeadHealing: 0 }
-        }
-      };
-    }
-    if (!this.runStats.killsByEnemyType || typeof this.runStats.killsByEnemyType !== "object") this.runStats.killsByEnemyType = {};
-    if (!this.runStats.killsByFloor || typeof this.runStats.killsByFloor !== "object") this.runStats.killsByFloor = {};
-    if (!this.runStats.classSpecific || typeof this.runStats.classSpecific !== "object") this.runStats.classSpecific = {};
-    if (!this.runStats.classSpecific.ranger || typeof this.runStats.classSpecific.ranger !== "object") {
-      this.runStats.classSpecific.ranger = { shotsFired: 0, fireArrowKills: 0 };
-    }
-    if (!this.runStats.classSpecific.warrior || typeof this.runStats.classSpecific.warrior !== "object") {
-      this.runStats.classSpecific.warrior = { executeKills: 0, frenzies: 0 };
-    }
-    if (!this.runStats.classSpecific.necromancer || typeof this.runStats.classSpecific.necromancer !== "object") {
-      this.runStats.classSpecific.necromancer = { undeadCharmed: 0, undeadHealing: 0 };
-    }
-    const floorKey = `${Math.max(1, Math.floor(Number.isFinite(this.floor) ? this.floor : 1))}`;
-    if (!Number.isFinite(this.runStats.killsByFloor[floorKey])) this.runStats.killsByFloor[floorKey] = 0;
-    if (!Number.isFinite(this.runStats.totalKills)) this.runStats.totalKills = 0;
-    if (!Number.isFinite(this.runStats.bossKills)) this.runStats.bossKills = 0;
-    if (!Number.isFinite(this.runStats.floorsCleared)) this.runStats.floorsCleared = 0;
-    if (!Number.isFinite(this.runStats.damageDealt)) this.runStats.damageDealt = 0;
-    if (!Number.isFinite(this.runStats.damageTaken)) this.runStats.damageTaken = 0;
-    if (!Number.isFinite(this.runStats.healingReceived)) this.runStats.healingReceived = 0;
-    if (!Number.isFinite(this.runStats.goldEarned)) this.runStats.goldEarned = 0;
-    if (!Number.isFinite(this.runStats.goldSpent)) this.runStats.goldSpent = 0;
-    return this.runStats;
-  },
-
-  recordEnemyKill(enemy) {
-    const stats = this.ensureRunStats();
-    const enemyType = typeof enemy?.type === "string" && enemy.type.length > 0 ? enemy.type : "unknown";
-    const floorKey = `${Math.max(1, Math.floor(Number.isFinite(this.floor) ? this.floor : 1))}`;
-    stats.totalKills += 1;
-    stats.killsByEnemyType[enemyType] = (stats.killsByEnemyType[enemyType] || 0) + 1;
-    stats.killsByFloor[floorKey] = (stats.killsByFloor[floorKey] || 0) + 1;
-  },
-
-  recordClassSpecificStat(classKey, statKey, amount = 1) {
-    const stats = this.ensureRunStats();
-    if (!stats.classSpecific[classKey] || typeof stats.classSpecific[classKey] !== "object") return;
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    stats.classSpecific[classKey][statKey] = (stats.classSpecific[classKey][statKey] || 0) + amount;
-  },
-
-  recordRunDamageDealt(amount) {
-    const stats = this.ensureRunStats();
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    stats.damageDealt += amount;
-  },
-
-  recordRunDamageTaken(amount) {
-    const stats = this.ensureRunStats();
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    stats.damageTaken += amount;
-  },
-
-  recordRunHealingReceived(amount) {
-    const stats = this.ensureRunStats();
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    stats.healingReceived += amount;
-  },
-
-  recordRunGoldEarned(amount) {
-    const stats = this.ensureRunStats();
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    stats.goldEarned += amount;
-  },
-
-  recordRunGoldSpent(amount) {
-    const stats = this.ensureRunStats();
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    stats.goldSpent += amount;
-  },
-
-  recordRunBossKill() {
-    const stats = this.ensureRunStats();
-    stats.bossKills += 1;
-  },
-
-  recordRunFloorCleared() {
-    const stats = this.ensureRunStats();
-    stats.floorsCleared += 1;
-  },
-
   getMapGrowthFactorForFloor(targetFloor) {
     const progression = this.config?.progression || {};
     const safeFloor = Number.isFinite(targetFloor) ? Math.max(2, Math.floor(targetFloor)) : 2;
@@ -145,7 +44,6 @@ export const runtimeBaseSupportMethods = {
     this.player.health = Math.min(this.player.maxHealth, this.player.health + amount);
     if (this.player.health > before) {
       const healed = this.player.health - before;
-      if (typeof this.recordRunHealingReceived === "function") this.recordRunHealingReceived(healed);
       this.markPlayerHealthBarVisible();
       this.spawnFloatingText(this.player.x, this.player.y - 26, `+${Math.max(1, Math.round(healed))}`, "#79e59a", 0.8, 14);
     }
@@ -158,7 +56,6 @@ export const runtimeBaseSupportMethods = {
 
   applyPlayerDamage(amount) {
     if (amount <= 0) return;
-    if (typeof this.recordRunDamageTaken === "function") this.recordRunDamageTaken(amount);
     this.spawnFloatingText(this.player.x, this.player.y - 18, `-${Math.round(amount)}`, "#ef6d6d");
     this.player.health = Math.max(0, this.player.health - amount);
     this.markPlayerHealthBarVisible();
@@ -172,7 +69,6 @@ export const runtimeBaseSupportMethods = {
     this.shopOpen = false;
     this.skillTreeOpen = false;
     this.statsPanelOpen = false;
-    this.statsPanelPausedGame = false;
     this.deathTransition.active = true;
     this.deathTransition.elapsed = 0;
     this.deathTransition.returnTriggered = false;
@@ -181,7 +77,6 @@ export const runtimeBaseSupportMethods = {
 
   updateDeathTransition(dt) {
     if (!this.deathTransition.active) return false;
-    if (this.statsPanelOpen) return true;
     this.deathTransition.elapsed = Math.min(
       this.deathTransitionDuration,
       this.deathTransition.elapsed + Math.max(0, Number.isFinite(dt) ? dt : 0)

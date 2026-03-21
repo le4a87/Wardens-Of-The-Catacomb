@@ -18,13 +18,12 @@ export function cleanupCurrentGame(currentGame) {
   return null;
 }
 
-export function returnToMenu({ stopNetworkSession, cleanupCurrentGame, layout, menuPanel, selector, music, showMenu }) {
+export function returnToMenu({ stopNetworkSession, cleanupCurrentGame, layout, menuPanel, selector, music }) {
   stopNetworkSession();
   cleanupCurrentGame();
   if (layout) layout.classList.remove("is-splash");
   if (menuPanel) menuPanel.hidden = false;
-  if (typeof showMenu === "function") showMenu();
-  else if (selector) selector.hidden = false;
+  if (selector) selector.hidden = false;
   music.playMenuMusic();
 }
 
@@ -43,7 +42,6 @@ export function dismissSplash({
   currentGame,
   menuPanel,
   music,
-  showMenu,
   startFallbackGame
 }) {
   if (!splashActive || splashDismissed) return false;
@@ -55,8 +53,7 @@ export function dismissSplash({
   clearSplashRender();
   if (selector && !currentGame) {
     if (menuPanel) menuPanel.hidden = false;
-    if (typeof showMenu === "function") showMenu();
-    else selector.hidden = false;
+    selector.hidden = false;
     music.playMenuMusic();
     return true;
   }

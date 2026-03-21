@@ -8,7 +8,7 @@ import { runtimeBaseSupportMethods } from "./runtimeBaseSupportMethods.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
 import { runtimeCombatStatsMethods } from "./runtimeCombatStatsMethods.js";
 import { runtimeFloorBossMethods } from "./runtimeFloorBossMethods.js";
-import { createNecromancerBeamState, createPlayerState, createRunStats, createSkillState, createUpgradeState } from "./runtimeBaseStateFactories.js";
+import { createNecromancerBeamState, createPlayerState, createSkillState, createUpgradeState } from "./runtimeBaseStateFactories.js";
 
 export class GameRuntimeBase {
   constructor(canvas, options = {}) {
@@ -55,13 +55,14 @@ export class GameRuntimeBase {
     this.skillTreeOpen = false;
     this.time = 0;
     this.skillPoints = 0;
-    this.statsPanelOpen = false; this.statsPanelView = "run"; this.statsPanelPausedGame = false;
+    this.statsPanelOpen = false;
     this.activePlayerCount = 1;
     this.passiveRegenTimer = 2;
     this.levelWeaponDamageBonus = 0;
     this.floorBoss = this.createFloorBossState(this.floor);
     this.lastFloorBossFeedbackPhase = null;
     this.feedbackAudioContext = null;
+
     this.bullets = [];
     this.fireArrows = [];
     this.fireZones = [];
@@ -80,7 +81,6 @@ export class GameRuntimeBase {
     this.floatingTexts = [];
     this.recentPlayerShots = [];
     this.skills = createSkillState();
-    this.runStats = createRunStats();
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
     this.warriorRageCooldownTimer = 0;
@@ -165,8 +165,9 @@ export class GameRuntimeBase {
     if (this.deathTransition.active) return;
     this.gameOver = true;
     this.paused = false;
-    this.shopOpen = false; this.skillTreeOpen = false;
-    this.statsPanelOpen = false; this.statsPanelPausedGame = false;
+    this.shopOpen = false;
+    this.skillTreeOpen = false;
+    this.statsPanelOpen = false;
     this.deathTransition.active = true;
     this.deathTransition.elapsed = 0;
     this.deathTransition.returnTriggered = false;
@@ -233,7 +234,6 @@ export class GameRuntimeBase {
   }
 
   advanceToNextFloor() {
-    if (typeof this.recordRunFloorCleared === "function") this.recordRunFloorCleared();
     const controlledUndead = (this.enemies || [])
       .filter((enemy) => enemy?.isControlledUndead && (enemy.hp || 0) > 0 && !(enemy.type === "skeleton_warrior" && enemy.collapsed))
       .map((enemy) => ({ ...enemy }));
@@ -291,7 +291,6 @@ export class GameRuntimeBase {
     this.skillPoints = 0;
     this.gold = 0;
     this.score = 0;
-    this.runStats = createRunStats();
     this.levelWeaponDamageBonus = 0;
     this.player.maxHealth = Number.isFinite(this.classSpec.baseMaxHealth) ? this.classSpec.baseMaxHealth : this.config.player.maxHealth;
     this.player.health = this.player.maxHealth;
@@ -475,7 +474,6 @@ export class GameRuntimeBase {
     enemy.hpBarTimer = this.config.enemy.hpBarDuration;
     enemy.contactAttackCooldown = 0;
     this.applyControlledUndeadBonuses(enemy);
-    if (typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("necromancer", "undeadCharmed", 1);
     return true;
   }
 
@@ -484,11 +482,11 @@ export class GameRuntimeBase {
     const before = enemy.hp;
     enemy.hp = Math.min(enemy.maxHp, enemy.hp + amount);
     if (enemy.hp > before) {
-      if (typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("necromancer", "undeadHealing", enemy.hp - before);
       enemy.hpBarTimer = this.config.enemy.hpBarDuration;
       this.spawnFloatingText(enemy.x, enemy.y - enemy.size * 0.7, `+${Math.max(1, Math.round(enemy.hp - before))}`, "#89b7ff", 0.8, 13);
     }
   }
+
 }
 
 Object.assign(GameRuntimeBase.prototype, runtimeBasePlacementMethods);

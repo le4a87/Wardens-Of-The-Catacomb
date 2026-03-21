@@ -5,7 +5,6 @@ export function handleActionMessage(room, action) {
   if (kind === "escape") {
     if (sim.shopOpen) sim.toggleShop(false);
     else if (sim.skillTreeOpen) sim.toggleSkillTree(false);
-    else if (sim.statsPanelOpen) sim.toggleStatsPanel(false);
     else if (!sim.gameOver) sim.paused = !sim.paused;
     return;
   }
@@ -26,15 +25,11 @@ export function handleActionMessage(room, action) {
     return;
   }
   if (kind === "toggleStats") {
-    sim.toggleStatsPanel();
+    sim.statsPanelOpen = !sim.statsPanelOpen;
     return;
   }
   if (kind === "closeStats") {
-    sim.toggleStatsPanel(false);
-    return;
-  }
-  if (kind === "setStatsView" && (action.view === "run" || action.view === "character")) {
-    sim.statsPanelView = action.view;
+    sim.statsPanelOpen = false;
     return;
   }
   if (kind === "buyUpgrade" && typeof action.key === "string") {
@@ -58,8 +53,7 @@ export function handleClientMessage(raw, context) {
     sanitizeInput,
     serializeState,
     buildJoinKeyframeState,
-    safeSend,
-    leaderboardStore
+    safeSend
   } = context;
 
   let msg = null;
@@ -72,35 +66,6 @@ export function handleClientMessage(raw, context) {
 
   if (!msg || typeof msg !== "object" || typeof msg.type !== "string") {
     safeSend(ws, { type: "error", message: "Malformed message" });
-    return;
-  }
-
-  if (msg.type === "leaderboard.get") {
-    safeSend(ws, {
-      type: "leaderboard.rows",
-      requestId: typeof msg.requestId === "string" ? msg.requestId : "",
-      rows: leaderboardStore ? leaderboardStore.getRows() : []
-    });
-    return;
-  }
-
-  if (msg.type === "leaderboard.submit") {
-    const run = msg.run && typeof msg.run === "object" ? msg.run : null;
-    if (!run) {
-      safeSend(ws, {
-        type: "error",
-        requestId: typeof msg.requestId === "string" ? msg.requestId : "",
-        message: "Missing leaderboard run payload"
-      });
-      return;
-    }
-    const rows = leaderboardStore ? leaderboardStore.submitRun(run) : [];
-    safeSend(ws, {
-      type: "leaderboard.rows",
-      requestId: typeof msg.requestId === "string" ? msg.requestId : "",
-      accepted: true,
-      rows
-    });
     return;
   }
 

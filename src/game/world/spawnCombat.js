@@ -128,11 +128,7 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
   if (!Number.isFinite(effective) || effective <= 0) return;
   const enemyHpBefore = Number.isFinite(enemy.hp) ? Math.max(0, enemy.hp) : 0;
   const dealt = Math.min(effective, enemyHpBefore);
-  enemy.lastDamageType = damageType;
   enemy.hp -= effective;
-  if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) && typeof game.recordRunDamageDealt === "function") {
-    game.recordRunDamageDealt(dealt);
-  }
   const lifeLeech = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy) ? 0 : game.getLifeLeechPercent();
   if (lifeLeech > 0 && dealt > 0) {
     game.applyPlayerHealing(Math.max(1, Math.ceil(dealt * lifeLeech)));
