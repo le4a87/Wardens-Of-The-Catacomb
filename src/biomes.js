@@ -29,10 +29,10 @@ const CATACOMB_COLORS = {
 };
 
 const SEWER_COLORS = {
-  floorBase: "#b9bcbc",
-  floorInsetA: "#c9cccc",
-  floorInsetB: "#a9adad",
-  floorStroke: "#7c8585",
+  floorBase: "#8b8f8e",
+  floorInsetA: "#999d9c",
+  floorInsetB: "#7c8080",
+  floorStroke: "#5d6665",
   wallOuter: "#303335",
   wallInner: "#3b4042",
   wallBands: "#4a4f51",
@@ -40,14 +40,14 @@ const SEWER_COLORS = {
   wallAccentMetal: "#7aa862",
   wallMoss: "#5f8a48",
   wallMossDark: "#3f5f2f",
-  sewerWater: "#447b6f",
-  sewerWaterDark: "#29554c",
-  sewerFoam: "rgba(198, 239, 224, 0.32)",
-  sewerPool: "#4e8c7e",
-  sewerPoolDark: "#325a52",
+  sewerWater: "#546347",
+  sewerWaterDark: "#32402a",
+  sewerFoam: "rgba(180, 194, 142, 0.22)",
+  sewerPool: "#5d7253",
+  sewerPoolDark: "#394834",
   grateFrame: "#4d5356",
   grateBars: "#2f3437",
-  rivulet: "#5f9689",
+  rivulet: "#738564",
   breakableShadow: "rgba(0, 0, 0, 0.24)",
   crateFill: "#735235",
   crateStroke: "#98724e",
@@ -140,7 +140,8 @@ export const BIOMES = {
       armorStandVariant: "sewer_pool",
       animatedArmorVariant: "gel_cube",
       armorStandPlacementTiles: ["o"],
-      armorStandSize: 24
+      armorStandSize: 24,
+      armorWakeRadiusTiles: 1
     }
   }
 };

@@ -38,14 +38,17 @@ export const runtimeBaseSupportMethods = {
     this.player.hpBarTimer = this.config.player.hpBarDuration;
   },
 
-  applyPlayerHealing(amount) {
+  applyPlayerHealing(amount, options = {}) {
     if (amount <= 0) return;
+    const suppressText = !!options.suppressText;
     const before = this.player.health;
     this.player.health = Math.min(this.player.maxHealth, this.player.health + amount);
     if (this.player.health > before) {
       const healed = this.player.health - before;
       this.markPlayerHealthBarVisible();
-      this.spawnFloatingText(this.player.x, this.player.y - 26, `+${Math.max(1, Math.round(healed))}`, "#79e59a", 0.8, 14);
+      if (!suppressText) {
+        this.spawnFloatingText(this.player.x, this.player.y - 26, `+${Math.max(1, Math.round(healed))}`, "#79e59a", 0.8, 14);
+      }
     }
   },
 

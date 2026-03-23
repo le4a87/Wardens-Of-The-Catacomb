@@ -51,7 +51,6 @@ function serializeEnemy(room, e) {
     size: e.size,
     hp: e.hp,
     maxHp: e.maxHp,
-    hpBarTimer: e.hpBarTimer || 0
     hpBarTimer: e.hpBarTimer || 0,
     shotWindupTimer: e.shotWindupTimer || 0,
     collapsed: !!e.collapsed,

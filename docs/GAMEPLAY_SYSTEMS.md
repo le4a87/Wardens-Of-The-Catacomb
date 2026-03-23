@@ -46,6 +46,47 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
   - class-based offensive scaling
   - class-specific passive stat growth
 
+## Biomes
+- Floors resolve through a biome layer before generation, trap placement, breakable placement, and rendering.
+- The current biome cycle is:
+  - floors `1-3`: `Catacomb`
+  - floor `4`: `Sewer`
+  - then repeat every four floors
+- Biomes also contribute to the map signature used by sync/runtime systems, so clients stay aligned on floor presentation and hazards.
+
+### Catacomb
+- Uses the original crypt room-and-corridor layout.
+- Visual identity:
+  - dark stone floors and walls
+  - wooden crates and boxes
+  - standard dungeon door treatment
+- Trap profile:
+  - classic wall arrow traps
+- Encounter profile:
+  - baseline spawn rules with no biome-specific modifiers
+
+### Sewer
+- Uses a dedicated sewer layout with three long flooded halls, connecting offshoot corridors, and rooms with at least two entrances.
+- Visual identity:
+  - dark grey walls with green moss patches
+  - darker grey floor tiles
+  - dark brown-green sludge water in flooded halls
+  - grates, rivulets, and room pool decals
+  - sewer breakables are metal trashcans and crates
+- Trap profile:
+  - wall traps become poison traps
+  - poison traps lay a line of acid pools instead of firing projectiles
+  - acid lingers for `5s` and uses a reduced damage multiplier relative to base armor-enemy contact damage
+- Encounter profile:
+  - rat archers are `3x` more likely to spawn when they are eligible
+  - rat archer active-cap is increased by `5`
+  - armor stands are reskinned as small sewer pools
+  - animated armor is reskinned as a gelatinous cube / moving water pool
+  - disguised sewer cubes do not activate until the player is within `1` tile
+- Terrain rules:
+  - flooded hall tiles slow player movement by `20%`
+  - room pools are visual decals only, though some pool tiles hide disguised cube enemies
+
 ## Drops and Economy
 - Gold drops scale with player level and floor level.
 - Health drops use a computed drop-rate helper instead of a flat static chance.

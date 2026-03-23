@@ -1,4 +1,108 @@
 export const runtimeSceneBossDrawMethods = {
+  drawLeprechaunPot(screenX, screenY, time = 0) {
+    const ctx = this.ctx;
+    const pulse = Math.sin(time * 4.2) * 0.5 + 0.5;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.36)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + 10, 20, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const glow = ctx.createRadialGradient(screenX, screenY + 2, 4, screenX, screenY + 2, 28);
+    glow.addColorStop(0, `rgba(182, 255, 115, ${0.2 + pulse * 0.18})`);
+    glow.addColorStop(1, "rgba(64, 120, 36, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY + 2, 28, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#2b2418";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + 2, 18, 13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#4c3a21";
+    ctx.fillRect(screenX - 16, screenY - 7, 32, 18);
+    ctx.fillStyle = "#cfb24c";
+    ctx.fillRect(screenX - 18, screenY - 9, 36, 4);
+    ctx.strokeStyle = "#e7d67c";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - 4, 6, Math.PI, 0);
+    ctx.stroke();
+
+    ctx.fillStyle = "#f2d45a";
+    for (let i = 0; i < 6; i++) {
+      const angle = i * 0.9 + time * 0.8;
+      const coinX = screenX + Math.cos(angle) * (5 + (i % 3) * 3);
+      const coinY = screenY - 8 + Math.sin(angle * 1.2) * 2 + (i % 2);
+      ctx.beginPath();
+      ctx.ellipse(coinX, coinY, 4, 2.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+
+  drawBossSpeechCallout(game, cameraX, cameraY, layout) {
+    const boss = game.floorBoss;
+    const text = typeof boss?.speechText === "string" ? boss.speechText.trim() : "";
+    if (!text) return;
+
+    const sourceX = Number.isFinite(boss?.speechSourceX) ? boss.speechSourceX : game.player?.x || 0;
+    const sourceY = Number.isFinite(boss?.speechSourceY) ? boss.speechSourceY : game.player?.y || 0;
+    const screenX = sourceX - cameraX;
+    const screenY = sourceY - cameraY - 56;
+    const maxWidth = Math.min(320, Math.max(180, layout.playW - 48));
+    const ctx = this.ctx;
+
+    ctx.save();
+    ctx.font = "bold 16px Trebuchet MS";
+    const words = text.split(/\s+/);
+    const lines = [];
+    let line = "";
+    for (const word of words) {
+      const testLine = line ? `${line} ${word}` : word;
+      if (ctx.measureText(testLine).width > maxWidth - 24 && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = testLine;
+      }
+    }
+    if (line) lines.push(line);
+
+    const bubbleW = Math.min(
+      maxWidth,
+      Math.max(120, ...lines.map((entry) => Math.ceil(ctx.measureText(entry).width) + 24))
+    );
+    const bubbleH = lines.length * 18 + 18;
+    const bubbleX = Math.max(12, Math.min(layout.playW - bubbleW - 12, screenX - bubbleW * 0.5));
+    const bubbleY = Math.max(layout.topHudH + 8, screenY - bubbleH);
+
+    ctx.fillStyle = "rgba(18, 22, 16, 0.92)";
+    ctx.strokeStyle = "rgba(202, 241, 150, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(bubbleX, bubbleY, bubbleW, bubbleH, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    const tailTargetX = Math.max(bubbleX + 18, Math.min(bubbleX + bubbleW - 18, screenX));
+    const tailBaseY = bubbleY + bubbleH;
+    ctx.beginPath();
+    ctx.moveTo(tailTargetX - 10, tailBaseY - 1);
+    ctx.lineTo(tailTargetX + 10, tailBaseY - 1);
+    ctx.lineTo(screenX, Math.min(this.canvas.height - 36, screenY + 18));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#f2f7da";
+    ctx.textAlign = "center";
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], bubbleX + bubbleW * 0.5, bubbleY + 22 + i * 18);
+    }
+    ctx.textAlign = "left";
+    ctx.restore();
+  },
+
   drawNecromancer(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size / 2;

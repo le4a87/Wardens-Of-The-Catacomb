@@ -414,11 +414,12 @@ export function stepGame(game, dt, controls = {}) {
   }
 
   let armorActivations = 0;
+  const armorWakeRadius = typeof game.getArmorWakeRadius === "function" ? game.getArmorWakeRadius() : game.config.enemy.armorWakeRadius;
   for (const stand of game.armorStands) {
     if (!stand.animated || stand.activated) continue;
     if (floorBossActive) break;
     if (game.enemies.length >= activeEnemyCap || armorActivations >= 4) break;
-    if (vecLength(game.player.x - stand.x, game.player.y - stand.y) < game.config.enemy.armorWakeRadius) {
+    if (vecLength(game.player.x - stand.x, game.player.y - stand.y) < armorWakeRadius) {
       stand.activated = true;
       game.enemies.push(game.spawnAnimatedArmor(stand.x, stand.y));
       armorActivations += 1;
