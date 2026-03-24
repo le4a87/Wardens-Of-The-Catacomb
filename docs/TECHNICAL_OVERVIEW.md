@@ -107,6 +107,9 @@ This document summarizes the current high-level architecture and validation work
   - branch closeout gate that runs all grouped validation suites
 
 ### Browser Validation Coverage
+- `validate:solo-xp`
+  - verifies that single-player kill rewards still grant XP/score
+  - now fills the required local player handle, uses the solo character-select path, and spawns a deterministic hostile target so the check is not floor-generation dependent
 - `validate:network-join`
   - verifies real browser room join, authoritative spawn adoption, and post-join movement
 - `validate:network-combat`
@@ -123,6 +126,9 @@ This document summarizes the current high-level architecture and validation work
   - runs the audio validator in explicit focus-cycle mode and records focus/visibility telemetry; use `--headed` when a real desktop session is available and strict blur/focus assertions are desired
 - `validate:network-ui`
   - verifies that controller clients can open and interact with skill/shop UI paths in live network sessions
+- `validate:network-pause`
+  - verifies pause-owner shop flow pauses the room without opening overlays on other clients
+  - checks that the passive `<handle> paused the game.` banner clears when the pause owner unpauses
 - `perf:network-browser`
   - captures active-tab frame cadence, snapshot backlog, correction pressure, and movement-latency proxies
 - `validate:dev-start`
