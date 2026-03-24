@@ -130,17 +130,21 @@ async function main() {
     await page.locator("#mode-select").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#menu-single").click();
     await page.locator("#character-select").waitFor({ state: "visible", timeout: 10000 });
-    await page.locator('[data-class-option="archer"]').click();
+    await page.locator("#character-select #net-player-name").fill("SoloXpTest");
+    await page.locator('#character-select [data-class-option="archer"]').click();
     await page.locator("#start-game").click();
 
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
       return !!state && state.networkReady === false && Number.isFinite(state.player?.xp);
-    }, { timeout: 15000 });
+    }, null, { timeout: 15000 });
 
     lastState = await getDebugState(page);
     const baselineXp = lastState?.player?.xp || 0;
     const baselineScore = lastState?.player?.score || 0;
+
+    const spawnResult = await runDebug(page, "spawnHostileNearPlayer");
+    assert(spawnResult?.ok === true, `failed to spawn a hostile for XP validation: ${JSON.stringify(spawnResult)}`);
 
     const damageResult = await runDebug(page, "damageNearestHostile", { amount: 9999 });
     assert(damageResult?.ok === true, `failed to damage a hostile for XP validation: ${JSON.stringify(damageResult)}`);
@@ -167,6 +171,7 @@ async function main() {
           finalXp: lastState?.player?.xp || 0,
           baselineScore,
           finalScore: lastState?.player?.score || 0,
+          spawnResult,
           damageResult
         },
         null,
@@ -178,6 +183,7 @@ async function main() {
       finalXp: lastState?.player?.xp || 0,
       baselineScore,
       finalScore: lastState?.player?.score || 0,
+      spawnResult,
       successPath
     }, null, 2));
   } catch (error) {

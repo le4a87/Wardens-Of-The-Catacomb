@@ -48,6 +48,7 @@ import {
   sanitizePlayerHandle,
   submitLocalRunToLeaderboard
 } from "./src/leaderboard/leaderboardClient.js";
+import { spawnTreasureGoblin } from "./src/game/enemySpawnFactories.js";
 
 const canvas = document.getElementById("game");
 const layout = document.querySelector(".layout");
@@ -477,6 +478,42 @@ if (typeof window !== "undefined") {
     const game = currentGame;
     if (!game) return { ok: false, error: "no active game" };
     if (typeof action !== "string" || !action) return { ok: false, error: "missing action" };
+    if (action === "spawnHostileNearPlayer") {
+      const offsets = [
+        [96, 0],
+        [-96, 0],
+        [0, 96],
+        [0, -96],
+        [144, 0],
+        [-144, 0]
+      ];
+      const playerX = Number.isFinite(game.player?.x) ? game.player.x : 0;
+      const playerY = Number.isFinite(game.player?.y) ? game.player.y : 0;
+      const radius = Math.max(12, ((game.player?.size || 20) * 0.5));
+      let spawnX = playerX + offsets[0][0];
+      let spawnY = playerY + offsets[0][1];
+      for (const [dx, dy] of offsets) {
+        const candidateX = playerX + dx;
+        const candidateY = playerY + dy;
+        const walkable = typeof game.isPositionWalkable === "function"
+          ? game.isPositionWalkable(candidateX, candidateY, radius, true)
+          : true;
+        if (!walkable) continue;
+        spawnX = candidateX;
+        spawnY = candidateY;
+        break;
+      }
+      const enemy = spawnTreasureGoblin(game, spawnX, spawnY);
+      if (!Array.isArray(game.enemies)) game.enemies = [];
+      game.enemies.push(enemy);
+      return {
+        ok: true,
+        enemyType: enemy.type,
+        x: enemy.x,
+        y: enemy.y,
+        hp: enemy.hp
+      };
+    }
     if (action === "damageNearestHostile") {
       if (typeof game.applyEnemyDamage !== "function") return { ok: false, error: "damage API unavailable" };
       const playerX = Number.isFinite(game.player?.x) ? game.player.x : 0;
@@ -561,7 +598,7 @@ if (typeof window !== "undefined") {
           hpBarTimer: game.player?.hpBarTimer || 0,
           hpBarVisible: typeof game.showPlayerHealthBar === "function" ? !!game.showPlayerHealthBar() : false,
           level: game.player?.level || 1,
-          xp: game.player?.xp || 0,
+          xp: Number.isFinite(game.experience) ? game.experience : (game.player?.xp || 0),
           score: game.score || 0,
           gold: game.gold || 0,
           classType: game.player?.classType || game.classType || "",

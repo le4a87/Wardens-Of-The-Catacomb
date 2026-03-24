@@ -25,9 +25,13 @@ export function resolveCombatAndDrops({
   const getRewardOwner = (enemy) => {
     const ownerId = typeof enemy?.lastDamageOwnerId === "string" && enemy.lastDamageOwnerId ? enemy.lastDamageOwnerId : null;
     const owner = typeof game.getPlayerEntityById === "function" ? game.getPlayerEntityById(ownerId) : null;
-    if (!owner) return null;
-    if (typeof game.isLivingPlayerEntity === "function" && !game.isLivingPlayerEntity(owner)) return null;
-    return owner;
+    const fallbackOwner = typeof game.isLivingPlayerEntity === "function"
+      ? (game.isLivingPlayerEntity(game.player) ? game.player : null)
+      : game.player;
+    const resolvedOwner = owner || fallbackOwner;
+    if (!resolvedOwner) return null;
+    if (typeof game.isLivingPlayerEntity === "function" && !game.isLivingPlayerEntity(resolvedOwner)) return null;
+    return resolvedOwner;
   };
 
   for (const b of game.bullets) {
