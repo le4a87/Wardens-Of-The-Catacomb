@@ -1,5 +1,30 @@
 import { runtimeSceneBossDrawMethods } from "./runtimeSceneBossDrawMethods.js";
 
+function hexToRgba(color, alpha) {
+  if (typeof color !== "string") return `rgba(158, 184, 255, ${alpha})`;
+  const hex = color.trim();
+  const expanded = hex.length === 4
+    ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+    : hex;
+  const match = /^#([0-9a-f]{6})$/i.exec(expanded);
+  if (!match) return `rgba(158, 184, 255, ${alpha})`;
+  const int = Number.parseInt(match[1], 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getControlledUndeadPalette(enemy) {
+  const accent = typeof enemy?.controlledColor === "string" && enemy.controlledColor ? enemy.controlledColor : "#9eb8ff";
+  return {
+    accent,
+    fillSoft: hexToRgba(accent, 0.45),
+    fillStrong: hexToRgba(accent, 0.92),
+    stroke: hexToRgba(accent, 0.78)
+  };
+}
+
 export const runtimeSceneEnemyDrawMethods = {
   ...runtimeSceneBossDrawMethods,
   drawGhost(enemyOrScreenX, maybeScreenX, maybeScreenY, maybeSize) {
@@ -12,8 +37,9 @@ export const runtimeSceneEnemyDrawMethods = {
     const headRadius = half * 0.58;
     const bodyTop = screenY - size * 0.12;
     const bodyBottom = screenY + half;
+    const controlledPalette = getControlledUndeadPalette(enemy);
 
-    ctx.fillStyle = enemy?.isControlledUndead ? "#9eb8ff" : "#d8f2ff";
+    ctx.fillStyle = enemy?.isControlledUndead ? controlledPalette.fillStrong : "#d8f2ff";
     ctx.beginPath();
     ctx.arc(screenX, screenY - size * 0.2, headRadius, Math.PI, 0);
     ctx.lineTo(screenX + half * 0.82, bodyBottom - 4);
@@ -25,7 +51,7 @@ export const runtimeSceneEnemyDrawMethods = {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = enemy?.isControlledUndead ? "rgba(120, 144, 255, 0.45)" : "rgba(120, 208, 255, 0.45)";
+    ctx.fillStyle = enemy?.isControlledUndead ? controlledPalette.fillSoft : "rgba(120, 208, 255, 0.45)";
     ctx.fillRect(screenX - half * 0.72, bodyTop, half * 1.44, half * 1.15);
   },
 
@@ -210,11 +236,12 @@ export const runtimeSceneEnemyDrawMethods = {
   drawSkeleton(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size / 2;
+    const controlledPalette = getControlledUndeadPalette(enemy);
     ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
     ctx.beginPath();
     ctx.ellipse(screenX, screenY + half * 0.82, half * 0.92, half * 0.35, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "#dfe1df";
+    ctx.strokeStyle = enemy?.isControlledUndead ? controlledPalette.stroke : "#dfe1df";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -227,7 +254,7 @@ export const runtimeSceneEnemyDrawMethods = {
     ctx.moveTo(screenX, screenY + half * 0.68);
     ctx.lineTo(screenX + half * 0.38, screenY + half * 1.02);
     ctx.stroke();
-    ctx.fillStyle = "#f0efe8";
+    ctx.fillStyle = enemy?.isControlledUndead ? controlledPalette.fillStrong : "#f0efe8";
     ctx.beginPath();
     ctx.arc(screenX, screenY - half * 0.44, half * 0.42, 0, Math.PI * 2);
     ctx.fill();

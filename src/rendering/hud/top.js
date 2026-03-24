@@ -1,5 +1,47 @@
 import { formatTime } from "../../utils.js";
 
+function drawMultiplayerNotifications(ctx, game, layout) {
+  const current = game?.multiplayerNotificationCurrent;
+  if (!current?.text) return;
+  const boxW = Math.min(360, layout.playW - 40);
+  const boxH = 24;
+  const boxX = Math.floor((layout.playW - boxW) * 0.5);
+  const boxY = 88;
+  ctx.fillStyle = "rgba(10, 16, 25, 0.92)";
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = "rgba(156, 176, 214, 0.52)";
+  ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
+  ctx.fillStyle = "#eef3ff";
+  ctx.font = "bold 12px Trebuchet MS";
+  ctx.textAlign = "center";
+  ctx.fillText(current.text, boxX + boxW * 0.5, boxY + 16);
+  ctx.textAlign = "left";
+}
+
+function drawPauseOwnerBanner(ctx, game, layout) {
+  if (!game?.networkEnabled || !game?.paused) return;
+  const localId = typeof game.networkLocalPlayerId === "string" ? game.networkLocalPlayerId : null;
+  const pauseOwnerId = typeof game.networkPauseOwnerId === "string" ? game.networkPauseOwnerId : null;
+  if (!pauseOwnerId || !localId || pauseOwnerId === localId) return;
+  const roster = Array.isArray(game.networkRosterPlayers) ? game.networkRosterPlayers : [];
+  const owner = roster.find((player) => player?.id === pauseOwnerId);
+  const handle = typeof owner?.handle === "string" && owner.handle.trim() ? owner.handle.trim() : "Player";
+  const text = `${handle} paused the game.`;
+  const boxW = Math.min(320, layout.playW - 40);
+  const boxH = 24;
+  const boxX = Math.floor((layout.playW - boxW) * 0.5);
+  const boxY = 88;
+  ctx.fillStyle = "rgba(10, 16, 25, 0.92)";
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = "rgba(156, 176, 214, 0.52)";
+  ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
+  ctx.fillStyle = "#eef3ff";
+  ctx.font = "bold 12px Trebuchet MS";
+  ctx.textAlign = "center";
+  ctx.fillText(text, boxX + boxW * 0.5, boxY + 16);
+  ctx.textAlign = "left";
+}
+
 export function drawHud(renderer, game, layout) {
   const ctx = renderer.ctx;
   ctx.fillStyle = "rgba(5, 8, 14, 0.9)";
@@ -7,16 +49,11 @@ export function drawHud(renderer, game, layout) {
   ctx.fillStyle = "#f2efe3";
   ctx.font = "16px Trebuchet MS";
   ctx.fillText(`Score: ${game.score}`, 14, 24);
-  ctx.fillText(`Time: ${formatTime(game.time)}`, 200, 24);
-  ctx.fillText(`Floor: ${game.floor}`, 360, 24);
-  ctx.fillText(`Class: ${game.classSpec?.label || "Unknown"}`, 468, 24);
-  if (game.isNecromancerClass && game.isNecromancerClass()) {
-    ctx.fillStyle = "#8fc2ff";
-    ctx.fillText(`Pets: ${game.getControlledUndeadCount()}/${game.getNecromancerControlCap()}`, 690, 24);
-  }
+  ctx.fillText(`Time: ${formatTime(game.time)}`, 192, 24);
+  ctx.fillText(`Floor: ${game.floor}`, 340, 24);
   if (game.networkEnabled) {
     ctx.fillStyle = game.networkRole === "Controller" ? "#8fe3a2" : "#dfc670";
-    ctx.fillText(`Net: ${game.networkRole || "Connected"}`, game.isNecromancerClass && game.isNecromancerClass() ? 830 : 690, 24);
+    ctx.fillText(`Net: ${game.networkRole || "Connected"}`, 470, 24);
   }
 
   const objective = typeof game.getFloorObjectiveText === "function" ? game.getFloorObjectiveText() : "";
@@ -62,6 +99,9 @@ export function drawHud(renderer, game, layout) {
     ctx.fillText(title, layout.playW / 2, barY - 4 + 12);
     ctx.textAlign = "left";
   }
+
+  drawPauseOwnerBanner(ctx, game, layout);
+  drawMultiplayerNotifications(ctx, game, layout);
 }
 
 export function drawPausedOverlay(renderer, layout) {

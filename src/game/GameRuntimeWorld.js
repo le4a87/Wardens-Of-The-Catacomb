@@ -10,6 +10,7 @@ import {
   moveEnemyTowardPlayer,
   moveEnemyTowardTargetPoint,
   moveWithCollision,
+  moveWithCollisionSubsteps,
   separateEnemyFromPlayer
 } from "./world/navigationCollision.js";
 import {
@@ -44,6 +45,8 @@ import {
   buyUpgrade,
   toggleShop,
   toggleSkillTree,
+  toggleStatsPanel,
+  setStatsPanelView,
   pointInRect,
   handleUiClicks
 } from "./world/uiEconomy.js";
@@ -91,6 +94,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   moveWithCollision(entity, dx, dy) {
     moveWithCollision(this, entity, dx, dy);
+  }
+
+  moveWithCollisionSubsteps(entity, dx, dy, maxStep = 4) {
+    moveWithCollisionSubsteps(this, entity, dx, dy, maxStep);
   }
 
   separateEnemyFromPlayer(enemy) {
@@ -149,8 +156,8 @@ export class GameRuntimeWorld extends GameRuntimeBase {
     return spawnSkeleton(this, x, y, options);
   }
 
-  applyEnemyDamage(enemy, amount, damageType = "physical") {
-    applyEnemyDamage(this, enemy, amount, damageType);
+  applyEnemyDamage(enemy, amount, damageType = "physical", ownerId = null) {
+    applyEnemyDamage(this, enemy, amount, damageType, ownerId);
   }
 
   getEnemySpawnInterval() {
@@ -207,6 +214,14 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   toggleSkillTree(open) {
     toggleSkillTree(this, open);
+  }
+
+  toggleStatsPanel(open) {
+    toggleStatsPanel(this, open);
+  }
+
+  setStatsPanelView(view) {
+    return setStatsPanelView(this, view);
   }
 
   pointInRect(x, y, rect) {

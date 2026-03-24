@@ -1,3 +1,4 @@
+import http from "node:http";
 import { WebSocketServer } from "ws";
 import { buildJoinKeyframeState } from "./net/deltaProtocol.js";
 import { handleClientClose, handleClientMessage } from "./net/clientMessageHandler.js";
@@ -9,8 +10,11 @@ import { average, makeSamplePusher, monotonicNowMs, percentile } from "./net/tel
 import { buildDeltaCollection } from "./net/deltaProtocol.js";
 import { buildMapChunkRows } from "./net/mapChunkStreaming.js";
 import { chooseGameplayTrack } from "./musicCatalog.js";
+import { handleLeaderboardApiRequest } from "./leaderboardApi.js";
+import { LeaderboardStore } from "./leaderboardStore.js";
 
 const PORT = Number.parseInt(process.env.PORT || "8090", 10);
+const HOST = typeof process.env.HOST === "string" && process.env.HOST.trim() ? process.env.HOST.trim() : "";
 const TICK_RATE = Number.parseInt(process.env.TICK_RATE || "60", 10);
 const SNAPSHOT_RATE = Number.parseInt(process.env.SNAPSHOT_RATE || "20", 10);
 const META_BROADCAST_MIN_MS = Number.parseInt(process.env.META_BROADCAST_MIN_MS || "320", 10);
@@ -20,7 +24,7 @@ const MAP_CHUNK_PUSH_MS = Number.parseInt(process.env.MAP_CHUNK_PUSH_MS || "120"
 const DELTA_KEYFRAME_EVERY = Number.parseInt(process.env.DELTA_KEYFRAME_EVERY || "30", 10);
 const SNAPSHOT_ACK_GAP_FORCE_KEYFRAME = Number.parseInt(process.env.SNAPSHOT_ACK_GAP_FORCE_KEYFRAME || "8", 10);
 const MAX_ROOMS = 64;
-const MAX_PEERS_PER_ROOM = 8;
+const MAX_PEERS_PER_ROOM = 6;
 const MAX_WS_BUFFERED_BYTES = Number.parseInt(process.env.MAX_WS_BUFFERED_BYTES || "262144", 10);
 const MAX_TELEMETRY_SAMPLES = Number.parseInt(process.env.MAX_TELEMETRY_SAMPLES || "4096", 10);
 const TICK_DRIFT_EPSILON_MS = Number.parseFloat(process.env.TICK_DRIFT_EPSILON_MS || "0.5");
@@ -29,6 +33,7 @@ const MAX_SNAPSHOT_STEPS_PER_LOOP = Number.parseInt(process.env.MAX_SNAPSHOT_STE
 
 const rooms = new Map();
 const pushTelemetrySample = makeSamplePusher(MAX_TELEMETRY_SAMPLES);
+const leaderboardStore = new LeaderboardStore();
 
 const roomOptions = {
   average,
@@ -62,8 +67,22 @@ function getOrCreateRoom(roomId, classType) {
   return room;
 }
 
+const server = http.createServer(async (req, res) => {
+  const method = req.method || "GET";
+  const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  if (requestUrl.pathname === "/api/leaderboard") {
+    await handleLeaderboardApiRequest(req, res, leaderboardStore);
+    return;
+  }
+  res.writeHead(404, {
+    "Content-Type": "application/json; charset=utf-8"
+  });
+  res.end(`${JSON.stringify({ error: "Not found" })}\n`);
+});
+
 const wss = new WebSocketServer({
-  port: PORT,
+  server,
   perMessageDeflate: false
 });
 
@@ -86,7 +105,7 @@ wss.on("connection", (ws) => {
     type: "hello",
     playerId: client.id,
     protocol: 2,
-    note: "Server authoritative alpha. One active controller per room; others are spectators."
+    note: "Server authoritative alpha. Multiplayer room scaffolding is in progress."
   });
 
   ws.on("message", (raw) => {
@@ -101,7 +120,8 @@ wss.on("connection", (ws) => {
       sanitizeInput,
       serializeState,
       buildJoinKeyframeState,
-      safeSend
+      safeSend,
+      leaderboardStore
     });
   });
 
@@ -119,4 +139,19 @@ startRoomSchedulers({
   monotonicNowMs
 });
 
-console.log(`Authoritative network server listening on ws://localhost:${PORT}`);
+server.listen(PORT, HOST || undefined, () => {
+  const address = server.address();
+  const boundHost =
+    address && typeof address === "object" && typeof address.address === "string"
+      ? address.address === "::" || address.address === "0.0.0.0"
+        ? "all interfaces"
+        : address.address
+      : HOST || "all interfaces";
+  const endpointHost =
+    address && typeof address === "object" && typeof address.address === "string" && address.address && address.address !== "::" && address.address !== "0.0.0.0"
+      ? address.address
+      : HOST || "localhost";
+  console.log(`Authoritative server listening on ${boundHost}:${PORT}`);
+  console.log(`WebSocket gameplay endpoint available on ws://${endpointHost}:${PORT}`);
+  console.log(`Leaderboard REST endpoint available on http://${endpointHost}:${PORT}/api/leaderboard`);
+});

@@ -5,11 +5,79 @@ function shallowPlayerState(simPlayer) {
     size: simPlayer.size,
     health: simPlayer.health,
     maxHealth: simPlayer.maxHealth,
+    hpBarTimer: simPlayer.hpBarTimer || 0,
+    level: simPlayer.level,
+    score: simPlayer.score,
+    gold: simPlayer.gold,
+    experience: simPlayer.experience,
+    expToNextLevel: simPlayer.expToNextLevel,
+    skillPoints: simPlayer.skillPoints,
     dirX: simPlayer.dirX,
     dirY: simPlayer.dirY,
     facing: simPlayer.facing,
     classType: simPlayer.classType
   };
+}
+
+function shallowActivePlayerState(player) {
+  return {
+    id: player.id,
+    handle: player.handle,
+    classType: player.classType,
+    x: player.x,
+    y: player.y,
+    size: player.size,
+    health: player.health,
+    maxHealth: player.maxHealth,
+    hpBarTimer: player.hpBarTimer || 0,
+    level: player.level,
+    score: player.score,
+    gold: player.gold,
+    experience: player.experience,
+    expToNextLevel: player.expToNextLevel,
+    skillPoints: player.skillPoints,
+    levelWeaponDamageBonus: player.levelWeaponDamageBonus,
+    fireCooldown: player.fireCooldown,
+    fireArrowCooldown: player.fireArrowCooldown,
+    deathBoltCooldown: player.deathBoltCooldown,
+    warriorMomentumTimer: player.warriorMomentumTimer,
+    warriorRageActiveTimer: player.warriorRageActiveTimer,
+    warriorRageCooldownTimer: player.warriorRageCooldownTimer,
+    warriorRageVictoryRushPool: player.warriorRageVictoryRushPool,
+    warriorRageVictoryRushTimer: player.warriorRageVictoryRushTimer,
+    necromancerBeam: player.necromancerBeam
+      ? {
+          active: !!player.necromancerBeam.active,
+          targetId: typeof player.necromancerBeam.targetId === "string" ? player.necromancerBeam.targetId : null,
+          targetX: Number.isFinite(player.necromancerBeam.targetX) ? player.necromancerBeam.targetX : 0,
+          targetY: Number.isFinite(player.necromancerBeam.targetY) ? player.necromancerBeam.targetY : 0,
+          progress: Number.isFinite(player.necromancerBeam.progress) ? player.necromancerBeam.progress : 0
+        }
+      : null,
+    skills: player.skills,
+    upgrades: player.upgrades,
+    dirX: player.dirX,
+    dirY: player.dirY,
+    facing: player.facing,
+    moving: !!player.moving,
+    alive: player.alive !== false,
+    color: player.color
+  };
+}
+
+function resolveControlledEnemyColor(room, enemy) {
+  const ownerId = typeof enemy?.controllerPlayerId === "string" && enemy.controllerPlayerId ? enemy.controllerPlayerId : null;
+  if (!ownerId || !room) return null;
+  const players = typeof room.getSimulationPlayerEntities === "function"
+    ? room.getSimulationPlayerEntities()
+    : typeof room.getActivePlayerStates === "function"
+    ? room.getActivePlayerStates()
+    : [];
+  for (const player of players) {
+    if (!player || player.id !== ownerId) continue;
+    return typeof player.color === "string" && player.color ? player.color : null;
+  }
+  return null;
 }
 
 export function getStableId(room, domain, prefix, obj) {
@@ -60,6 +128,10 @@ function serializeEnemy(room, e) {
     damageMin: e.damageMin,
     damageMax: e.damageMax
   };
+  if (e.isControlledUndead) base.isControlledUndead = true;
+  if (typeof e.controllerPlayerId === "string" && e.controllerPlayerId) base.controllerPlayerId = e.controllerPlayerId;
+  const controlledColor = resolveControlledEnemyColor(room, e);
+  if (controlledColor) base.controlledColor = controlledColor;
   switch (e.type) {
     case "rat_archer":
       base.dirX = e.dirX;
@@ -122,19 +194,38 @@ function makeActiveBounds(sim, padTiles = 10) {
   const pad = Math.max(0, padTiles) * tile;
   const playW = typeof sim.getPlayAreaWidth === "function" ? sim.getPlayAreaWidth() : 960;
   const viewH = Number.isFinite(sim?.canvas?.height) ? sim.canvas.height : 640;
-  const cam =
-    typeof sim.getCamera === "function"
-      ? sim.getCamera()
-      : {
-          x: Math.max(0, (sim.player?.x || 0) - playW / 2),
-          y: Math.max(0, (sim.player?.y || 0) - viewH / 2)
-        };
-  return {
-    left: cam.x - pad,
-    top: cam.y - pad,
-    right: cam.x + playW + pad,
-    bottom: cam.y + viewH + pad
-  };
+  const players = typeof sim.getLivingPlayerEntities === "function" ? sim.getLivingPlayerEntities() : [sim.player];
+  const activePlayers = Array.isArray(players) && players.length > 0 ? players.filter((player) => !!player) : [sim.player];
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  for (const player of activePlayers) {
+    const px = Number.isFinite(player?.x) ? player.x : (sim.player?.x || 0);
+    const py = Number.isFinite(player?.y) ? player.y : (sim.player?.y || 0);
+    const camX = Math.max(0, Math.min((sim.worldWidth || playW) - playW, px - playW / 2));
+    const camY = Math.max(0, Math.min((sim.worldHeight || viewH) - viewH, py - viewH / 2));
+    left = Math.min(left, camX - pad);
+    top = Math.min(top, camY - pad);
+    right = Math.max(right, camX + playW + pad);
+    bottom = Math.max(bottom, camY + viewH + pad);
+  }
+  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(right) || !Number.isFinite(bottom)) {
+    const cam =
+      typeof sim.getCamera === "function"
+        ? sim.getCamera()
+        : {
+            x: Math.max(0, (sim.player?.x || 0) - playW / 2),
+            y: Math.max(0, (sim.player?.y || 0) - viewH / 2)
+          };
+    return {
+      left: cam.x - pad,
+      top: cam.y - pad,
+      right: cam.x + playW + pad,
+      bottom: cam.y + viewH + pad
+    };
+  }
+  return { left, top, right, bottom };
 }
 
 function isInsideBounds(obj, bounds, extra = 0) {
@@ -150,7 +241,18 @@ export function serializeMetaState(source) {
   const sim = source && source.sim ? source.sim : source;
   const musicTrack = source && source.currentMusicTrack ? { ...source.currentMusicTrack } : sim && sim.musicTrack ? { ...sim.musicTrack } : null;
   const floorBoss = sim.floorBoss && typeof sim.floorBoss === "object" ? { ...sim.floorBoss } : null;
+  const finalResults =
+    source?.finalResults && typeof source.finalResults === "object"
+      ? {
+          teamOutcome: typeof source.finalResults.teamOutcome === "string" ? source.finalResults.teamOutcome : "Defeat",
+          totalParticipants: Number.isFinite(source.finalResults.totalParticipants) ? source.finalResults.totalParticipants : 0,
+          players: Array.isArray(source.finalResults.players) ? source.finalResults.players.map((player) => ({ ...player })) : []
+        }
+      : null;
   return {
+    roomPhase: typeof source?.phase === "string" ? source.phase : "active",
+    roomOwnerId: typeof source?.roomOwnerId === "string" ? source.roomOwnerId : null,
+    pauseOwnerId: typeof source?.pauseOwnerId === "string" ? source.pauseOwnerId : null,
     floor: sim.floor,
     biomeKey: sim.biomeKey,
     level: sim.level,
@@ -166,12 +268,15 @@ export function serializeMetaState(source) {
     shopOpen: sim.shopOpen,
     skillTreeOpen: sim.skillTreeOpen,
     statsPanelOpen: sim.statsPanelOpen,
+    statsPanelView: sim.statsPanelView,
     warriorMomentumTimer: sim.warriorMomentumTimer || 0,
     warriorRageActiveTimer: sim.warriorRageActiveTimer || 0,
     warriorRageCooldownTimer: sim.warriorRageCooldownTimer || 0,
     warriorRageVictoryRushPool: sim.warriorRageVictoryRushPool || 0,
     warriorRageVictoryRushTimer: sim.warriorRageVictoryRushTimer || 0,
     floorBoss,
+    runStats: sim.runStats,
+    finalResults,
     portal: sim.portal ? { ...sim.portal } : null,
     musicTrack,
     skills: sim.skills,
@@ -194,13 +299,19 @@ export function serializeState(room) {
   const activeFireArrows = sim.fireArrows.filter((a) => isInsideBounds(a, activeBounds, 144));
   const activeFireZones = sim.fireZones.filter((z) => isInsideBounds(z, activeBounds, (Number.isFinite(z.radius) ? z.radius : 0) + 28));
   const activeMeleeSwings = sim.meleeSwings.filter((s) => isInsideBounds(s, activeBounds, (Number.isFinite(s.range) ? s.range : 0) + 24));
+  const activePlayers = typeof room.getActivePlayerStates === "function" ? room.getActivePlayerStates() : [];
+  const primaryPlayer =
+    (typeof room.syncPrimaryActivePlayerFromSim === "function" ? room.syncPrimaryActivePlayerFromSim() : null) ||
+    activePlayers[0] ||
+    sim.player;
   return {
     mapSignature: typeof sim.getMapSignature === "function" ? sim.getMapSignature() : `${sim.biomeKey}:${sim.floor}:${sim.mapWidth}x${sim.mapHeight}`,
     time: sim.time,
     floor: sim.floor,
     biomeKey: sim.biomeKey,
     floorBoss,
-    player: shallowPlayerState(sim.player),
+    player: shallowPlayerState(primaryPlayer),
+    players: activePlayers.map((player) => shallowActivePlayerState(player)),
     door: { ...sim.door },
     pickup: { ...sim.pickup },
     portal: sim.portal ? { ...sim.portal } : null,

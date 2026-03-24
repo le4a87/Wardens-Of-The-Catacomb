@@ -1,3 +1,18 @@
+function hexToRgba(color, alpha) {
+  if (typeof color !== "string") return `rgba(121, 255, 141, ${alpha})`;
+  const hex = color.trim();
+  const expanded = hex.length === 4
+    ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+    : hex;
+  const match = /^#([0-9a-f]{6})$/i.exec(expanded);
+  if (!match) return `rgba(121, 255, 141, ${alpha})`;
+  const int = Number.parseInt(match[1], 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export const rendererEffectsProjectileMethods = {
   drawProjectiles(game, cameraX, cameraY) {
     const ctx = this.ctx;
@@ -24,6 +39,35 @@ export const rendererEffectsProjectileMethods = {
       ctx.stroke();
       if (beam.progress > 0) {
         ctx.fillStyle = "rgba(158, 255, 186, 0.95)";
+        ctx.fillRect(tx - 12, ty - 20, 24 * Math.max(0, Math.min(1, beam.progress / (game.config.necromancer?.charmDuration || 2))), 4);
+      }
+    }
+
+    for (const player of game.remotePlayers || []) {
+      if (!player || player.alive === false || player.classType !== "necromancer") continue;
+      const beam = player.necromancerBeam;
+      if (!beam?.active) continue;
+      const sx = player.x - cameraX;
+      const sy = player.y - cameraY - 8;
+      const fallbackTx = player.x + (Number.isFinite(player.dirX) ? player.dirX : 1) * ((game.config?.necromancer?.controlRangeTiles || 10) * (game.config?.map?.tile || 32) * 0.45);
+      const fallbackTy = player.y + (Number.isFinite(player.dirY) ? player.dirY : 0) * ((game.config?.necromancer?.controlRangeTiles || 10) * (game.config?.map?.tile || 32) * 0.45);
+      const tx = (Number.isFinite(beam.targetX) ? beam.targetX : fallbackTx) - cameraX;
+      const ty = (Number.isFinite(beam.targetY) ? beam.targetY : fallbackTy) - cameraY;
+      if (![sx, sy, tx, ty].every(Number.isFinite)) continue;
+      const color = typeof player.color === "string" && player.color ? player.color : "#79ff8d";
+      const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+      grad.addColorStop(0, hexToRgba(color, 0.18));
+      grad.addColorStop(0.5, hexToRgba(color, 0.76));
+      grad.addColorStop(1, hexToRgba(color, 0.3));
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 4.5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      if ((beam.progress || 0) > 0) {
+        ctx.fillStyle = hexToRgba(color, 0.92);
         ctx.fillRect(tx - 12, ty - 20, 24 * Math.max(0, Math.min(1, beam.progress / (game.config.necromancer?.charmDuration || 2))), 4);
       }
     }
@@ -175,6 +219,8 @@ export const rendererEffectsProjectileMethods = {
     const end = swing.angle + arc * 0.5;
     const dirX = Math.cos(swing.angle);
     const dirY = Math.sin(swing.angle);
+    const originPlayer = player && Number.isFinite(player.x) && Number.isFinite(player.y) ? player : null;
+    if (![x, y, range, arc, start, end, dirX, dirY].every(Number.isFinite)) return;
 
     ctx.save();
     ctx.globalAlpha = 0.55 * alpha;
@@ -214,10 +260,12 @@ export const rendererEffectsProjectileMethods = {
     const bladeY = y + dirY * (range * 0.72);
     ctx.strokeStyle = swing.executeProc ? "#ffd0d0" : "#e9e0d1";
     ctx.lineWidth = swing.executeProc ? 2.3 : 2;
-    ctx.beginPath();
-    ctx.moveTo(player.x - cameraX + dirX * 12, player.y - cameraY + dirY * 12);
-    ctx.lineTo(bladeX, bladeY);
-    ctx.stroke();
+    if (originPlayer) {
+      ctx.beginPath();
+      ctx.moveTo(originPlayer.x - cameraX + dirX * 12, originPlayer.y - cameraY + dirY * 12);
+      ctx.lineTo(bladeX, bladeY);
+      ctx.stroke();
+    }
     ctx.restore();
   },
 
@@ -225,6 +273,7 @@ export const rendererEffectsProjectileMethods = {
     const ctx = this.ctx;
     const x = zone.x - cameraX;
     const y = zone.y - cameraY;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     if (zone.zoneType === "ghostSiphon") {
       const tx = (Number.isFinite(zone.targetX) ? zone.targetX : zone.x) - cameraX;
       const ty = (Number.isFinite(zone.targetY) ? zone.targetY : zone.y) - cameraY;
@@ -284,10 +333,12 @@ export const rendererEffectsProjectileMethods = {
       return;
     }
     const lifeFrac = Math.max(0, Math.min(1, zone.life / this.config.fireArrow.lingerDuration));
+    const radius = Number.isFinite(zone.radius) ? Math.max(0, zone.radius) : 0;
+    if (radius <= 0) return;
     const pulse = 0.88 + Math.sin((time * 10 + zone.x * 0.02 + zone.y * 0.015)) * 0.09;
-    const coreR = zone.radius * 0.42 * pulse;
-    const midR = zone.radius * 0.72 * (0.96 + Math.sin(time * 7.8 + zone.y * 0.018) * 0.06);
-    const edgeR = zone.radius * (0.96 + Math.sin(time * 6.1 + zone.x * 0.013) * 0.05);
+    const coreR = radius * 0.42 * pulse;
+    const midR = radius * 0.72 * (0.96 + Math.sin(time * 7.8 + zone.y * 0.018) * 0.06);
+    const edgeR = radius * (0.96 + Math.sin(time * 6.1 + zone.x * 0.013) * 0.05);
 
     const outer = ctx.createRadialGradient(x, y, coreR * 0.15, x, y, edgeR);
     outer.addColorStop(0, `rgba(255, 224, 140, ${0.26 * lifeFrac + 0.12})`);
@@ -312,8 +363,8 @@ export const rendererEffectsProjectileMethods = {
     for (let i = 0; i < tongues; i++) {
       const a = (i / tongues) * Math.PI * 2 + time * 1.7;
       const wobble = Math.sin(time * 8 + i * 1.9 + zone.x * 0.01) * 0.1;
-      const r1 = zone.radius * (0.58 + wobble);
-      const r2 = zone.radius * (0.88 + wobble * 0.5);
+      const r1 = radius * (0.58 + wobble);
+      const r2 = radius * (0.88 + wobble * 0.5);
       const px = x + Math.cos(a) * r1;
       const py = y + Math.sin(a) * r1;
       const tx = x + Math.cos(a) * r2;

@@ -27,14 +27,35 @@ export function isHostilePair(game, source, target) {
 }
 
 export function isActiveCharmTarget(game, enemy) {
-  return !!enemy && !!game?.necromancerBeam?.active && game.necromancerBeam.targetEnemy === enemy;
+  if (!enemy) return false;
+  if (typeof game?.isEnemyTargetedByAnyNecromancerBeam === "function") return game.isEnemyTargetedByAnyNecromancerBeam(enemy);
+  return !!game?.necromancerBeam?.active && game.necromancerBeam.targetEnemy === enemy;
+}
+
+export function getEnemyAttackOwnerId(game, enemy) {
+  if (!enemy || !isFriendlyToPlayer(game, enemy)) return null;
+  return typeof enemy.controllerPlayerId === "string" && enemy.controllerPlayerId ? enemy.controllerPlayerId : null;
 }
 
 export function getPriorityTarget(game, enemy, maxRange = Infinity) {
   if (!enemy) return game.player;
   const sourceFriendly = isFriendlyToPlayer(game, enemy);
-  let best = sourceFriendly ? null : game.player;
-  let bestDist = sourceFriendly ? Number.POSITIVE_INFINITY : vecLength(game.player.x - enemy.x, game.player.y - enemy.y);
+  const livingPlayers = typeof game.getLivingPlayerEntities === "function" ? game.getLivingPlayerEntities() : [game.player];
+  const controllingPlayer =
+    sourceFriendly && typeof game?.getControllingPlayerEntityForEnemy === "function"
+      ? game.getControllingPlayerEntityForEnemy(enemy)
+      : null;
+  let best = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+  if (!sourceFriendly) {
+    for (const player of livingPlayers) {
+      if (!player) continue;
+      const dist = vecLength((player.x || 0) - enemy.x, (player.y || 0) - enemy.y);
+      if (dist > maxRange || dist >= bestDist) continue;
+      best = player;
+      bestDist = dist;
+    }
+  }
   for (const other of game.enemies || []) {
     if (!other || !isHostilePair(game, enemy, other) || (other.hp || 0) <= 0) continue;
     if (sourceFriendly && other.type === "mimic" && other.dormant) continue;
@@ -47,7 +68,16 @@ export function getPriorityTarget(game, enemy, maxRange = Infinity) {
       bestDist = dist;
     }
   }
-  return best || game.player;
+  if (best) return best;
+  if (sourceFriendly && controllingPlayer) {
+    return {
+      id: controllingPlayer.id || null,
+      x: controllingPlayer.x,
+      y: controllingPlayer.y,
+      anchorOnly: true
+    };
+  }
+  return livingPlayers[0] || game.player;
 }
 
 export function moveEnemyTowardPoint(game, enemy, target, dt, speedScale, minDistance = 0) {
@@ -109,22 +139,25 @@ export function segmentDistanceToPoint(x0, y0, x1, y1, px, py) {
 }
 
 export function isCoveredFromPlayer(game, x, y, self = null) {
-  if (!hasLineOfSight(game, game.player.x, game.player.y, x, y)) return true;
+  const player = typeof game.getNearestPlayerEntity === "function" ? game.getNearestPlayerEntity(x, y) : game.player;
+  if (!player) return false;
+  if (!hasLineOfSight(game, player.x, player.y, x, y)) return true;
   for (const br of game.breakables || []) {
     if ((br.hp || 0) <= 0) continue;
     const radius = (Number.isFinite(br.size) ? br.size : 20) * 0.5;
-    if (segmentDistanceToPoint(game.player.x, game.player.y, x, y, br.x, br.y) <= radius) return true;
+    if (segmentDistanceToPoint(player.x, player.y, x, y, br.x, br.y) <= radius) return true;
   }
   for (const enemy of game.enemies || []) {
     if (!enemy || enemy === self || (enemy.hp || 0) <= 0) continue;
     if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
     const radius = (Number.isFinite(enemy.size) ? enemy.size : 20) * 0.5;
-    if (segmentDistanceToPoint(game.player.x, game.player.y, x, y, enemy.x, enemy.y) <= radius) return true;
+    if (segmentDistanceToPoint(player.x, player.y, x, y, enemy.x, enemy.y) <= radius) return true;
   }
   return false;
 }
 
 export function findRatCoverTarget(game, enemy, minPlayerDist) {
+  const player = typeof game.getNearestPlayerEntity === "function" ? game.getNearestPlayerEntity(enemy.x, enemy.y) : game.player;
   const tile = game.config?.map?.tile || 32;
   const radiusTiles = Math.max(2, Math.floor(game.config.enemy.ratArcherCoverSearchRadiusTiles || 6));
   const originTx = Math.floor(enemy.x / tile);
@@ -137,7 +170,7 @@ export function findRatCoverTarget(game, enemy, minPlayerDist) {
       if (!game.isWalkableTile(tx, ty)) continue;
       const x = tx * tile + tile * 0.5;
       const y = ty * tile + tile * 0.5;
-      if (vecLength(game.player.x - x, game.player.y - y) < minPlayerDist) continue;
+      if (vecLength(player.x - x, player.y - y) < minPlayerDist) continue;
       if (!isCoveredFromPlayer(game, x, y, enemy)) continue;
       candidates.push({ x, y });
     }
@@ -147,6 +180,7 @@ export function findRatCoverTarget(game, enemy, minPlayerDist) {
 }
 
 export function findNecromancerTeleportPoint(game, enemy) {
+  const player = typeof game.getNearestPlayerEntity === "function" ? game.getNearestPlayerEntity(enemy.x, enemy.y) : game.player;
   const tile = game.config?.map?.tile || 32;
   const minRange = Math.max(tile * 2, (game.config.enemy.necromancerBossTeleportMinRangeTiles || 3.25) * tile);
   const maxRange = Math.max(minRange + tile * 0.5, (game.config.enemy.necromancerBossTeleportMaxRangeTiles || 4.75) * tile);
@@ -158,8 +192,8 @@ export function findNecromancerTeleportPoint(game, enemy) {
   for (const angle of angles) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const dist = minRange + (maxRange - minRange) * (attempt / 2);
-      const x = game.player.x + Math.cos(angle) * dist;
-      const y = game.player.y + Math.sin(angle) * dist;
+      const x = player.x + Math.cos(angle) * dist;
+      const y = player.y + Math.sin(angle) * dist;
       const tx = Math.floor(x / tile);
       const ty = Math.floor(y / tile);
       if (!game.isWalkableTile(tx, ty)) continue;
@@ -169,7 +203,7 @@ export function findNecromancerTeleportPoint(game, enemy) {
           : { x, y };
       if (!safePoint) continue;
       if (typeof game.isPositionWalkable === "function" && !game.isPositionWalkable(safePoint.x, safePoint.y, radius, true)) continue;
-      if (vecLength(safePoint.x - game.player.x, safePoint.y - game.player.y) < minRange * 0.9) continue;
+      if (vecLength(safePoint.x - player.x, safePoint.y - player.y) < minRange * 0.9) continue;
       if (vecLength(safePoint.x - enemy.x, safePoint.y - enemy.y) < tile) continue;
       return safePoint;
     }

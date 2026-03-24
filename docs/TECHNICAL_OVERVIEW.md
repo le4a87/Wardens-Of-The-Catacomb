@@ -36,14 +36,52 @@ This document summarizes the current high-level architecture and validation work
 
 ## Network Model
 - The server is authoritative.
-- Rooms currently support one active controller and spectator clients.
+- Rooms now support a dedicated shared lobby phase and a true multiplayer active phase.
+- A room tracks:
+  - `roomOwnerId` for lobby ownership
+  - `pauseOwnerId` for global pause authority
+  - a roster of connected clients with class selection, ready state, and stable run colors
+  - a collection of active player entities rather than only one authoritative avatar
 - The client handles:
   - snapshot interpolation
-  - prediction for controller input
+  - local-player prediction/reconciliation
   - map chunk readiness
   - projectile reconciliation
-- The network render/runtime path now reads the active `netClient` dynamically instead of capturing a stale pre-connect reference, which keeps controller-only UI actions working after live room join.
+- The authoritative room still keeps one primary `sim.player` path for the pause owner, but snapshots now also serialize a `players` collection for all active participants.
+- The client runtime resolves the local player out of `state.players`, keeps remote players in `game.remotePlayers`, and renders/interpolates them separately from the local predicted avatar.
+- The network render/runtime path now reads the active `netClient` dynamically instead of capturing a stale pre-connect reference, which keeps multiplayer UI actions working after live room join.
 - The browser debug surface in `game.js` now exposes enough live state for Playwright-based network validation and perf harnesses.
+
+### Lobby And Session Flow
+- Network players enter Connection Setup, then join a dedicated shared lobby instead of going through the local character-select start path.
+- The lobby supports:
+  - live shared roster
+  - in-room class selection
+  - ready/unready state
+  - owner star
+  - owner-controlled dev start floor selection
+  - auto-start countdown when all connected players are ready
+- Completed multiplayer runs reset the authoritative room back to the lobby instead of reusing the ended run state.
+
+### Multiplayer Gameplay State
+- The authoritative room tracks non-owner active players in `activePlayers` and periodically syncs the pause-owner state out of the primary sim into the same roster shape.
+- Snapshot payloads now include:
+  - local `player`
+  - `players` for the full active roster
+  - room/meta ownership and phase fields
+  - per-player progression/build state needed for multiplayer HUD and ability correctness
+- Remote players now participate in:
+  - movement
+  - hostile targeting and damage intake
+  - class primary/alt combat paths
+  - per-player XP/gold/score progression
+  - death/spectate flow
+  - disconnect removal and room-owner / pause-owner transfer rules
+
+### Spectating And Results
+- Dead players stay in the connected run roster, become read-only spectators, and can cycle living targets through keyboard and party-panel selection.
+- Final multiplayer results are serialized through room meta state and rendered client-side as a shared team summary rather than using the solo leaderboard path.
+- Multiplayer leaderboard submission is currently disabled by design.
 
 ## Enemy Runtime Notes
 - Enemy behavior now routes through `src/game/enemyTactics.js`, which provides:
@@ -118,6 +156,7 @@ This document summarizes the current high-level architecture and validation work
 - `server/validate-floor-boss.js` now validates the generalized floor-boss flow rather than assuming only the necromancer boss exists.
 - `server/validate-dev-start.js` now covers higher-floor local dev starts so larger-floor spawn regressions are caught by automation instead of manual testing.
 - If network startup or render regressions return, inspect snapshot-buffer identity and snapshot-consumption paths before changing interpolation or prediction. A real branch regression came from replacing the live snapshot buffer after the render loop had already captured it.
+- If local-only multiplayer HUD regressions return, inspect the split between immediate local-authoritative state application and delayed buffered snapshot playback. Some multiplayer bugs only affected the damaged player's own HUD while remote party views were already correct.
 - If controller-only network UI regressions return, inspect the active `netClient` wiring first. A real regression came from the render loop capturing `null` before connection completed, which silently drained shop/skill clicks through the no-client path.
 
 ## Operational Notes

@@ -49,12 +49,20 @@ export class NetClient {
     return this.send("input", { input });
   }
 
+  sendLobbyUpdate(payload = {}) {
+    return this.send("room.lobbyUpdate", payload);
+  }
+
   takeControl() {
     return this.send("room.takeControl", {});
   }
 
   sendAction(action) {
     return this.send("action", { action });
+  }
+
+  returnRoomToLobby() {
+    return this.send("room.returnToLobby", {});
   }
 
   disconnect() {

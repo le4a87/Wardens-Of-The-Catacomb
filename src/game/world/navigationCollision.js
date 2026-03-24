@@ -406,3 +406,15 @@ export function moveWithCollision(game, entity, dx, dy) {
     entity.y = ny;
   }
 }
+
+export function moveWithCollisionSubsteps(game, entity, dx, dy, maxStep = 4) {
+  if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) return;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+  const distance = vecLength(dx, dy);
+  if (!(distance > 0)) return;
+  const clampedMaxStep = Number.isFinite(maxStep) ? Math.max(1, maxStep) : 4;
+  const steps = Math.max(1, Math.ceil(distance / clampedMaxStep));
+  const stepX = dx / steps;
+  const stepY = dy / steps;
+  for (let i = 0; i < steps; i++) moveWithCollision(game, entity, stepX, stepY);
+}

@@ -5,6 +5,7 @@ import {
   findNecromancerTeleportPoint,
   findRatCoverTarget,
   findSkeletonSummonPoint,
+  getEnemyAttackOwnerId,
   getPriorityTarget,
   hasLineOfSight,
   isFriendlyToPlayer,
@@ -144,6 +145,7 @@ export function updateRatArcher(game, enemy, dt, speedScale) {
 }
 
 export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
+  const ownerId = getEnemyAttackOwnerId(game, enemy);
   if (isFriendlyToPlayer(game, enemy) && typeof game.getPlayerMoveSpeed === "function") {
     enemy.speed = Math.max(Number.isFinite(enemy.speed) ? enemy.speed : 0, game.getPlayerMoveSpeed() * 1.1);
   }
@@ -181,13 +183,13 @@ export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
   enemy.dirY = dy / dist;
   if (dist <= range && enemy.attackCooldown <= 0) {
     enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
-    if (target === game.player && game.player.hitCooldown <= 0) {
-      game.player.hitCooldown = 1.0;
+    if (game.isPlayerEntity && game.isPlayerEntity(target) && (target.hitCooldown || 0) <= 0) {
+      target.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);
       const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-      game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, "physical"));
-    } else if (target !== game.player) {
-      game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical");
+      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical"), "physical");
+    } else if (!game.isPlayerEntity || !game.isPlayerEntity(target)) {
+      game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical", ownerId);
     }
     return;
   }
@@ -215,8 +217,9 @@ export function updateNecromancer(game, enemy, dt, speedScale) {
     : 0;
   const summonCap = Math.max(1, Math.floor(game.config.enemy.necromancerSummonCap || 5) + summonCapBonus);
   const summonCount = Math.max(1, Math.floor(game.config.enemy.necromancerSummonCount || 2) + summonCountBonus);
-  const toPlayerX = game.player.x - enemy.x;
-  const toPlayerY = game.player.y - enemy.y;
+  const targetPlayer = typeof game.getNearestPlayerEntity === "function" ? game.getNearestPlayerEntity(enemy.x, enemy.y) : game.player;
+  const toPlayerX = targetPlayer.x - enemy.x;
+  const toPlayerY = targetPlayer.y - enemy.y;
   const playerDist = vecLength(toPlayerX, toPlayerY) || 1;
   const dirX = toPlayerX / playerDist;
   const dirY = toPlayerY / playerDist;
@@ -256,8 +259,8 @@ export function updateNecromancer(game, enemy, dt, speedScale) {
     moveEnemyTowardPoint(game, enemy, { x: enemy.x - dirX * 96, y: enemy.y - dirY * 96 }, dt, Number.isFinite(speedScale) ? speedScale : 1);
     return;
   }
-  if (playerDist > preferredRange || !hasLineOfSight(game, enemy.x, enemy.y, game.player.x, game.player.y)) {
-    game.moveEnemyTowardPlayer(enemy, speedScale * 0.92, dt);
+  if (playerDist > preferredRange || !hasLineOfSight(game, enemy.x, enemy.y, targetPlayer.x, targetPlayer.y)) {
+    moveEnemyTowardPoint(game, enemy, targetPlayer, dt, speedScale * 0.92);
     return;
   }
   if (enemy.summonCooldown <= 0 && countSummonedSkeletons(game) < summonCap) {
@@ -348,20 +351,20 @@ export function updateMinotaur(game, enemy, dt, speedScale) {
       dt,
       chargeScale
     );
-    if (target === game.player) {
-      const playerRadius = typeof game.getPlayerEnemyCollisionRadius === "function"
-        ? game.getPlayerEnemyCollisionRadius()
-        : (game.player.size || 20) * 0.5;
+    if (game.isPlayerEntity && game.isPlayerEntity(target)) {
+      const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function"
+        ? game.getPlayerEnemyCollisionRadiusFor(target)
+        : (target.size || 20) * 0.5;
       const collisionRange = playerRadius + (enemy.size || 34) * 0.52;
-      const playerDist = vecLength(game.player.x - enemy.x, game.player.y - enemy.y);
+      const playerDist = vecLength(target.x - enemy.x, target.y - enemy.y);
       if (playerDist <= collisionRange) {
-        game.moveWithCollision(game.player, (enemy.chargeDirX || dirX) * chargePushDistance * dt, (enemy.chargeDirY || dirY) * chargePushDistance * dt);
-        if (enemy.chargeImpactCooldown <= 0 && game.player.hitCooldown <= 0) {
-          game.player.hitCooldown = 0.75;
+        game.moveWithCollision(target, (enemy.chargeDirX || dirX) * chargePushDistance * dt, (enemy.chargeDirY || dirY) * chargePushDistance * dt);
+        if (enemy.chargeImpactCooldown <= 0 && (target.hitCooldown || 0) <= 0) {
+          target.hitCooldown = 0.75;
           enemy.chargeImpactCooldown = 0.18;
           const rawDamage = game.rollEnemyContactDamage(enemy) * chargeDamageMultiplier;
           const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-          game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, "physical"));
+          game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical"), "physical");
         }
       }
     }
@@ -376,12 +379,12 @@ export function updateMinotaur(game, enemy, dt, speedScale) {
   if (dist <= stompRange && enemy.stompCooldown <= 0) {
     if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "stomp");
     enemy.stompCooldown = game.config.enemy.minotaurStompCooldown || 2.2;
-    if (target === game.player && game.player.hitCooldown <= 0) {
-      game.player.hitCooldown = 1.0;
+    if (game.isPlayerEntity && game.isPlayerEntity(target) && (target.hitCooldown || 0) <= 0) {
+      target.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);
       const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-      game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, "physical"));
-    } else if (target !== game.player) {
+      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical"), "physical");
+    } else if (!game.isPlayerEntity || !game.isPlayerEntity(target)) {
       game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical");
     }
     return;

@@ -12,6 +12,35 @@ export function createSkillState() {
   };
 }
 
+export function createRunStats() {
+  return {
+    totalKills: 0,
+    bossKills: 0,
+    floorsCleared: 0,
+    damageDealt: 0,
+    damageTaken: 0,
+    healingReceived: 0,
+    goldEarned: 0,
+    goldSpent: 0,
+    killsByEnemyType: {},
+    killsByFloor: {},
+    classSpecific: {
+      ranger: {
+        shotsFired: 0,
+        fireArrowKills: 0
+      },
+      warrior: {
+        executeKills: 0,
+        frenzies: 0
+      },
+      necromancer: {
+        undeadCharmed: 0,
+        undeadHealing: 0
+      }
+    }
+  };
+}
+
 export function createUpgradeState() {
   return {
     moveSpeed: { key: "moveSpeed", label: "Move Speed", baseCost: 80, costScale: 1.28, level: 0, maxLevel: 20 },

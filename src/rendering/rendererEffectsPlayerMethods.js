@@ -1,6 +1,81 @@
 export const rendererEffectsPlayerMethods = {
+  getReplicatedPlayerClassSpec(player) {
+    const classType = player?.classType;
+    return this.config.classes[classType] || this.config.classes.archer;
+  },
+
+  drawReplicatedPlayerSprite(player, screenX, screenY, renderSize, frameSize) {
+    const prevRenderX = Number.isFinite(player._renderPrevX) ? player._renderPrevX : player.x;
+    const prevRenderY = Number.isFinite(player._renderPrevY) ? player._renderPrevY : player.y;
+    const movedRenderSq = (player.x - prevRenderX) * (player.x - prevRenderX) + (player.y - prevRenderY) * (player.y - prevRenderY);
+    player._renderPrevX = player.x;
+    player._renderPrevY = player.y;
+    const movingVisual = !!player.moving || movedRenderSq > 0.01;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const lastTs = Number.isFinite(player._renderAnimTs) ? player._renderAnimTs : now;
+    const renderDt = Math.min(0.05, Math.max(0, (now - lastTs) / 1000));
+    player._renderAnimTs = now;
+    player._renderAnimPhase = Number.isFinite(player._renderAnimPhase) ? player._renderAnimPhase : 0;
+    if (movingVisual) player._renderAnimPhase += renderDt * this.config.player.animationSpeed;
+    else player._renderAnimPhase = Math.max(0, player._renderAnimPhase - renderDt * this.config.player.animationSpeed * 1.8);
+    const animFrame = movingVisual ? Math.floor(player._renderAnimPhase) % this.config.player.spriteFramesPerDir : 0;
+    const frameX = animFrame * frameSize;
+    const frameY = (Number.isFinite(player.facing) ? player.facing : 0) * frameSize;
+    const drawX = screenX - renderSize / 2;
+    const drawY = screenY - renderSize * 0.56;
+    this.drawPlayerSpriteFrame(frameX, frameY, frameSize, drawX, drawY, renderSize, null, 0);
+    return { movingVisual, walkPhase: movingVisual ? player._renderAnimPhase * 0.1 : 0 };
+  },
+
+  drawReplicatedPlayerRig(player, classSpec, screenX, screenY, walkPhase = 0) {
+    const usesRanged = !!classSpec?.usesRanged;
+    if (player.classType === "necromancer") {
+      this.drawPlayerNecromancerRig(player, screenX, screenY, walkPhase, 0);
+      return;
+    }
+    if (!usesRanged) {
+      this.drawPlayerFighterRig(player, screenX, screenY, walkPhase, 0);
+      return;
+    }
+    this.drawPlayerAimingRig(player, screenX, screenY, walkPhase, 0);
+  },
+
+  drawRemotePlayerHandle(player, screenX, screenY) {
+    const ctx = this.ctx;
+    const handle = typeof player?.handle === "string" && player.handle.trim() ? player.handle.trim() : "Player";
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "bold 13px Trebuchet MS";
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = "rgba(10, 12, 18, 0.9)";
+    ctx.fillStyle = typeof player?.color === "string" && player.color.trim() ? player.color.trim() : "#58a6ff";
+    ctx.strokeText(handle, screenX, screenY + 24);
+    ctx.fillText(handle, screenX, screenY + 24);
+    ctx.restore();
+    ctx.textAlign = "left";
+  },
+
+  drawRemotePlayers(game, cameraX, cameraY) {
+    const remotePlayers = Array.isArray(game.remotePlayers) ? game.remotePlayers : [];
+    if (remotePlayers.length === 0) return;
+    const frameSize = this.config.player.spriteFrame;
+    const renderSize = this.config.player.spriteRenderSize || frameSize;
+    for (const player of remotePlayers) {
+      if (!player || player.alive === false) continue;
+      const screenX = player.x - cameraX;
+      const screenY = player.y - cameraY;
+      const classSpec = this.getReplicatedPlayerClassSpec(player);
+      const { walkPhase } = this.drawReplicatedPlayerSprite(player, screenX, screenY, renderSize, frameSize);
+      this.drawReplicatedPlayerRig(player, classSpec, screenX, screenY, walkPhase);
+      this.drawRemotePlayerHandle(player, screenX, screenY);
+    }
+  },
+
   drawPlayer(game, cameraX, cameraY) {
     const p = game.player;
+    if (!p) return;
+    const isDead = Number.isFinite(p.health) ? p.health <= 0 : p.alive === false;
+    if (isDead && game?.networkEnabled && !game?.gameOver) return;
     const frameSize = this.config.player.spriteFrame;
     const renderSize = this.config.player.spriteRenderSize || frameSize;
     const playerScreenX = p.x - cameraX;
@@ -179,9 +254,11 @@ export const rendererEffectsPlayerMethods = {
   },
 
   drawPlayerHealthBar(game, cameraX, cameraY) {
+    const p = game.player;
+    const isDead = Number.isFinite(p?.health) ? p.health <= 0 : p?.alive === false;
+    if (isDead && game?.networkEnabled && !game?.gameOver) return;
     if (!game.shouldShowPlayerHealthBar || !game.shouldShowPlayerHealthBar()) return;
     const ctx = this.ctx;
-    const p = game.player;
     const ratio = p.maxHealth > 0 ? Math.max(0, Math.min(1, p.health / p.maxHealth)) : 0;
     const width = 52;
     const height = 6;
@@ -266,6 +343,14 @@ export const rendererEffectsPlayerMethods = {
       };
     }
     if (this._minimapCache?.canvas) ctx.drawImage(this._minimapCache.canvas, miniX, miniY, drawW, drawH);
+
+    for (const player of Array.isArray(game.remotePlayers) ? game.remotePlayers : []) {
+      if (!player || player.alive === false) continue;
+      ctx.fillStyle = typeof player.color === "string" && player.color.trim() ? player.color.trim() : "#58a6ff";
+      ctx.beginPath();
+      ctx.arc(miniX + (player.x / this.config.map.tile) * scale, miniY + (player.y / this.config.map.tile) * scale, Math.max(2, scale * 1.15), 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.fillStyle = "#59f3a2";
     ctx.beginPath();

@@ -1,6 +1,21 @@
 import { runtimeSceneEnemyDrawMethods } from "./runtimeSceneEnemyDrawMethods.js";
 import { runtimeSceneObjectDrawMethods } from "./runtimeSceneObjectDrawMethods.js";
 
+function hexToRgba(color, alpha) {
+  if (typeof color !== "string") return `rgba(199, 202, 209, ${alpha})`;
+  const hex = color.trim();
+  const expanded = hex.length === 4
+    ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+    : hex;
+  const match = /^#([0-9a-f]{6})$/i.exec(expanded);
+  if (!match) return `rgba(199, 202, 209, ${alpha})`;
+  const int = Number.parseInt(match[1], 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export const runtimeSceneDrawMethods = {
   drawNetworkPendingScene(game, layout) {
     const ctx = this.ctx;
@@ -27,7 +42,8 @@ export const runtimeSceneDrawMethods = {
     const row0Len = typeof row0 === "string" ? row0.length : Array.isArray(row0) ? row0.length : 0;
     if (row0Len > 0) {
       const minimapBottom = this.drawMinimap(game, layout);
-      this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
+      const statsBottom = this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
+      this.drawGroupPanel(game, layout, statsBottom + this.sidebarPadding);
     }
   },
 
@@ -318,6 +334,7 @@ export const runtimeSceneDrawMethods = {
   drawSkeletonWarrior(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size * 0.5;
+    const controlledColor = typeof enemy?.controlledColor === "string" && enemy.controlledColor ? enemy.controlledColor : null;
     if (enemy.collapsed) {
       ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
       ctx.beginPath();
@@ -331,7 +348,7 @@ export const runtimeSceneDrawMethods = {
         ctx.ellipse(screenX, screenY + half * 0.2, half * 0.9, half * 0.55, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
-      ctx.strokeStyle = enemy.reviveAtEnd ? "#bfe8ff" : "#d7d9de";
+      ctx.strokeStyle = enemy.reviveAtEnd ? "#bfe8ff" : controlledColor ? hexToRgba(controlledColor, 0.84) : "#d7d9de";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(screenX - 7, screenY + 2);
@@ -356,7 +373,7 @@ export const runtimeSceneDrawMethods = {
     ctx.ellipse(screenX, screenY + half * 0.8, half * 0.92, half * 0.36, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "#d5d7dc";
+    ctx.strokeStyle = controlledColor ? hexToRgba(controlledColor, 0.8) : "#d5d7dc";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(screenX, screenY - 7);
@@ -373,7 +390,7 @@ export const runtimeSceneDrawMethods = {
     ctx.lineTo(screenX + 9, screenY + 7);
     ctx.stroke();
 
-    ctx.fillStyle = "#c7cad1";
+    ctx.fillStyle = controlledColor ? hexToRgba(controlledColor, 0.9) : "#c7cad1";
     ctx.beginPath();
     ctx.arc(screenX, screenY - 11, 5.5, 0, Math.PI * 2);
     ctx.fill();

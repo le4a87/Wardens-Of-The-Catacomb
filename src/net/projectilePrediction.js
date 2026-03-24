@@ -82,7 +82,7 @@ function enqueuePredictedPrimarySpread(game, store, seq, dirX, dirY, nowMs) {
   }
 }
 
-export function prunePredictedProjectiles(store, nowMs = performance.now(), ttlMs = 1200) {
+export function prunePredictedProjectiles(store, nowMs = performance.now(), ttlMs = 220) {
   if (!(store instanceof Map)) return;
   for (const [seq, list] of store.entries()) {
     const next = list.filter((p) => nowMs - p.createdAt <= ttlMs);

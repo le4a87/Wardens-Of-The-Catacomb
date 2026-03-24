@@ -1,3 +1,7 @@
+function isActiveMultiplayer(game) {
+  return !!game?.networkEnabled && game.networkRoomPhase === "active";
+}
+
 export function getEnemySpawnInterval(game) {
   const c = game.config.enemy;
   const base = Number.isFinite(c.spawnIntervalStart) ? c.spawnIntervalStart : 2.6;
@@ -69,12 +73,13 @@ export function buyUpgrade(game, upgradeKey) {
   if (!canBuyUpgrade(game, upgradeKey)) return false;
   const cost = getUpgradeCost(game, upgradeKey);
   game.gold -= cost;
+  if (typeof game.recordRunGoldSpent === "function") game.recordRunGoldSpent(cost);
   game.upgrades[upgradeKey].level += 1;
   return true;
 }
 
 export function toggleShop(game, open) {
-  if (game.gameOver) return;
+  if (game.gameOver || (Number.isFinite(game?.player?.health) && game.player.health <= 0)) return;
   game.shopOpen = typeof open === "boolean" ? open : !game.shopOpen;
   if (game.shopOpen) game.paused = false;
   if (typeof game.onPauseChanged === "function") game.onPauseChanged(game.paused, game);
@@ -87,7 +92,7 @@ export function toggleShop(game, open) {
 }
 
 export function toggleSkillTree(game, open) {
-  if (game.gameOver) return;
+  if (game.gameOver || (Number.isFinite(game?.player?.health) && game.player.health <= 0)) return;
   game.skillTreeOpen = typeof open === "boolean" ? open : !game.skillTreeOpen;
   if (game.skillTreeOpen) game.paused = false;
   if (typeof game.onPauseChanged === "function") game.onPauseChanged(game.paused, game);
@@ -99,6 +104,48 @@ export function toggleSkillTree(game, open) {
   }
 }
 
+export function toggleStatsPanel(game, open) {
+  const nextOpen = typeof open === "boolean" ? open : !game.statsPanelOpen;
+  if (nextOpen === game.statsPanelOpen) return;
+  if (isActiveMultiplayer(game)) {
+    game.statsPanelOpen = nextOpen;
+    game.statsPanelPausedGame = false;
+    if (nextOpen) {
+      game.shopOpen = false;
+      game.skillTreeOpen = false;
+    }
+    if (game.input) {
+      game.input.mouse.leftDown = false;
+      game.input.mouse.leftQueued = false;
+    }
+    return;
+  }
+  if (nextOpen) {
+    game.statsPanelPausedGame = !game.paused && !game.gameOver;
+    game.statsPanelOpen = true;
+    if (!game.gameOver) {
+      game.paused = true;
+      game.shopOpen = false;
+      game.skillTreeOpen = false;
+    }
+  } else {
+    game.statsPanelOpen = false;
+    if (game.statsPanelPausedGame) game.paused = false;
+    game.statsPanelPausedGame = false;
+  }
+  if (typeof game.onPauseChanged === "function") game.onPauseChanged(game.paused, game);
+  if (game.input) {
+    game.input.mouse.leftDown = false;
+    game.input.mouse.leftQueued = false;
+  }
+}
+
+export function setStatsPanelView(game, view) {
+  if (view !== "run" && view !== "character") return false;
+  game.statsPanelView = view;
+  return true;
+}
+
 export function pointInRect(_game, x, y, rect) {
   if (!rect) return false;
   return x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
@@ -106,8 +153,9 @@ export function pointInRect(_game, x, y, rect) {
 
 export function handleUiClicks(game) {
   if (!game.input) return;
+  const playerAlive = !(Number.isFinite(game?.player?.health) && game.player.health <= 0);
   const wheelDelta = game.input.consumeWheelDelta ? game.input.consumeWheelDelta() : 0;
-  if (wheelDelta !== 0 && (game.skillTreeOpen || game.shopOpen)) {
+  if (playerAlive && wheelDelta !== 0 && (game.skillTreeOpen || game.shopOpen)) {
     const target = game.skillTreeOpen
       ? { area: game.uiRects.skillTreeScrollArea, max: game.uiRects.skillTreeScrollMax, key: "skillTree" }
       : { area: game.uiRects.shopScrollArea, max: game.uiRects.shopScrollMax, key: "shop" };
@@ -121,29 +169,49 @@ export function handleUiClicks(game) {
       if (game.onReturnToMenu) game.onReturnToMenu();
     } else if (game.shopOpen) toggleShop(game, false);
     else if (game.skillTreeOpen) toggleSkillTree(game, false);
+    else if (game.statsPanelOpen) toggleStatsPanel(game, false);
     else {
       game.paused = !game.paused;
       if (typeof game.onPauseChanged === "function") game.onPauseChanged(game.paused, game);
     }
+  }
+  if (playerAlive && game.input.consumeKeyQueued("b") && !game.gameOver) {
+    toggleShop(game);
+  }
+  if (playerAlive && game.input.consumeKeyQueued("k") && !game.gameOver) {
+    toggleSkillTree(game);
+  }
+  if (game.input.consumeKeyQueued("c") && !game.gameOver) {
+    toggleStatsPanel(game);
   }
   const clicks = game.input.consumeUiLeftClicks();
   if (clicks.length === 0) return;
 
   for (const click of clicks) {
     if (pointInRect(game, click.x, click.y, game.uiRects.shopButton)) {
+      if (!playerAlive) continue;
       toggleShop(game);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillTreeButton)) {
+      if (!playerAlive) continue;
       toggleSkillTree(game);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsButton)) {
-      game.statsPanelOpen = !game.statsPanelOpen;
+      toggleStatsPanel(game);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsClose)) {
-      game.statsPanelOpen = false;
+      toggleStatsPanel(game, false);
+      continue;
+    }
+    if (pointInRect(game, click.x, click.y, game.uiRects.statsRunTab)) {
+      setStatsPanelView(game, "run");
+      continue;
+    }
+    if (pointInRect(game, click.x, click.y, game.uiRects.statsCharacterTab)) {
+      setStatsPanelView(game, "character");
       continue;
     }
     if (!game.shopOpen && !game.skillTreeOpen) continue;
@@ -155,6 +223,7 @@ export function handleUiClicks(game) {
       toggleSkillTree(game, false);
       continue;
     }
+    if (!playerAlive) continue;
     if (pointInRect(game, click.x, click.y, game.uiRects.skillFireArrowNode)) {
       game.spendSkillPoint("fireArrow");
       continue;

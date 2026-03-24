@@ -10,6 +10,26 @@ export function resolveCombatAndDrops({
   segmentRectHit,
   skeletonIgnoresArrow
 }) {
+  const getLivingPlayers = () => (typeof game.getLivingPlayerEntities === "function" ? game.getLivingPlayerEntities() : [game.player]);
+  const damagePlayer = (player, amount, type = "physical") => {
+    if (!player || amount <= 0) return;
+    const resolved = typeof game.getDamageTakenForPlayerEntity === "function" ? game.getDamageTakenForPlayerEntity(player, amount, type) : amount;
+    if (typeof game.applyDamageToPlayerEntity === "function") game.applyDamageToPlayerEntity(player, resolved, type);
+    else game.applyPlayerDamage(resolved);
+  };
+  const healPlayer = (player, amount) => {
+    if (!player || amount <= 0) return;
+    if (typeof game.applyHealingToPlayerEntity === "function") game.applyHealingToPlayerEntity(player, amount);
+    else if (player === game.player) game.applyPlayerHealing(amount);
+  };
+  const getRewardOwner = (enemy) => {
+    const ownerId = typeof enemy?.lastDamageOwnerId === "string" && enemy.lastDamageOwnerId ? enemy.lastDamageOwnerId : null;
+    const owner = typeof game.getPlayerEntityById === "function" ? game.getPlayerEntityById(ownerId) : null;
+    if (!owner) return null;
+    if (typeof game.isLivingPlayerEntity === "function" && !game.isLivingPlayerEntity(owner)) return null;
+    return owner;
+  };
+
   for (const b of game.bullets) {
     if (!isActive(b, 180)) {
       b.life = 0;
@@ -46,7 +66,7 @@ export function resolveCombatAndDrops({
       const half = (br.size || 20) * 0.5 + (a.size || 8) * 0.5;
       if (segmentRectHit(prevX, prevY, a.x, a.y, br.x - half, br.y - half, br.x + half, br.y + half)) {
         br.hp = 0;
-        game.triggerFireExplosion(a.x, a.y);
+        game.triggerFireExplosion(a.x, a.y, a);
         a.life = 0;
         break;
       }
@@ -58,14 +78,14 @@ export function resolveCombatAndDrops({
 
   for (const bullet of game.bullets) {
     if (bullet.projectileType === "deathBolt" && bullet.life > 0 && game.isWallAt(bullet.x, bullet.y, false)) {
-      game.triggerDeathBoltExplosion(bullet.x, bullet.y);
+      game.triggerDeathBoltExplosion(bullet.x, bullet.y, bullet);
       bullet.life = 0;
     }
   }
   game.bullets = game.bullets.filter((b) => !game.isWallAt(b.x, b.y, false) && b.life > 0);
   for (const arrow of game.fireArrows) {
     if (arrow.life <= 0 || game.isWallAt(arrow.x, arrow.y, false)) {
-      game.triggerFireExplosion(arrow.x, arrow.y);
+      game.triggerFireExplosion(arrow.x, arrow.y, arrow);
       arrow.life = 0;
     }
   }
@@ -83,18 +103,21 @@ export function resolveCombatAndDrops({
         if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
         if (vecLength(b.x - enemy.x, b.y - enemy.y) <= (enemy.size + b.size) * 0.5) {
           const rawDamage = game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
-          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), "arrow");
+          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), "arrow", b.ownerId || null);
           b.life = 0;
           ratArrowHit = true;
           break;
         }
       }
       if (ratArrowHit) continue;
-      if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerEnemyRadius + b.size * 0.5) {
+      for (const player of getLivingPlayers()) {
+        const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function" ? game.getPlayerEnemyCollisionRadiusFor(player) : playerEnemyRadius;
+        if (vecLength(b.x - player.x, b.y - player.y) > playerRadius + b.size * 0.5) continue;
         const rawDamage = game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, "arrow"));
+        damagePlayer(player, scaledEnemyDamage, "arrow");
         b.life = 0;
+        break;
       }
       continue;
     }
@@ -116,7 +139,7 @@ export function resolveCombatAndDrops({
         }
       }
       if (hit) {
-        game.triggerDeathBoltExplosion(b.x, b.y);
+        game.triggerDeathBoltExplosion(b.x, b.y, b);
         b.life = 0;
       }
       continue;
@@ -129,15 +152,20 @@ export function resolveCombatAndDrops({
         }
       }
       if (b.life <= 0) continue;
-      if (vecLength(b.x - game.player.x, b.y - game.player.y) <= playerEnemyRadius + b.size * 0.5) {
+      let hitPlayer = false;
+      for (const player of getLivingPlayers()) {
+        const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function" ? game.getPlayerEnemyCollisionRadiusFor(player) : playerEnemyRadius;
+        if (vecLength(b.x - player.x, b.y - player.y) > playerRadius + b.size * 0.5) continue;
         const rawDamage = typeof game.rollWallTrapDamage === "function"
           ? game.rollWallTrapDamage()
           : game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
         const scaledTrapDamage = rawDamage * game.getEnemyDamageScale();
-        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledTrapDamage, "arrow"));
+        damagePlayer(player, scaledTrapDamage, "arrow");
         b.life = 0;
-        continue;
+        hitPlayer = true;
+        break;
       }
+      if (hitPlayer) continue;
       for (const enemy of activeEnemies) {
         if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
         if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
@@ -145,7 +173,7 @@ export function resolveCombatAndDrops({
           const rawDamage = typeof game.rollWallTrapDamage === "function"
             ? game.rollWallTrapDamage()
             : game.rollEnemyContactDamage({ damageMin: b.damageMin, damageMax: b.damageMax });
-          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), "arrow");
+          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), "arrow", b.ownerId || null);
           b.life = 0;
           break;
         }
@@ -159,17 +187,19 @@ export function resolveCombatAndDrops({
         if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
         if (vecLength(b.x - enemy.x, b.y - enemy.y) < (enemy.size + b.size) * 0.5) {
           const rawDamage = Number.isFinite(b.damage) ? b.damage : game.config.enemy.necromancerProjectileDamage || 16;
-          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), b.damageType || "necrotic");
+          game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), b.damageType || "necrotic", b.ownerId || null);
           b.life = 0;
           break;
         }
       }
       if (b.life <= 0) continue;
-      if (vecLength(b.x - game.player.x, b.y - game.player.y) < (game.player.size + b.size) * 0.5) {
+      for (const player of getLivingPlayers()) {
+        if (vecLength(b.x - player.x, b.y - player.y) >= ((player.size || game.player.size) + b.size) * 0.5) continue;
         const rawDamage = Number.isFinite(b.damage) ? b.damage : game.config.enemy.necromancerProjectileDamage || 16;
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, b.damageType || "necrotic"));
+        damagePlayer(player, scaledEnemyDamage, b.damageType || "necrotic");
         b.life = 0;
+        break;
       }
       continue;
     }
@@ -193,7 +223,8 @@ export function resolveCombatAndDrops({
           continue;
         }
         const dmgMult = Number.isFinite(b.damageMult) ? b.damageMult : 1;
-        game.applyEnemyDamage(enemy, game.rollPrimaryDamage() * Math.max(0.01, dmgMult), "arrow");
+        const projectileDamage = Number.isFinite(b.damage) ? b.damage : game.rollPrimaryDamage();
+        game.applyEnemyDamage(enemy, projectileDamage * Math.max(0.01, dmgMult), "arrow", b.ownerId || null);
         b.hitTargets.add(enemy);
         if (Math.random() >= game.getPiercingChance()) b.life = 0;
         break;
@@ -212,7 +243,7 @@ export function resolveCombatAndDrops({
       }
     }
     if (hit) {
-      game.triggerFireExplosion(arrow.x, arrow.y);
+      game.triggerFireExplosion(arrow.x, arrow.y, arrow);
       arrow.life = 0;
       continue;
     }
@@ -226,7 +257,7 @@ export function resolveCombatAndDrops({
       }
     }
     if (hit) {
-      game.triggerFireExplosion(arrow.x, arrow.y);
+      game.triggerFireExplosion(arrow.x, arrow.y, arrow);
       arrow.life = 0;
     }
   }
@@ -237,7 +268,7 @@ export function resolveCombatAndDrops({
     if (zone.zoneType === "deathBolt") {
       zone.pulseTimer = Math.max(-4, (Number.isFinite(zone.pulseTimer) ? zone.pulseTimer : (game.config.deathBolt?.pulseInterval || 1)) - dt);
       while (zone.life > 0 && zone.pulseTimer <= 0) {
-        if (typeof game.applyDeathBoltPulse === "function") game.applyDeathBoltPulse(zone.x, zone.y);
+        if (typeof game.applyDeathBoltPulse === "function") game.applyDeathBoltPulse(zone.x, zone.y, zone);
         zone.pulseTimer += game.config.deathBolt?.pulseInterval || 1;
       }
       continue;
@@ -287,7 +318,8 @@ export function resolveCombatAndDrops({
         continue;
       }
       if (vecLength(zone.x - enemy.x, zone.y - enemy.y) < zone.radius + enemy.size * 0.35) {
-        game.applyEnemyDamage(enemy, game.getFireArrowLingerDps() * dt, "fire");
+        const lingerDps = Number.isFinite(zone.dps) ? zone.dps : game.getFireArrowLingerDps();
+        game.applyEnemyDamage(enemy, lingerDps * dt, "fire", zone.ownerId || null);
       }
     }
   }
@@ -301,10 +333,12 @@ export function resolveCombatAndDrops({
     const auraRange = (game.config.enemy.mummyAuraRangeTiles || 1.8) * game.config.map.tile;
     const auraDps = game.config.enemy.mummyAuraDps || 8;
     let affected = false;
-    if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) {
-      if (vecLength(enemy.x - game.player.x, enemy.y - game.player.y) <= auraRange + playerEnemyRadius) {
+      if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) {
+      for (const player of getLivingPlayers()) {
+        const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function" ? game.getPlayerEnemyCollisionRadiusFor(player) : playerEnemyRadius;
+        if (vecLength(enemy.x - player.x, enemy.y - player.y) > auraRange + playerRadius) continue;
         const rawDamage = auraDps * dt * game.getEnemyDamageScale();
-        game.applyPlayerDamage(game.getPlayerDamageTaken(rawDamage, "poison"));
+        damagePlayer(player, rawDamage, "poison");
         affected = true;
       }
       for (const ally of activeEnemies) {
@@ -337,8 +371,10 @@ export function resolveCombatAndDrops({
       if (vecLength(a.x - b.x, a.y - b.y) > minDist) continue;
       const friendly = aFriendly ? a : b;
       const hostile = aFriendly ? b : a;
+      const friendlyOwnerId =
+        typeof friendly?.controllerPlayerId === "string" && friendly.controllerPlayerId ? friendly.controllerPlayerId : null;
       if ((friendly.contactAttackCooldown || 0) <= 0) {
-        game.applyEnemyDamage(hostile, game.rollEnemyContactDamage(friendly) * game.getEnemyDamageScale(), "physical");
+        game.applyEnemyDamage(hostile, game.rollEnemyContactDamage(friendly) * game.getEnemyDamageScale(), "physical", friendlyOwnerId);
         friendly.contactAttackCooldown = 0.55;
       }
       if ((hostile.contactAttackCooldown || 0) <= 0) {
@@ -370,7 +406,12 @@ export function resolveCombatAndDrops({
   for (const enemy of game.enemies) {
     if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) continue;
     if ((enemy.hp || 0) <= 0) continue;
-    if (vecLength(enemy.x - game.player.x, enemy.y - game.player.y) > maxPetDistance) enemy.hp = 0;
+    const owner = typeof game.getControllingPlayerEntityForEnemy === "function" ? game.getControllingPlayerEntityForEnemy(enemy) : game.player;
+    if (!owner || (typeof game.isLivingPlayerEntity === "function" && !game.isLivingPlayerEntity(owner))) {
+      enemy.hp = 0;
+      continue;
+    }
+    if (vecLength(enemy.x - owner.x, enemy.y - owner.y) > maxPetDistance) enemy.hp = 0;
   }
 
   let removeBossSummons = false;
@@ -380,21 +421,32 @@ export function resolveCombatAndDrops({
       const wasFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy);
       if (wasFriendly && typeof game.triggerExplodingDeath === "function") game.triggerExplodingDeath(enemy);
       if (wasFriendly) return false;
-      game.triggerWarriorMomentumOnKill();
-      if (enemy.type === "goblin") game.score += 30 + enemy.goldEaten;
-      else if (enemy.type === "armor") game.score += 40;
-      else if (enemy.type === "mimic") game.score += 35;
-      else if (enemy.type === "mummy") game.score += 22;
-      else if (enemy.type === "prisoner") game.score += 22;
-      else if (enemy.type === "mummy") game.score += 22;
-      else if (enemy.type === "rat_archer") game.score += 16;
-      else if (enemy.type === "skeleton_warrior") game.score += 10;
-      else if (enemy.type === "necromancer") game.score += 250;
-      else if (enemy.type === "leprechaun") game.score += 500;
-      else if (enemy.type === "minotaur") game.score += 320;
-      else if (enemy.type === "skeleton") game.score += 12;
-      else game.score += 10;
-      game.gainExperience(game.xpFromEnemy(enemy));
+      const rewardOwner = getRewardOwner(enemy);
+      if (typeof game.recordKillByPlayerEntity === "function") game.recordKillByPlayerEntity(rewardOwner, enemy);
+      if (enemy.isFloorBoss && typeof game.recordRunBossKill === "function") game.recordRunBossKill();
+      if (enemy.lastDamageType === "fire" && typeof game.recordClassSpecificStat === "function") {
+        game.recordClassSpecificStat("ranger", "fireArrowKills", 1);
+      }
+      if (enemy.pendingExecuteKill && typeof game.recordClassSpecificStat === "function") {
+        game.recordClassSpecificStat("warrior", "executeKills", 1);
+      }
+      if (typeof game.triggerWarriorMomentumOnKillForPlayerEntity === "function") game.triggerWarriorMomentumOnKillForPlayerEntity(rewardOwner);
+      else game.triggerWarriorMomentumOnKill();
+      let rewardScore = 10;
+      if (enemy.type === "goblin") rewardScore = 30 + enemy.goldEaten;
+      else if (enemy.type === "armor") rewardScore = 40;
+      else if (enemy.type === "mimic") rewardScore = 35;
+      else if (enemy.type === "mummy") rewardScore = 22;
+      else if (enemy.type === "prisoner") rewardScore = 22;
+      else if (enemy.type === "rat_archer") rewardScore = 16;
+      else if (enemy.type === "skeleton_warrior") rewardScore = 10;
+      else if (enemy.type === "necromancer") rewardScore = 250;
+      else if (enemy.type === "leprechaun") rewardScore = 500;
+      else if (enemy.type === "minotaur") rewardScore = 320;
+      else if (enemy.type === "skeleton") rewardScore = 12;
+      if (typeof game.awardScoreToPlayerEntity === "function") game.awardScoreToPlayerEntity(rewardOwner, rewardScore);
+      if (typeof game.gainExperienceForPlayerEntity === "function") game.gainExperienceForPlayerEntity(rewardOwner, game.xpFromEnemy(enemy));
+      else game.gainExperience(game.xpFromEnemy(enemy));
       if (enemy.type === "goblin") game.dropTreasureBag(enemy.x, enemy.y, enemy.goldEaten);
       else if (enemy.type === "armor") game.dropArmorLoot(enemy.x, enemy.y);
       else if (enemy.type === "mimic") game.dropTreasureBag(enemy.x, enemy.y, 24);
@@ -432,15 +484,16 @@ export function resolveCombatAndDrops({
 
   for (const drop of game.drops) {
     if (drop.life <= 0) continue;
-    if (vecLength(game.player.x - drop.x, game.player.y - drop.y) < game.getPickupRadius()) {
-      if (drop.type === "health") game.applyPlayerHealing(drop.amount);
-      else if (game.isGoldDrop(drop)) {
+    for (const player of getLivingPlayers()) {
+      if (vecLength(player.x - drop.x, player.y - drop.y) >= game.getPickupRadius()) continue;
+      if (drop.type === "health") {
+        healPlayer(player, drop.amount);
+      } else if (game.isGoldDrop(drop)) {
         const amount = Math.max(1, Math.floor(drop.amount * game.getGoldFindMultiplier()));
-        game.gold += amount;
-        game.score += amount;
-        game.spawnFloatingText(game.player.x, game.player.y - 30, `+${amount}g`, "#f2d76b", 0.75, 14);
+        if (typeof game.awardGoldToPlayerEntity === "function") game.awardGoldToPlayerEntity(player, amount);
       }
       drop.life = 0;
+      break;
     }
   }
   game.drops = game.drops.filter((drop) => drop.life > 0);
@@ -459,22 +512,23 @@ export function resolveCombatAndDrops({
         }
       }
     };
-    affectsEntity(game.player);
+    for (const player of getLivingPlayers()) affectsEntity(player);
     for (const enemy of game.enemies) affectsEntity(enemy);
   }
 
-  if (game.player.hitCooldown <= 0) {
+  for (const player of getLivingPlayers()) {
+    if ((player.hitCooldown || 0) > 0) continue;
+    const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function" ? game.getPlayerEnemyCollisionRadiusFor(player) : playerEnemyRadius;
     for (const enemy of activeEnemies) {
       if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
       if (enemy.type === "leprechaun" && enemy.phase !== "enraged") continue;
       if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
-      if (vecLength(game.player.x - enemy.x, game.player.y - enemy.y) <= enemy.size * 0.5 + playerEnemyRadius) {
-        game.player.hitCooldown = 1.0;
-        const rawDamage = game.rollEnemyContactDamage(enemy);
-        const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-        game.applyPlayerDamage(game.getPlayerDamageTaken(scaledEnemyDamage, "physical"));
-        break;
-      }
+      if (vecLength(player.x - enemy.x, player.y - enemy.y) > enemy.size * 0.5 + playerRadius) continue;
+      player.hitCooldown = 1.0;
+      const rawDamage = game.rollEnemyContactDamage(enemy);
+      const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+      damagePlayer(player, scaledEnemyDamage, "physical");
+      break;
     }
   }
 }

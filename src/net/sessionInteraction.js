@@ -2,6 +2,8 @@ export function collectInput(game, consumeQueued = true) {
   if (game?.input?.mouse?.hasAim && typeof game.input.refreshAimWorldPosition === "function") {
     game.input.refreshAimWorldPosition();
   }
+  const playerAlive = !(Number.isFinite(game?.player?.health) && game.player.health <= 0);
+  const gameplayBlocked = !playerAlive || !!game?.gameOver || !!game?.paused || !!game?.shopOpen || !!game?.skillTreeOpen;
   const playerX = Number.isFinite(game?.player?.x) ? game.player.x : 0;
   const playerY = Number.isFinite(game?.player?.y) ? game.player.y : 0;
   const rawAimX = game.input.mouse.worldX - playerX;
@@ -15,16 +17,16 @@ export function collectInput(game, consumeQueued = true) {
   if (keys.has("arrowup") || keys.has("w")) moveY -= 1;
   if (keys.has("arrowdown") || keys.has("s")) moveY += 1;
   return {
-    moveX,
-    moveY,
-    hasAim: !!game.input.mouse.hasAim,
+    moveX: gameplayBlocked ? 0 : moveX,
+    moveY: gameplayBlocked ? 0 : moveY,
+    hasAim: !gameplayBlocked && !!game.input.mouse.hasAim,
     aimX: game.input.mouse.worldX,
     aimY: game.input.mouse.worldY,
-    aimDirX: game.input.mouse.hasAim ? rawAimX / rawAimLen : 0,
-    aimDirY: game.input.mouse.hasAim ? rawAimY / rawAimLen : 0,
-    firePrimaryQueued: consumeQueued ? game.input.consumeLeftQueued() : false,
-    firePrimaryHeld: !!game.input.mouse.leftDown,
-    fireAltQueued: consumeQueued ? game.input.consumeRightQueued() : false
+    aimDirX: !gameplayBlocked && game.input.mouse.hasAim ? rawAimX / rawAimLen : 0,
+    aimDirY: !gameplayBlocked && game.input.mouse.hasAim ? rawAimY / rawAimLen : 0,
+    firePrimaryQueued: !gameplayBlocked && consumeQueued ? game.input.consumeLeftQueued() : false,
+    firePrimaryHeld: !gameplayBlocked && !!game.input.mouse.leftDown,
+    fireAltQueued: !gameplayBlocked && consumeQueued ? game.input.consumeRightQueued() : false
   };
 }
 
@@ -40,12 +42,53 @@ export function shouldSendNetworkInput(input, nowMs, previous, lastInputSendAt, 
     input.hasAim &&
     previous.hasAim &&
     (Math.abs((input.aimDirX || 0) - (previous.aimDirX || 0)) > 0.01 || Math.abs((input.aimDirY || 0) - (previous.aimDirY || 0)) > 0.01);
-  const hasAction = !!input.firePrimaryQueued || !!input.fireAltQueued;
-  if (changedMove || changedAimMode || changedAimPos || changedAimDir || hasAction) return true;
+  const changedPrimaryHold = !!input.firePrimaryHeld !== !!previous.firePrimaryHeld;
+  const hasQueuedAction = !!input.firePrimaryQueued || !!input.fireAltQueued;
+  const hasContinuousInput = !!input.firePrimaryHeld || !!input.moveX || !!input.moveY;
+  if (changedMove || changedAimMode || changedAimPos || changedAimDir || changedPrimaryHold || hasQueuedAction || hasContinuousInput) return true;
   return nowMs - lastInputSendAt >= forceSendIdleMs;
 }
 
 export function handleNetworkUiActions(game, netClient, isController) {
+  const playerAlive = !(Number.isFinite(game?.player?.health) && game.player.health <= 0);
+  const isActiveMultiplayer = !!game?.networkEnabled && game.networkRoomPhase === "active";
+  const localPlayerId = typeof game?.networkLocalPlayerId === "string" ? game.networkLocalPlayerId : null;
+  const pauseOwnerId = typeof game?.networkPauseOwnerId === "string" ? game.networkPauseOwnerId : null;
+  const isPauseOwner = !!(isActiveMultiplayer && localPlayerId && pauseOwnerId && localPlayerId === pauseOwnerId);
+  const canUseLocalPanels = !!game && isActiveMultiplayer;
+  const toggleLocalShop = (open) => {
+    if (typeof game?.toggleShop === "function") game.toggleShop(open);
+  };
+  const toggleLocalSkillTree = (open) => {
+    if (typeof game?.toggleSkillTree === "function") game.toggleSkillTree(open);
+  };
+  const toggleLocalStats = (open) => {
+    if (typeof game?.toggleStatsPanel === "function") game.toggleStatsPanel(open);
+  };
+  const handleSpectateUi = () => {
+    if (!game || !game.input || game.gameOver || (Number.isFinite(game?.player?.health) && game.player.health > 0)) return false;
+    let handled = false;
+    const pointInRect = typeof game.pointInRect === "function"
+      ? (x, y, rect) => game.pointInRect(x, y, rect)
+      : (x, y, rect) => !!rect && x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
+    if (game.input.consumeKeyQueued("q")) {
+      if (typeof game.cycleSpectateTarget === "function") game.cycleSpectateTarget(-1);
+      handled = true;
+    }
+    if (game.input.consumeKeyQueued("e")) {
+      if (typeof game.cycleSpectateTarget === "function") game.cycleSpectateTarget(1);
+      handled = true;
+    }
+    const clicks = game.input.consumeUiLeftClicks();
+    for (const click of clicks) {
+      const rows = Array.isArray(game.uiRects?.groupPanelRows) ? game.uiRects.groupPanelRows : [];
+      const hitRow = rows.find((row) => row?.alive && row.rect && pointInRect(click.x, click.y, row.rect));
+      if (!hitRow) continue;
+      if (typeof game.setSpectateTargetById === "function") game.setSpectateTargetById(hitRow.id);
+      handled = true;
+    }
+    return handled;
+  };
   if (!game.networkUiDebug || typeof game.networkUiDebug !== "object") {
     game.networkUiDebug = {
       lastClick: null,
@@ -54,16 +97,17 @@ export function handleNetworkUiActions(game, netClient, isController) {
       recentActions: []
     };
   }
-  if (!netClient || !isController) {
-    const droppedClicks = game.input.consumeUiLeftClicks();
+  if (!netClient) {
+    const handledSpectateUi = handleSpectateUi();
+    const droppedClicks = handledSpectateUi ? [] : game.input.consumeUiLeftClicks();
     if (droppedClicks.length > 0) {
       game.networkUiDebug.lastClick = droppedClicks[droppedClicks.length - 1];
-      game.networkUiDebug.lastHit = netClient ? "notController" : "noNetClient";
+      game.networkUiDebug.lastHit = "noNetClient";
       game.networkUiDebug.lastActionKind = "";
       game.networkUiDebug.recentActions.push({
         atMs: Math.round(performance.now()),
         click: droppedClicks[droppedClicks.length - 1],
-        hit: netClient ? "notController" : "noNetClient",
+        hit: "noNetClient",
         actionKind: "",
         actionKey: ""
       });
@@ -74,8 +118,13 @@ export function handleNetworkUiActions(game, netClient, isController) {
     if (game.input.consumeWheelDelta) game.input.consumeWheelDelta();
     return;
   }
+  const handledSpectateUi = handleSpectateUi();
+  if (handledSpectateUi) {
+    if (game.input.consumeWheelDelta) game.input.consumeWheelDelta();
+    return;
+  }
   const wheelDelta = game.input.consumeWheelDelta ? game.input.consumeWheelDelta() : 0;
-  if (wheelDelta !== 0 && (game.skillTreeOpen || game.shopOpen)) {
+  if (playerAlive && wheelDelta !== 0 && (game.skillTreeOpen || game.shopOpen)) {
     const target = game.skillTreeOpen
       ? { max: game.uiRects.skillTreeScrollMax, key: "skillTree" }
       : { max: game.uiRects.shopScrollMax, key: "shop" };
@@ -85,7 +134,25 @@ export function handleNetworkUiActions(game, netClient, isController) {
     game.uiScroll[target.key] = Math.max(0, Math.min(max, next));
   }
   if (game.input.consumeKeyQueued("escape")) {
-    netClient.sendAction({ kind: "escape" });
+    if (isActiveMultiplayer && !isPauseOwner) {
+      if (game.shopOpen) toggleLocalShop(false);
+      else if (game.skillTreeOpen) toggleLocalSkillTree(false);
+      else if (game.statsPanelOpen) toggleLocalStats(false);
+    } else if (isController) {
+      netClient.sendAction({ kind: "escape" });
+    }
+  }
+  if (playerAlive && game.input.consumeKeyQueued("b") && !game.gameOver) {
+    if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop();
+    else if (isController) netClient.sendAction({ kind: "toggleShop" });
+  }
+  if (playerAlive && game.input.consumeKeyQueued("k") && !game.gameOver) {
+    if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree();
+    else if (isController) netClient.sendAction({ kind: "toggleSkillTree" });
+  }
+  if (game.input.consumeKeyQueued("c")) {
+    if (canUseLocalPanels) toggleLocalStats();
+    else if (isController) netClient.sendAction({ kind: "toggleStats" });
   }
   const clicks = game.input.consumeUiLeftClicks();
   if (clicks.length === 0) return;
@@ -107,85 +174,114 @@ export function handleNetworkUiActions(game, netClient, isController) {
     }
   };
   for (const click of clicks) {
+    if (hit(click.x, click.y, game.uiRects.gameOverStatsButton)) {
+      recordAction(click, "gameOverStatsButton", "toggleStats");
+      if (canUseLocalPanels) toggleLocalStats();
+      else if (isController) netClient.sendAction({ kind: "toggleStats" });
+      continue;
+    }
     if (hit(click.x, click.y, game.uiRects.shopButton)) {
+      if (!playerAlive) continue;
       recordAction(click, "shopButton", "toggleShop");
-      netClient.sendAction({ kind: "toggleShop" });
+      if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop();
+      else if (isController) netClient.sendAction({ kind: "toggleShop" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.shopClose)) {
+      if (!playerAlive) continue;
       recordAction(click, "shopClose", "closeShop");
-      netClient.sendAction({ kind: "closeShop" });
+      if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop(false);
+      else if (isController) netClient.sendAction({ kind: "closeShop" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeButton)) {
+      if (!playerAlive) continue;
       recordAction(click, "skillTreeButton", "toggleSkillTree");
-      netClient.sendAction({ kind: "toggleSkillTree" });
+      if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree();
+      else if (isController) netClient.sendAction({ kind: "toggleSkillTree" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeClose)) {
+      if (!playerAlive) continue;
       recordAction(click, "skillTreeClose", "closeSkillTree");
-      netClient.sendAction({ kind: "closeSkillTree" });
+      if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree(false);
+      else if (isController) netClient.sendAction({ kind: "closeSkillTree" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsButton)) {
       recordAction(click, "statsButton", "toggleStats");
-      netClient.sendAction({ kind: "toggleStats" });
+      if (canUseLocalPanels) toggleLocalStats();
+      else if (isController) netClient.sendAction({ kind: "toggleStats" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsClose)) {
       recordAction(click, "statsClose", "closeStats");
-      netClient.sendAction({ kind: "closeStats" });
+      if (canUseLocalPanels) toggleLocalStats(false);
+      else if (isController) netClient.sendAction({ kind: "closeStats" });
+      continue;
+    }
+    if (hit(click.x, click.y, game.uiRects.statsRunTab)) {
+      recordAction(click, "statsRunTab", "setStatsView", "run");
+      if (typeof game?.setStatsPanelView === "function" && canUseLocalPanels) game.setStatsPanelView("run");
+      else if (isController) netClient.sendAction({ kind: "setStatsView", view: "run" });
+      continue;
+    }
+    if (hit(click.x, click.y, game.uiRects.statsCharacterTab)) {
+      recordAction(click, "statsCharacterTab", "setStatsView", "character");
+      if (typeof game?.setStatsPanelView === "function" && canUseLocalPanels) game.setStatsPanelView("character");
+      else if (isController) netClient.sendAction({ kind: "setStatsView", view: "character" });
       continue;
     }
     const itemRects = game.uiRects.shopItems || [];
     for (const item of itemRects) {
+      if (!playerAlive) break;
       if (hit(click.x, click.y, item.rect)) {
         recordAction(click, `shopItem:${item.key}`, "buyUpgrade", item.key);
         netClient.sendAction({ kind: "buyUpgrade", key: item.key });
         break;
       }
     }
-    if (hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
       recordAction(click, "skillFireArrowNode", "spendSkill", "fireArrow");
       netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillPiercingNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillPiercingNode)) {
       recordAction(click, "skillPiercingNode", "spendSkill", "piercingStrike");
       netClient.sendAction({ kind: "spendSkill", key: "piercingStrike" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillMultiarrowNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillMultiarrowNode)) {
       recordAction(click, "skillMultiarrowNode", "spendSkill", "multiarrow");
       netClient.sendAction({ kind: "spendSkill", key: "multiarrow" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillWarriorMomentumNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillWarriorMomentumNode)) {
       recordAction(click, "skillWarriorMomentumNode", "spendSkill", "warriorMomentum");
       netClient.sendAction({ kind: "spendSkill", key: "warriorMomentum" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillWarriorRageNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillWarriorRageNode)) {
       recordAction(click, "skillWarriorRageNode", "spendSkill", "warriorRage");
       netClient.sendAction({ kind: "spendSkill", key: "warriorRage" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillWarriorExecuteNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillWarriorExecuteNode)) {
       recordAction(click, "skillWarriorExecuteNode", "spendSkill", "warriorExecute");
       netClient.sendAction({ kind: "spendSkill", key: "warriorExecute" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillUndeadMasteryNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillUndeadMasteryNode)) {
       recordAction(click, "skillUndeadMasteryNode", "spendSkill", "undeadMastery");
       netClient.sendAction({ kind: "spendSkill", key: "undeadMastery" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillDeathBoltNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillDeathBoltNode)) {
       recordAction(click, "skillDeathBoltNode", "spendSkill", "deathBolt");
       netClient.sendAction({ kind: "spendSkill", key: "deathBolt" });
       continue;
     }
-    if (hit(click.x, click.y, game.uiRects.skillExplodingDeathNode)) {
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillExplodingDeathNode)) {
       recordAction(click, "skillExplodingDeathNode", "spendSkill", "explodingDeath");
       netClient.sendAction({ kind: "spendSkill", key: "explodingDeath" });
       continue;
@@ -202,7 +298,11 @@ export function predictFromInput(game, input, dt, canRunPredictedCollision) {
   const mx = Number.isFinite(input.moveX) ? input.moveX : 0;
   const my = Number.isFinite(input.moveY) ? input.moveY : 0;
   if (mx || my) {
-    if (typeof game.moveWithCollision === "function") {
+    if (typeof game.moveWithCollisionSubsteps === "function") {
+      const len = Math.hypot(mx, my) || 1;
+      const speed = game.getPlayerMoveSpeed();
+      game.moveWithCollisionSubsteps(game.player, (mx / len) * speed * dt, (my / len) * speed * dt);
+    } else if (typeof game.moveWithCollision === "function") {
       const len = Math.hypot(mx, my) || 1;
       const speed = game.getPlayerMoveSpeed();
       game.moveWithCollision(game.player, (mx / len) * speed * dt, (my / len) * speed * dt);
@@ -239,8 +339,18 @@ export function predictFromInput(game, input, dt, canRunPredictedCollision) {
   }
 }
 
+function hasRecentCorrectionPressure(game) {
+  const perf = game?.networkPerf;
+  if (!perf || typeof perf !== "object") return false;
+  if (Number.isFinite(perf.lastCorrectionPx) && perf.lastCorrectionPx >= 56) return true;
+  const recent = Array.isArray(perf.recentCorrections) ? perf.recentCorrections : [];
+  const last = recent[recent.length - 1];
+  return !!last && Number.isFinite(last.errorPx) && last.errorPx >= 56;
+}
+
 export function canRunPredictedCollision(game, isKnownMapTileAt) {
   if (!game || !game.player) return false;
+  if (hasRecentCorrectionPressure(game)) return false;
   const r = (game.player.size || 22) * 0.5;
   return (
     isKnownMapTileAt(game, game.player.x - r, game.player.y - r) &&
@@ -252,10 +362,12 @@ export function canRunPredictedCollision(game, isKnownMapTileAt) {
 
 export function updateNetworkRole(game, isController, networkTakeControl) {
   if (!game) return;
-  const role = isController ? "Controller" : "Spectator";
+  const playerAlive = Number.isFinite(game?.player?.health) ? game.player.health > 0 : true;
+  const inActiveRoom = game.networkRoomPhase === "active";
+  const role = inActiveRoom ? (playerAlive ? "Active" : "Spectating") : (isController ? "Controller" : "Connected");
   game.networkEnabled = true;
   game.networkRole = role;
-  if (networkTakeControl) networkTakeControl.disabled = role === "Controller";
+  if (networkTakeControl) networkTakeControl.disabled = !!isController;
 }
 
 export function setSelectedClass(classType, classButtons) {

@@ -78,7 +78,11 @@ export function startNetworkRenderLoopRuntime({
     const targetServerTime = Number.isFinite(estimatedServerNow) ? estimatedServerNow - renderDelay : NaN;
     const pkt = consumeSnapshotForRender(netSnapshotBuffer, targetServerTime, targetRecvTime, maxSnapshotBuffer);
     if (pkt) {
-      applySnapshot(game, pkt.state, isNetworkController(), Number.isFinite(pkt.lastInputSeq) ? pkt.lastInputSeq : 0);
+      const stateWithServerTime =
+        pkt?.state && typeof pkt.state === "object" && Number.isFinite(pkt.serverTime)
+          ? { ...pkt.state, serverTime: pkt.serverTime }
+          : pkt.state;
+      applySnapshot(game, stateWithServerTime, isNetworkController(), Number.isFinite(pkt.lastInputSeq) ? pkt.lastInputSeq : 0);
     }
     if (isNetworkController()) {
       const input = collectInput(game, false);
@@ -100,7 +104,24 @@ export function startNetworkRenderLoopRuntime({
       }
     }
     if (typeof game.updateDeathTransition === "function") game.updateDeathTransition(dt);
-    if (Array.isArray(game.map) && game.map.length > 0) game.revealAroundPlayer();
+    if (typeof game.tickMultiplayerNotifications === "function") game.tickMultiplayerNotifications(dt);
+    if (Array.isArray(game.map) && game.map.length > 0) {
+      if (game.player.health > 0 || !game.getSpectateTargetEntity) game.revealAroundPlayer();
+      else {
+        const target = game.getSpectateTargetEntity();
+        if (target) {
+          const originalX = game.player.x;
+          const originalY = game.player.y;
+          game.player.x = target.x;
+          game.player.y = target.y;
+          game.revealAroundPlayer();
+          game.player.x = originalX;
+          game.player.y = originalY;
+        } else {
+          game.revealAroundPlayer();
+        }
+      }
+    }
     game.floatingTexts = stepClientFloatingTexts(game.floatingTexts, dt);
     prunePredictedProjectiles(netPredictedProjectiles);
     game.renderer.draw(game);

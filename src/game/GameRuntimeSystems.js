@@ -30,19 +30,26 @@ import { runtimePlayerCombatMethods } from "./runtimePlayerCombatMethods.js";
 
 export class GameRuntimeSystems extends GameRuntimeWorld {
   getControlledUndeadFormationPoint(enemy) {
-    const allies = (this.enemies || []).filter((entry) => this.isControlledUndead(entry) && (entry.hp || 0) > 0 && !(entry.type === "skeleton_warrior" && entry.collapsed));
+    const owner = typeof this.getControllingPlayerEntityForEnemy === "function" ? this.getControllingPlayerEntityForEnemy(enemy) : this.player;
+    const ownerId = typeof owner?.id === "string" && owner.id ? owner.id : null;
+    const allies = (this.enemies || []).filter((entry) =>
+      this.isControlledUndead(entry) &&
+      (entry.hp || 0) > 0 &&
+      !(entry.type === "skeleton_warrior" && entry.collapsed) &&
+      (!ownerId || entry.controllerPlayerId === ownerId)
+    );
     const index = allies.indexOf(enemy);
     const count = Math.max(1, allies.length);
     const slot = index >= 0 ? index : 0;
-    const moveDx = (this.player.x || 0) - (this.player.lastX || this.player.x || 0);
-    const moveDy = (this.player.y || 0) - (this.player.lastY || this.player.y || 0);
+    const moveDx = (owner.x || 0) - (owner.lastX || owner.x || 0);
+    const moveDy = (owner.y || 0) - (owner.lastY || owner.y || 0);
     const moveLen = vecLength(moveDx, moveDy);
     if (moveLen > 0.2) {
-      this.player.formationDirX = moveDx / moveLen;
-      this.player.formationDirY = moveDy / moveLen;
+      owner.formationDirX = moveDx / moveLen;
+      owner.formationDirY = moveDy / moveLen;
     }
-    const dirX = Number.isFinite(this.player.formationDirX) ? this.player.formationDirX : 0;
-    const dirY = Number.isFinite(this.player.formationDirY) ? this.player.formationDirY : 1;
+    const dirX = Number.isFinite(owner.formationDirX) ? owner.formationDirX : 0;
+    const dirY = Number.isFinite(owner.formationDirY) ? owner.formationDirY : 1;
     const backX = -dirX;
     const backY = -dirY;
     const sideX = -backY;
@@ -54,8 +61,8 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
     const offsetX = backX * Math.cos(angle) - sideX * Math.sin(angle);
     const offsetY = backY * Math.cos(angle) - sideY * Math.sin(angle);
     return {
-      x: this.player.x + offsetX * ring,
-      y: this.player.y + offsetY * ring
+      x: owner.x + offsetX * ring,
+      y: owner.y + offsetY * ring
     };
   }
 
@@ -83,7 +90,7 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
     };
     for (const enemy of this.enemies || []) {
       if (!enemy || enemy === sourceEnemy || (enemy.hp || 0) <= 0) continue;
-      if (sourceFriendly && this.necromancerBeam?.active && this.necromancerBeam.targetEnemy === enemy) continue;
+      if (sourceFriendly && typeof this.isEnemyTargetedByAnyNecromancerBeam === "function" && this.isEnemyTargetedByAnyNecromancerBeam(enemy)) continue;
       if (sourceFriendly && enemy.type === "mimic" && enemy.dormant) continue;
       if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
       const enemyFriendly = this.isEnemyFriendlyToPlayer(enemy);
@@ -113,10 +120,18 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
   updateGenericEnemy(enemy, dt, speedScale) {
     const target = this.getEnemyTargetPoint(enemy);
     if (this.isEnemyFriendlyToPlayer(enemy)) {
-      enemy.speed = Math.max(Number.isFinite(enemy.speed) ? enemy.speed : 0, this.getPlayerMoveSpeed() * 1.1);
+      const owner = typeof this.getControllingPlayerEntityForEnemy === "function" ? this.getControllingPlayerEntityForEnemy(enemy) : this.player;
+      const ownerSpeed = typeof this.getPlayerMoveSpeedFor === "function" ? this.getPlayerMoveSpeedFor(owner) : this.getPlayerMoveSpeed();
+      enemy.speed = Math.max(Number.isFinite(enemy.speed) ? enemy.speed : 0, ownerSpeed * 1.1);
       const aggro = (this.config.necromancer?.aggroRangeTiles || 6.5) * this.config.map.tile;
       const follow = (this.config.necromancer?.followDistanceTiles || 2.2) * this.config.map.tile;
-      if (target !== this.player && vecLength(target.x - enemy.x, target.y - enemy.y) <= aggro) {
+      const leash = 5 * this.config.map.tile;
+      const distToOwner = vecLength(owner.x - enemy.x, owner.y - enemy.y);
+      const targetDist = target ? vecLength(target.x - enemy.x, target.y - enemy.y) : Number.POSITIVE_INFINITY;
+      const targetDistFromOwner = target ? vecLength(target.x - owner.x, target.y - owner.y) : Number.POSITIVE_INFINITY;
+      if (distToOwner > leash) {
+        this.moveEnemyTowardTarget(enemy, owner, speedScale, dt, Math.max(8, follow * 0.6));
+      } else if (target !== owner && targetDist <= aggro && targetDistFromOwner <= leash) {
         this.moveEnemyTowardTarget(enemy, target, speedScale, dt, 6);
       } else {
         const anchor = this.getControlledUndeadFormationPoint(enemy);

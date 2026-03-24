@@ -1,6 +1,81 @@
 import { RendererRuntimeBase } from "./RendererRuntimeBase.js";
 import { runtimeSceneDrawMethods } from "./runtimeSceneDrawMethods.js";
 
+function drawMultiplayerResultsOverlay(ctx, game, canvas) {
+  const results = game?.networkFinalResults && typeof game.networkFinalResults === "object" ? game.networkFinalResults : null;
+  if (!results) return false;
+  ctx.save();
+  ctx.textAlign = "left";
+  const roster = Array.isArray(results.players) ? results.players : [];
+  const localHandle = typeof game.playerHandle === "string" && game.playerHandle.trim() ? game.playerHandle.trim() : "Player";
+  const localEntry = roster.find((player) => player && player.handle === localHandle) || null;
+  const panelW = Math.min(760, canvas.width - 80);
+  const rowH = 30;
+  const panelH = Math.min(canvas.height - 120, 268 + Math.min(6, roster.length) * rowH);
+  const panelX = (canvas.width - panelW) * 0.5;
+  const panelY = Math.max(84, (canvas.height - panelH) * 0.5 + 42);
+  const rosterRows = roster.slice(0, 6);
+
+  ctx.fillStyle = "rgba(9, 13, 20, 0.96)";
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = "rgba(143, 159, 194, 0.62)";
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+  ctx.fillStyle = "#f3f0e8";
+  ctx.font = "bold 24px Trebuchet MS";
+  ctx.fillText("Team Summary", panelX + 20, panelY + 30);
+  ctx.fillStyle = "#b8c4dc";
+  ctx.font = "14px Trebuchet MS";
+  ctx.fillText(`${results.teamOutcome || "Defeat"} • ${roster.length} participant${roster.length === 1 ? "" : "s"}`, panelX + 20, panelY + 52);
+
+  const selfText = localEntry
+    ? `You: Lvl ${localEntry.level || 1} • ${localEntry.outcome || "Dead"} • ${localEntry.kills || 0} kills • ${Math.round(localEntry.damageDealt || 0)} dmg`
+    : `You: Lvl ${game.level || 1} • ${game.player?.health > 0 ? "Alive" : "Dead"} • ${game.runStats?.totalKills || 0} kills • ${Math.round(game.runStats?.damageDealt || 0)} dmg`;
+  ctx.fillStyle = "#dce5f7";
+  ctx.fillText(selfText, panelX + 20, panelY + 74);
+
+  const headerY = panelY + 104;
+  ctx.fillStyle = "#8fa5cb";
+  ctx.font = "bold 12px Trebuchet MS";
+  ctx.fillText("Player", panelX + 20, headerY);
+  ctx.fillText("Level", panelX + 280, headerY);
+  ctx.fillText("Outcome", panelX + 352, headerY);
+  ctx.fillText("Kills", panelX + 476, headerY);
+  ctx.fillText("Damage", panelX + 548, headerY);
+
+  let rowY = headerY + 20;
+  for (const player of rosterRows) {
+    const accent = typeof player?.color === "string" && player.color ? player.color : "#5bb3ff";
+    ctx.fillStyle = "rgba(18, 24, 35, 0.92)";
+    ctx.fillRect(panelX + 14, rowY - 15, panelW - 28, rowH);
+    ctx.fillStyle = accent;
+    ctx.fillRect(panelX + 14, rowY - 15, 4, rowH);
+    ctx.fillStyle = accent;
+    ctx.font = "bold 13px Trebuchet MS";
+    ctx.fillText(player?.handle || "Player", panelX + 24, rowY + 4);
+    ctx.fillStyle = "#b8c4dc";
+    ctx.font = "12px Trebuchet MS";
+    ctx.fillText(player?.classLabel || player?.classType || "Unknown", panelX + 146, rowY + 4);
+    ctx.fillText(`${player?.level || 1}`, panelX + 280, rowY + 4);
+    ctx.fillText(player?.outcome || "Dead", panelX + 352, rowY + 4);
+    ctx.fillText(`${player?.kills || 0}`, panelX + 476, rowY + 4);
+    ctx.fillText(`${Math.round(player?.damageDealt || 0)}`, panelX + 548, rowY + 4);
+    rowY += rowH;
+  }
+
+  const remaining = Math.max(
+    0,
+    (Number.isFinite(game.deathTransitionDuration) ? game.deathTransitionDuration : 0) -
+      (Number.isFinite(game.deathTransition?.elapsed) ? game.deathTransition.elapsed : 0)
+  );
+  ctx.fillStyle = "#d3dbeb";
+  ctx.font = "13px Trebuchet MS";
+  ctx.fillText(`Returning to lobby in ${Math.ceil(remaining)}s`, panelX + 20, panelY + panelH - 18);
+  ctx.restore();
+  return true;
+}
+
 export class RendererRuntimeScene extends RendererRuntimeBase {
   draw(game) {
     const ctx = this.ctx;
@@ -35,6 +110,10 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.skillExplodingDeathNode = null;
     game.uiRects.statsButton = null;
     game.uiRects.statsClose = null;
+    game.uiRects.statsRunTab = null;
+    game.uiRects.statsCharacterTab = null;
+    game.uiRects.gameOverStatsButton = null;
+    game.uiRects.hudAbilityWidget = null;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawSidebarBackground(layout);
@@ -85,6 +164,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     }
 
     this.drawDrops(game, cameraX, cameraY);
+    this.drawRemotePlayers(game, cameraX, cameraY);
     this.drawPlayer(game, cameraX, cameraY);
     this.drawProjectiles(game, cameraX, cameraY);
     this.drawPlayerHealthBar(game, cameraX, cameraY);
@@ -96,10 +176,13 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     this.drawBossSpeechCallout(game, cameraX, cameraY, layout);
     this.drawHud(game, layout);
     const minimapBottom = this.drawMinimap(game, layout);
-    this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
+    if (!game.gameOver || !game.statsPanelOpen) {
+      const statsBottom = this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
+      this.drawGroupPanel(game, layout, statsBottom + this.sidebarPadding);
+    }
     if (game.shopOpen) this.drawShopMenu(game, layout);
     if (game.skillTreeOpen) this.drawSkillTreeMenu(game, layout);
-    if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.gameOver) this.drawPausedOverlay(layout);
+    if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.statsPanelOpen && !game.gameOver) this.drawPausedOverlay(layout);
 
     if (game.gameOver) {
       const progress = typeof game.getDeathTransitionProgress === "function" ? game.getDeathTransitionProgress() : 1;
@@ -114,7 +197,9 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       ctx.fillText("GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 18);
       ctx.fillStyle = `rgba(208, 203, 194, ${subtitleAlpha})`;
       ctx.font = "20px Trebuchet MS";
-      ctx.fillText("Returning to the main menu...", this.canvas.width / 2, this.canvas.height / 2 + 28);
+      if (!drawMultiplayerResultsOverlay(ctx, game, this.canvas)) {
+        ctx.fillText("Run complete. Continue or wait to return to the menu.", this.canvas.width / 2, this.canvas.height / 2 + 28);
+      }
       ctx.textAlign = "left";
     }
   }

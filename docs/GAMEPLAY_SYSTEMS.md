@@ -45,6 +45,10 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
   - class-based max-health growth
   - class-based offensive scaling
   - class-specific passive stat growth
+- In multiplayer, progression is per-player rather than shared:
+  - XP, gold, score, skills, upgrades, cooldowns, and class build state belong to the acting player
+  - kill rewards are last-hit based
+  - controlled-necromancer summons inherit kill, damage, XP, and score credit for their owning necromancer
 
 ## Biomes
 - Floors resolve through a biome layer before generation, trap placement, breakable placement, and rendering.
@@ -112,6 +116,10 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
   - Rat archers manage distance through retreat, hold, advance, and reposition phases.
   - Skeleton warriors collapse into bones, then either expire or telegraph a reanimation.
   - Mummies are slow aura bruisers with poison pressure in close range.
+- In multiplayer, enemy spawn distribution and activation use the living-player roster instead of only the local host view:
+  - ambient spawns can appear around separated living players
+  - active-world bounds expand to the union of living player view areas
+  - proximity systems such as targeting, pickups, traps, and armor wakeups operate on the living player roster
 
 ## Difficulty Scaling
 
@@ -146,6 +154,49 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
   - active enemy cap
   - enemy speed
   - enemy damage
+- Current multiplayer scaling still uses connected room membership rather than only living survivors.
+
+## Multiplayer Run Rules
+- Up to `6` players can join a room.
+- Duplicate classes are allowed.
+- The first joined player becomes the room owner and initial pause owner.
+- Only the pause owner controls global pause.
+- Shop, skill tree, and stats overlays are per-player UI in multiplayer:
+  - pause-owner shop/skill actions pause the room globally
+  - other players can open their own local overlays without opening them on teammates' clients
+- Pickups are first-touch:
+  - gold and health go to the touching player
+  - key / exit progression is shared room state
+- Any living player can take the exit once it is open.
+- Floor transitions are shared and lock gameplay immediately once triggered.
+- Late joiners are blocked after the run starts.
+
+## Multiplayer Death And Spectating
+- A dead player stays dead until the run ends.
+- The run ends only when all connected players are dead.
+- Dead players automatically spectate living teammates after a short death beat.
+- Spectators can cycle living targets and use passive UI like stats.
+- Dead players cannot move, attack, shop, or spend skills.
+- If the pause owner dies, they keep pause authority while connected; authority only transfers on disconnect.
+
+## Multiplayer HUD And Results
+- Remote players render as full in-world avatars.
+- Remote player handles appear below their characters using that player's stable run color.
+- The bottom-right HUD keeps the local player panel, then adds a compact group panel below it for other connected run members.
+- The group panel shows:
+  - handle
+  - class/color identity
+  - level
+  - health bar
+  - dead-state entries for connected dead spectators
+- The minimap uses stable per-run player colors for teammates.
+- Multiplayer game over shows a shared team-results overlay with:
+  - roster
+  - final level
+  - final outcome
+  - kills
+  - damage dealt
+- Multiplayer leaderboard submission is disabled in the current implementation.
 
 ## Floor Boss Rules
 - The floor boss trigger level is `floor * 5`.
@@ -163,9 +214,10 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
 
 ## Network Combat Feedback
 - Network mode synthesizes enemy damage floating text client-side from authoritative enemy HP changes instead of replicating full floating-text state.
+- Local-player health in multiplayer is driven from authoritative snapshot health plus replicated player HP-bar visibility timers.
 - Browser/network validation now covers:
   - join safety
-  - controller combat input
+  - multiplayer combat input
   - hit-confirmation timing
   - archer projectile alignment
   - focused-tab audio stability

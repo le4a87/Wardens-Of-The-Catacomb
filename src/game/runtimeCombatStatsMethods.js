@@ -300,7 +300,9 @@ export const runtimeCombatStatsMethods = {
   triggerWarriorMomentumOnKill() {
     if (this.classSpec.usesRanged) return;
     if ((this.skills.warriorMomentum.points || 0) <= 0) return;
+    const wasInactive = (this.warriorMomentumTimer || 0) <= 0;
     this.warriorMomentumTimer = Math.max(this.warriorMomentumTimer, this.getWarriorMomentumDuration());
+    if (wasInactive && typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("warrior", "frenzies", 1);
   },
 
   spendSkillPoint(skillKey) {

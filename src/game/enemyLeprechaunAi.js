@@ -64,26 +64,29 @@ function spawnLuckyCharmVolley(game, enemy) {
 }
 
 function applyLeprechaunPunch(game, enemy) {
-  const dx = game.player.x - enemy.x;
-  const dy = game.player.y - enemy.y;
+  const target = typeof game.getNearestPlayerEntity === "function" ? game.getNearestPlayerEntity(enemy.x, enemy.y) : game.player;
+  const dx = target.x - enemy.x;
+  const dy = target.y - enemy.y;
   const dist = vecLength(dx, dy) || 1;
   const range = (game.config.enemy.leprechaunPunchRangeTiles || 2.2) * (game.config.map?.tile || 32);
-  if (dist > range + game.getPlayerEnemyCollisionRadius()) return false;
-  if (game.player.hitCooldown > 0) return false;
-  game.player.hitCooldown = 1.0;
+  if (dist > range + game.getPlayerEnemyCollisionRadiusFor(target)) return false;
+  if ((target.hitCooldown || 0) > 0) return false;
+  target.hitCooldown = 1.0;
   const rawDamage = game.rollEnemyContactDamage({
     damageMin: game.config.enemy.leprechaunPunchDamageMin,
     damageMax: game.config.enemy.leprechaunPunchDamageMax
   });
   const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
   const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
-  game.applyPlayerDamage(game.getWarriorRageDamageTaken(reducedByDefense));
+  game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, game.getWarriorRageDamageTaken(reducedByDefense), "physical"), "physical");
   if (typeof game.applyPlayerKnockback === "function" && (enemy.punchKnockbackCooldown || 0) <= 0) {
-    game.applyPlayerKnockback(
-      (game.config.enemy.leprechaunPunchKnockbackTiles || 20) * (game.config.map?.tile || 32),
-      dx / dist,
-      dy / dist
-    );
+    if (game.isPrimaryPlayerEntity && game.isPrimaryPlayerEntity(target)) {
+      game.applyPlayerKnockback(
+        (game.config.enemy.leprechaunPunchKnockbackTiles || 20) * (game.config.map?.tile || 32),
+        dx / dist,
+        dy / dist
+      );
+    }
     enemy.punchKnockbackCooldown = game.config.enemy.leprechaunPunchKnockbackCooldown || 15;
   }
   return true;
@@ -91,8 +94,9 @@ function applyLeprechaunPunch(game, enemy) {
 
 export function updateLeprechaunBoss(game, enemy, dt, speedScale) {
   const tile = game.config?.map?.tile || 32;
-  const toPlayerX = game.player.x - enemy.x;
-  const toPlayerY = game.player.y - enemy.y;
+  const targetPlayer = typeof game.getNearestPlayerEntity === "function" ? game.getNearestPlayerEntity(enemy.x, enemy.y) : game.player;
+  const toPlayerX = targetPlayer.x - enemy.x;
+  const toPlayerY = targetPlayer.y - enemy.y;
   const playerDist = vecLength(toPlayerX, toPlayerY) || 1;
   enemy.dirX = toPlayerX / playerDist;
   enemy.dirY = toPlayerY / playerDist;
@@ -107,9 +111,9 @@ export function updateLeprechaunBoss(game, enemy, dt, speedScale) {
     enemy.invincible = true;
     enemy.speed = game.config.enemy.leprechaunIntroSpeed || game.config.enemy.leprechaunFleeSpeed;
     if (typeof game.moveEnemyTowardTargetPoint === "function") {
-      game.moveEnemyTowardTargetPoint(enemy, game.player.x, game.player.y, speedScale, dt, (game.config.enemy.leprechaunIntroApproachTiles || 3) * tile);
+      game.moveEnemyTowardTargetPoint(enemy, targetPlayer.x, targetPlayer.y, speedScale, dt, (game.config.enemy.leprechaunIntroApproachTiles || 3) * tile);
     } else {
-      moveEntityTowardPoint(game, enemy, game.player.x, game.player.y, enemy.speed * (speedScale || 1), dt, (game.config.enemy.leprechaunIntroApproachTiles || 3) * tile);
+      moveEntityTowardPoint(game, enemy, targetPlayer.x, targetPlayer.y, enemy.speed * (speedScale || 1), dt, (game.config.enemy.leprechaunIntroApproachTiles || 3) * tile);
     }
     if (playerDist <= (game.config.enemy.leprechaunIntroApproachTiles || 3) * tile) {
       enemy.phase = "flee";
@@ -192,5 +196,5 @@ export function updateLeprechaunBoss(game, enemy, dt, speedScale) {
     enemy.charmCooldown = game.config.enemy.leprechaunCharmCooldown || 1.2;
     return;
   }
-  moveEntityTowardPoint(game, enemy, game.player.x, game.player.y, enemy.speed, dt, Math.max(12, punchRange * 0.4));
+  moveEntityTowardPoint(game, enemy, targetPlayer.x, targetPlayer.y, enemy.speed, dt, Math.max(12, punchRange * 0.4));
 }

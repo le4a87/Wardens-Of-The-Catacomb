@@ -63,16 +63,35 @@ export const runtimeBasePlacementMethods = {
   },
 
   getActiveBounds(padTiles = 8) {
-    const cam = this.getCamera();
     const tile = this.config.map.tile;
     const pad = Math.max(0, padTiles) * tile;
     const playW = this.getPlayAreaWidth();
-    return {
-      left: cam.x - pad,
-      top: cam.y - pad,
-      right: cam.x + playW + pad,
-      bottom: cam.y + this.canvas.height + pad
-    };
+    const players = typeof this.getLivingPlayerEntities === "function" ? this.getLivingPlayerEntities() : [this.player];
+    const activePlayers = Array.isArray(players) && players.length > 0 ? players.filter((player) => !!player) : [this.player];
+    let left = Number.POSITIVE_INFINITY;
+    let top = Number.POSITIVE_INFINITY;
+    let right = Number.NEGATIVE_INFINITY;
+    let bottom = Number.NEGATIVE_INFINITY;
+    for (const player of activePlayers) {
+      const x = Number.isFinite(player?.x) ? player.x : (this.player?.x || 0);
+      const y = Number.isFinite(player?.y) ? player.y : (this.player?.y || 0);
+      const camX = clamp(x - playW / 2, 0, this.worldWidth - playW);
+      const camY = clamp(y - this.canvas.height / 2, 0, this.worldHeight - this.canvas.height);
+      left = Math.min(left, camX - pad);
+      top = Math.min(top, camY - pad);
+      right = Math.max(right, camX + playW + pad);
+      bottom = Math.max(bottom, camY + this.canvas.height + pad);
+    }
+    if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(right) || !Number.isFinite(bottom)) {
+      const cam = this.getCamera();
+      return {
+        left: cam.x - pad,
+        top: cam.y - pad,
+        right: cam.x + playW + pad,
+        bottom: cam.y + this.canvas.height + pad
+      };
+    }
+    return { left, top, right, bottom };
   },
 
   isInsideBounds(x, y, radius = 0, bounds = null) {

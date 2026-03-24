@@ -9,7 +9,7 @@ import { runtimeBaseSupportMethods } from "./runtimeBaseSupportMethods.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
 import { runtimeCombatStatsMethods } from "./runtimeCombatStatsMethods.js";
 import { runtimeFloorBossMethods } from "./runtimeFloorBossMethods.js";
-import { createNecromancerBeamState, createPlayerState, createSkillState, createUpgradeState } from "./runtimeBaseStateFactories.js";
+import { createNecromancerBeamState, createPlayerState, createRunStats, createSkillState, createUpgradeState } from "./runtimeBaseStateFactories.js";
 
 export class GameRuntimeBase {
   constructor(canvas, options = {}) {
@@ -58,14 +58,15 @@ export class GameRuntimeBase {
     this.skillTreeOpen = false;
     this.time = 0;
     this.skillPoints = 0;
-    this.statsPanelOpen = false;
+    this.statsPanelOpen = false; this.statsPanelView = "run"; this.statsPanelPausedGame = false;
     this.activePlayerCount = 1;
+    this.remotePlayers = [];
+    this.spectateTargetId = null;
     this.passiveRegenTimer = 2;
     this.levelWeaponDamageBonus = 0;
     this.floorBoss = this.createFloorBossState(this.floor);
     this.lastFloorBossFeedbackPhase = null;
     this.feedbackAudioContext = null;
-
     this.bullets = [];
     this.fireArrows = [];
     this.fireZones = [];
@@ -84,6 +85,7 @@ export class GameRuntimeBase {
     this.floatingTexts = [];
     this.recentPlayerShots = [];
     this.skills = createSkillState();
+    this.runStats = createRunStats();
     this.warriorMomentumTimer = 0;
     this.warriorRageActiveTimer = 0;
     this.warriorRageCooldownTimer = 0;
@@ -168,9 +170,8 @@ export class GameRuntimeBase {
     if (this.deathTransition.active) return;
     this.gameOver = true;
     this.paused = false;
-    this.shopOpen = false;
-    this.skillTreeOpen = false;
-    this.statsPanelOpen = false;
+    this.shopOpen = false; this.skillTreeOpen = false;
+    this.statsPanelOpen = false; this.statsPanelPausedGame = false;
     this.deathTransition.active = true;
     this.deathTransition.elapsed = 0;
     this.deathTransition.returnTriggered = false;
@@ -200,6 +201,7 @@ export class GameRuntimeBase {
   }
 
   advanceToNextFloor() {
+    if (typeof this.recordRunFloorCleared === "function") this.recordRunFloorCleared();
     const controlledUndead = (this.enemies || [])
       .filter((enemy) => enemy?.isControlledUndead && (enemy.hp || 0) > 0 && !(enemy.type === "skeleton_warrior" && enemy.collapsed))
       .map((enemy) => ({ ...enemy }));
@@ -257,6 +259,7 @@ export class GameRuntimeBase {
     this.skillPoints = 0;
     this.gold = 0;
     this.score = 0;
+    this.runStats = createRunStats();
     this.levelWeaponDamageBonus = 0;
     this.player.maxHealth = Number.isFinite(this.classSpec.baseMaxHealth) ? this.classSpec.baseMaxHealth : this.config.player.maxHealth;
     this.player.health = this.player.maxHealth;
@@ -278,10 +281,14 @@ export class GameRuntimeBase {
   }
 
   getCamera() {
+    const cameraTarget =
+      typeof this.getSpectateTargetEntity === "function" && this.player.health <= 0 && !this.gameOver
+        ? this.getSpectateTargetEntity() || this.player
+        : this.player;
     const viewportWidth = this.getPlayAreaWidth();
     return {
-      x: clamp(this.player.x - viewportWidth / 2, 0, this.worldWidth - viewportWidth),
-      y: clamp(this.player.y - this.canvas.height / 2, 0, this.worldHeight - this.canvas.height)
+      x: clamp(cameraTarget.x - viewportWidth / 2, 0, this.worldWidth - viewportWidth),
+      y: clamp(cameraTarget.y - this.canvas.height / 2, 0, this.worldHeight - this.canvas.height)
     };
   }
 
@@ -313,6 +320,16 @@ export class GameRuntimeBase {
     return !!enemy?.isControlledUndead;
   }
 
+  getControlledUndeadOwnerId(enemy) {
+    return typeof enemy?.controllerPlayerId === "string" && enemy.controllerPlayerId ? enemy.controllerPlayerId : null;
+  }
+
+  getControlledUndeadOwnerEntity(enemy) {
+    const ownerId = this.getControlledUndeadOwnerId(enemy);
+    if (!ownerId || typeof this.getPlayerEntityById !== "function") return this.player;
+    return this.getPlayerEntityById(ownerId) || this.player;
+  }
+
   isEnemyFriendlyToPlayer(enemy) {
     return this.isControlledUndead(enemy);
   }
@@ -325,6 +342,13 @@ export class GameRuntimeBase {
     const p = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
     const base = Number.isFinite(this.config.necromancer?.baseControlCap) ? this.config.necromancer.baseControlCap : 1;
     return Math.min(5, base + p);
+  }
+
+  getNecromancerControlCapForPlayer(playerEntity = this.player) {
+    const points = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
+      ? this.skills.undeadMastery.points
+      : (Number.isFinite(playerEntity?.skills?.undeadMastery?.points) ? playerEntity.skills.undeadMastery.points : 0);
+    return this.getNecromancerControlCap(points);
   }
 
   getNecromancerCharmDuration(points = this.skills.undeadMastery.points) {
@@ -341,8 +365,35 @@ export class GameRuntimeBase {
     return Math.max(min, skillDuration * Math.max(0.35, 1 - levelReductionPct));
   }
 
-  getControlledUndeadCount() {
-    return (this.enemies || []).filter((enemy) => this.isControlledUndead(enemy) && (enemy.hp || 0) > 0).length;
+  getNecromancerCharmDurationForPlayer(playerEntity = this.player) {
+    const points = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
+      ? this.skills.undeadMastery.points
+      : (Number.isFinite(playerEntity?.skills?.undeadMastery?.points) ? playerEntity.skills.undeadMastery.points : 0);
+    if (!(playerEntity && playerEntity !== this.player)) return this.getNecromancerCharmDuration(points);
+    const classSpec = this.getPlayerClassSpec(playerEntity);
+    const maxPoints = Number.isFinite(playerEntity?.skills?.undeadMastery?.maxPoints) ? playerEntity.skills.undeadMastery.maxPoints : 4;
+    const p = Number.isFinite(points) ? Math.max(0, points) : 0;
+    const base = Number.isFinite(this.config.necromancer?.charmDuration) ? this.config.necromancer.charmDuration : 2;
+    const min = Number.isFinite(this.config.necromancer?.minCharmDuration) ? this.config.necromancer.minCharmDuration : 0.5;
+    const denom = Math.log1p(1.2 * Math.max(1, maxPoints));
+    const norm = denom > 0 ? Math.log1p(1.2 * Math.min(maxPoints, p)) / denom : 1;
+    const skillDuration = base - (base - min) * Math.max(0, Math.min(1, norm));
+    const levelReductionPct = Number.isFinite(classSpec.levelCharmTimeReductionPct)
+      ? Math.max(0, classSpec.levelCharmTimeReductionPct) * Math.max(0, (Number.isFinite(playerEntity.level) ? playerEntity.level : 1) - 1)
+      : 0;
+    return Math.max(min, skillDuration * Math.max(0.35, 1 - levelReductionPct));
+  }
+
+  getControlledUndeadCount(playerEntity = null) {
+    const ownerId =
+      typeof playerEntity === "string"
+        ? playerEntity
+        : (playerEntity && typeof playerEntity.id === "string" ? playerEntity.id : null);
+    return (this.enemies || []).filter((enemy) => {
+      if (!this.isControlledUndead(enemy) || (enemy.hp || 0) <= 0) return false;
+      if (!ownerId) return true;
+      return this.getControlledUndeadOwnerId(enemy) === ownerId;
+    }).length;
   }
 
   getControlledUndeadBoost(points = this.skills.explodingDeath.points) {
@@ -354,9 +405,30 @@ export class GameRuntimeBase {
     return (1 + perRank * p) * (1 + levelBoost);
   }
 
+  getControlledUndeadBoostForPlayer(playerEntity = this.player) {
+    const points = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
+      ? this.skills.explodingDeath.points
+      : (Number.isFinite(playerEntity?.skills?.explodingDeath?.points) ? playerEntity.skills.explodingDeath.points : 0);
+    if (!(playerEntity && playerEntity !== this.player)) return this.getControlledUndeadBoost(points);
+    const classSpec = this.getPlayerClassSpec(playerEntity);
+    const perRank = Number.isFinite(this.config.necromancer?.petBuffPerRank) ? this.config.necromancer.petBuffPerRank : 0.2;
+    const p = Number.isFinite(points) ? Math.max(0, points) : 0;
+    const levelBoost = Number.isFinite(classSpec.levelControlPowerPct)
+      ? Math.max(0, classSpec.levelControlPowerPct) * Math.max(0, (Number.isFinite(playerEntity.level) ? playerEntity.level : 1) - 1)
+      : 0;
+    return (1 + perRank * p) * (1 + levelBoost);
+  }
+
   getControlledUndeadDefenseMultiplier(points = this.skills.explodingDeath.points) {
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
     return 1.5 + (0.2 * p);
+  }
+
+  getControlledUndeadDefenseMultiplierForPlayer(playerEntity = this.player) {
+    const points = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
+      ? this.skills.explodingDeath.points
+      : (Number.isFinite(playerEntity?.skills?.explodingDeath?.points) ? playerEntity.skills.explodingDeath.points : 0);
+    return this.getControlledUndeadDefenseMultiplier(points);
   }
 
   getOverallAttackModifier() {
@@ -409,13 +481,14 @@ export class GameRuntimeBase {
     return (Number.isFinite(this.config.explodingDeath?.radiusTiles) ? this.config.explodingDeath.radiusTiles : 3) * tile;
   }
 
-  canControlMoreUndead() {
-    return this.getControlledUndeadCount() < this.getNecromancerControlCap();
+  canControlMoreUndead(playerEntity = this.player) {
+    return this.getControlledUndeadCount(playerEntity) < this.getNecromancerControlCapForPlayer(playerEntity);
   }
 
-  applyControlledUndeadBonuses(enemy) {
+  applyControlledUndeadBonuses(enemy, playerEntity = null) {
     if (!enemy || !this.isControlledUndead(enemy)) return enemy;
-    const boost = this.getControlledUndeadBoost();
+    const owner = playerEntity || this.getControlledUndeadOwnerEntity(enemy);
+    const boost = this.getControlledUndeadBoostForPlayer(owner);
     const baseMaxHp = Number.isFinite(enemy.baseMaxHp) ? enemy.baseMaxHp : enemy.maxHp;
     const baseSpeed = Number.isFinite(enemy.baseSpeed) ? enemy.baseSpeed : enemy.speed;
     const baseMin = Number.isFinite(enemy.baseDamageMin) ? enemy.baseDamageMin : enemy.damageMin;
@@ -426,23 +499,28 @@ export class GameRuntimeBase {
     enemy.baseDamageMax = baseMax;
     enemy.maxHp = Math.max(1, baseMaxHp * 3 * boost);
     enemy.hp = Math.min(enemy.maxHp, Number.isFinite(enemy.hp * 3) ? enemy.hp * 3 : enemy.maxHp);
-    enemy.speed = Math.max(baseSpeed * boost, this.getPlayerMoveSpeed() * 1.1);
+    enemy.speed = Math.max(baseSpeed * boost, (typeof this.getPlayerMoveSpeedFor === "function" ? this.getPlayerMoveSpeedFor(owner) : this.getPlayerMoveSpeed()) * 1.1);
     enemy.damageMin = baseMin * 1.3 * boost;
     enemy.damageMax = baseMax * 1.3 * boost;
-    enemy.controlledDefenseMultiplier = this.getControlledUndeadDefenseMultiplier();
+    enemy.controlledDefenseMultiplier = this.getControlledUndeadDefenseMultiplierForPlayer(owner);
     return enemy;
   }
 
-  markUndeadAsControlled(enemy) {
+  markUndeadAsControlled(enemy, playerEntity = this.player) {
     if (!enemy || !this.isUndeadEnemy(enemy)) return false;
     if (this.isControlledUndead(enemy)) return true;
-    if (!this.canControlMoreUndead()) return false;
+    if (!this.canControlMoreUndead(playerEntity)) return false;
     enemy.isControlledUndead = true;
+    enemy.controllerPlayerId = typeof playerEntity?.id === "string" && playerEntity.id ? playerEntity.id : null;
+    enemy.controllerExplodingDeathPoints = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
+      ? (this.skills.explodingDeath.points || 0)
+      : (Number.isFinite(playerEntity?.skills?.explodingDeath?.points) ? playerEntity.skills.explodingDeath.points : 0);
     enemy.summonedByPlayer = true;
     enemy.controlledAt = this.time;
     enemy.hpBarTimer = this.config.enemy.hpBarDuration;
     enemy.contactAttackCooldown = 0;
-    this.applyControlledUndeadBonuses(enemy);
+    this.applyControlledUndeadBonuses(enemy, playerEntity);
+    if (typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("necromancer", "undeadCharmed", 1);
     return true;
   }
 
@@ -451,11 +529,11 @@ export class GameRuntimeBase {
     const before = enemy.hp;
     enemy.hp = Math.min(enemy.maxHp, enemy.hp + amount);
     if (enemy.hp > before) {
+      if (typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("necromancer", "undeadHealing", enemy.hp - before);
       enemy.hpBarTimer = this.config.enemy.hpBarDuration;
       this.spawnFloatingText(enemy.x, enemy.y - enemy.size * 0.7, `+${Math.max(1, Math.round(enemy.hp - before))}`, "#89b7ff", 0.8, 13);
     }
   }
-
 }
 
 Object.assign(GameRuntimeBase.prototype, runtimeBasePlacementMethods);

@@ -110,7 +110,7 @@ export function spawnSkeleton(game, x, y, options) {
   return spawnSkeletonEntity(game, x, y, options);
 }
 
-export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
+export function applyEnemyDamage(game, enemy, amount, damageType = "physical", ownerId = null) {
   if (!Number.isFinite(amount) || amount <= 0) return;
   if (enemy?.invincible) return;
   if (enemy?.type === "skeleton_warrior" && enemy.collapsed) {
@@ -136,7 +136,13 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
   if (!Number.isFinite(effective) || effective <= 0) return;
   const enemyHpBefore = Number.isFinite(enemy.hp) ? Math.max(0, enemy.hp) : 0;
   const dealt = Math.min(effective, enemyHpBefore);
+  enemy.lastDamageType = damageType;
+  if (ownerId) enemy.lastDamageOwnerId = ownerId;
   enemy.hp -= effective;
+  if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) {
+    const owner = typeof game.getPlayerEntityById === "function" ? game.getPlayerEntityById(ownerId) : game.player;
+    if (typeof game.recordDamageDealtByPlayerEntity === "function") game.recordDamageDealtByPlayerEntity(owner, dealt);
+  }
   const lifeLeech = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy) ? 0 : game.getLifeLeechPercent();
   if (lifeLeech > 0 && dealt > 0) {
     game.applyPlayerHealing(Math.max(1, Math.ceil(dealt * lifeLeech)));
@@ -175,23 +181,34 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical") {
 
 export function randomEnemySpawnPoint(game) {
   const tile = game.config.map.tile;
-  const cam = game.getCamera();
   const playW = game.getPlayAreaWidth();
-  const viewLeft = Math.floor(cam.x / tile);
-  const viewRight = Math.floor((cam.x + playW) / tile);
-  const viewTop = Math.floor(cam.y / tile);
-  const viewBottom = Math.floor((cam.y + game.canvas.height) / tile);
   const maxTx = game.map[0].length - 2;
   const maxTy = game.map.length - 2;
+  const livingPlayers = typeof game.getLivingPlayerEntities === "function" ? game.getLivingPlayerEntities() : [game.player];
+  const activePlayers = Array.isArray(livingPlayers) && livingPlayers.length > 0 ? livingPlayers.filter((player) => !!player) : [game.player];
+  const playerViews = activePlayers.map((player) => {
+    const px = Number.isFinite(player?.x) ? player.x : (game.player?.x || 0);
+    const py = Number.isFinite(player?.y) ? player.y : (game.player?.y || 0);
+    const camX = Math.max(0, Math.min(game.worldWidth - playW, px - playW / 2));
+    const camY = Math.max(0, Math.min(game.worldHeight - game.canvas.height, py - game.canvas.height / 2));
+    return {
+      player,
+      viewLeft: Math.floor(camX / tile),
+      viewRight: Math.floor((camX + playW) / tile),
+      viewTop: Math.floor(camY / tile),
+      viewBottom: Math.floor((camY + game.canvas.height) / tile)
+    };
+  });
 
-  const isOutsideView = (tx, ty) => tx < viewLeft || tx > viewRight || ty < viewTop || ty > viewBottom;
-  const tryPickNear = (baseTx, baseTy) => {
+  const isOutsideView = (tx, ty, view) =>
+    tx < view.viewLeft || tx > view.viewRight || ty < view.viewTop || ty > view.viewBottom;
+  const tryPickNear = (baseTx, baseTy, view) => {
     for (let r = 0; r <= 2; r++) {
       for (let oy = -r; oy <= r; oy++) {
         for (let ox = -r; ox <= r; ox++) {
           const tx = Math.max(1, Math.min(maxTx, baseTx + ox));
           const ty = Math.max(1, Math.min(maxTy, baseTy + oy));
-          if (!isOutsideView(tx, ty)) continue;
+          if (!isOutsideView(tx, ty, view)) continue;
           if (!isWalkableTile(game, tx, ty)) continue;
           const x = tx * tile + tile / 2;
           const y = ty * tile + tile / 2;
@@ -202,33 +219,43 @@ export function randomEnemySpawnPoint(game) {
     return null;
   };
 
+  const spawnViewCount = Math.max(1, playerViews.length);
+  const startIndex = Number.isFinite(game.enemySpawnFocusIndex) ? game.enemySpawnFocusIndex % spawnViewCount : 0;
+  const nextView = () => {
+    const view = playerViews[(game.enemySpawnFocusIndex || startIndex) % spawnViewCount] || playerViews[0];
+    game.enemySpawnFocusIndex = ((Number.isFinite(game.enemySpawnFocusIndex) ? game.enemySpawnFocusIndex : startIndex) + 1) % spawnViewCount;
+    return view;
+  };
+
   for (let i = 0; i < 40; i++) {
+    const view = nextView();
     const side = Math.floor(Math.random() * 4);
     let tx = 1;
     let ty = 1;
     if (side === 0) {
-      tx = viewLeft - 1;
-      ty = viewTop + Math.floor(Math.random() * Math.max(1, viewBottom - viewTop + 1));
+      tx = view.viewLeft - 1;
+      ty = view.viewTop + Math.floor(Math.random() * Math.max(1, view.viewBottom - view.viewTop + 1));
     } else if (side === 1) {
-      tx = viewRight + 1;
-      ty = viewTop + Math.floor(Math.random() * Math.max(1, viewBottom - viewTop + 1));
+      tx = view.viewRight + 1;
+      ty = view.viewTop + Math.floor(Math.random() * Math.max(1, view.viewBottom - view.viewTop + 1));
     } else if (side === 2) {
-      ty = viewTop - 1;
-      tx = viewLeft + Math.floor(Math.random() * Math.max(1, viewRight - viewLeft + 1));
+      ty = view.viewTop - 1;
+      tx = view.viewLeft + Math.floor(Math.random() * Math.max(1, view.viewRight - view.viewLeft + 1));
     } else {
-      ty = viewBottom + 1;
-      tx = viewLeft + Math.floor(Math.random() * Math.max(1, viewRight - viewLeft + 1));
+      ty = view.viewBottom + 1;
+      tx = view.viewLeft + Math.floor(Math.random() * Math.max(1, view.viewRight - view.viewLeft + 1));
     }
-    const p = tryPickNear(tx, ty);
+    const p = tryPickNear(tx, ty, view);
     if (p) return p;
   }
 
   // Fallback: random walkable tile outside visible bounds.
   for (let i = 0; i < 60; i++) {
+    const view = nextView();
     const tx = 1 + Math.floor(Math.random() * (game.map[0].length - 2));
     const ty = 1 + Math.floor(Math.random() * (game.map.length - 2));
     if (!isWalkableTile(game, tx, ty)) continue;
-    if (!isOutsideView(tx, ty)) continue;
+    if (!isOutsideView(tx, ty, view)) continue;
     const x = tx * tile + tile / 2;
     const y = ty * tile + tile / 2;
     return { x, y };
