@@ -84,6 +84,8 @@ export const runtimeSceneDrawMethods = {
   drawMap(game, cameraX, cameraY) {
     const ctx = this.ctx;
     const map = game.map;
+    const palette = typeof game.getBiomeAppearance === "function" ? game.getBiomeAppearance() : {};
+    const isSewer = game.biomeKey === "sewer";
     const tileSize = this.config.map.tile;
     const playW = game.getPlayAreaWidth ? game.getPlayAreaWidth() : this.canvas.width - this.sidebarWidth;
     const minX = Math.max(0, Math.floor(cameraX / tileSize) - 1);
@@ -98,28 +100,90 @@ export const runtimeSceneDrawMethods = {
         const hash = (x * 73856093) ^ (y * 19349663);
 
         if (tile === "#") {
-          ctx.fillStyle = "#262a37";
+          ctx.fillStyle = palette.wallOuter || "#262a37";
           ctx.fillRect(px, py, tileSize, tileSize);
-          ctx.fillStyle = "#2f3445";
+          ctx.fillStyle = palette.wallInner || "#2f3445";
           ctx.fillRect(px + 1, py + 1, tileSize - 2, tileSize - 2);
-          ctx.fillStyle = "#3a4054";
+          ctx.fillStyle = palette.wallBands || "#3a4054";
           ctx.fillRect(px + 2, py + 2, tileSize - 4, 6);
           ctx.fillRect(px + 2, py + 14, tileSize - 4, 6);
           ctx.fillRect(px + 2, py + 26, tileSize - 4, 4);
-          if ((hash & 7) === 0) {
-            ctx.fillStyle = "#4f2230";
+          if (isSewer) {
+            if ((hash & 3) === 0) {
+              ctx.fillStyle = palette.wallMossDark || "#3f5f2f";
+              ctx.beginPath();
+              ctx.arc(px + 8 + (hash & 3), py + 8 + ((hash >> 3) & 7), 4, 0, Math.PI * 2);
+              ctx.arc(px + 19, py + 18, 5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = palette.wallMoss || "#5f8a48";
+              ctx.beginPath();
+              ctx.arc(px + 10, py + 9, 2.8, 0, Math.PI * 2);
+              ctx.arc(px + 20, py + 16, 3.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          } else if ((hash & 7) === 0) {
+            ctx.fillStyle = palette.wallAccent || "#4f2230";
             ctx.fillRect(px + 11, py + 9, 10, 14);
-            ctx.fillStyle = "#d7a54c";
+            ctx.fillStyle = palette.wallAccentMetal || "#d7a54c";
             ctx.fillRect(px + 14, py + 13, 4, 5);
           }
         } else {
-          ctx.fillStyle = "#141821";
+          ctx.fillStyle = palette.floorBase || "#141821";
           ctx.fillRect(px, py, tileSize, tileSize);
-          ctx.fillStyle = (hash & 1) === 0 ? "#1b202b" : "#191e28";
+          ctx.fillStyle = (hash & 1) === 0 ? palette.floorInsetA || "#1b202b" : palette.floorInsetB || "#191e28";
           ctx.fillRect(px + 1, py + 1, tileSize - 2, tileSize - 2);
-          ctx.strokeStyle = "#202634";
+          ctx.strokeStyle = palette.floorStroke || "#202634";
           ctx.lineWidth = 1;
           ctx.strokeRect(px + 1.5, py + 1.5, tileSize - 3, tileSize - 3);
+          if (isSewer) {
+            if (tile === "~") {
+              ctx.fillStyle = palette.sewerWater || "#447b6f";
+              ctx.fillRect(px + 1, py + 1, tileSize - 2, tileSize - 2);
+              ctx.fillStyle = palette.sewerWaterDark || "#29554c";
+              ctx.fillRect(px + 3, py + 5, tileSize - 6, tileSize - 10);
+              ctx.strokeStyle = palette.sewerFoam || "rgba(198, 239, 224, 0.32)";
+              ctx.beginPath();
+              ctx.moveTo(px + 4, py + 9);
+              ctx.quadraticCurveTo(px + tileSize * 0.45, py + 6, px + tileSize - 4, py + 11);
+              ctx.moveTo(px + 5, py + 22);
+              ctx.quadraticCurveTo(px + tileSize * 0.58, py + 25, px + tileSize - 6, py + 20);
+              ctx.stroke();
+            } else {
+              for (let step = 4; step < tileSize - 3; step += 9) {
+                ctx.strokeStyle = (hash & 1) === 0 ? "#d5d7d7" : "#a8adad";
+                ctx.beginPath();
+                ctx.moveTo(px + 2, py + step + 0.5);
+                ctx.lineTo(px + tileSize - 2, py + step - 2.5);
+                ctx.stroke();
+              }
+            }
+            if (tile === "g") {
+              ctx.fillStyle = palette.grateFrame || "#4d5356";
+              ctx.fillRect(px + 6, py + 6, tileSize - 12, tileSize - 12);
+              ctx.strokeStyle = palette.grateBars || "#2f3437";
+              for (let gx = px + 9; gx <= px + tileSize - 9; gx += 4) {
+                ctx.beginPath();
+                ctx.moveTo(gx + 0.5, py + 7);
+                ctx.lineTo(gx + 0.5, py + tileSize - 7);
+                ctx.stroke();
+              }
+            } else if (tile === "r") {
+              ctx.strokeStyle = palette.rivulet || "#5f9689";
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(px + 4, py + 7);
+              ctx.bezierCurveTo(px + 11, py + 10, px + 18, py + 19, px + tileSize - 5, py + tileSize - 8);
+              ctx.stroke();
+              ctx.lineWidth = 1;
+            } else if (tile === "o") {
+              ctx.fillStyle = palette.sewerPool || "#4e8c7e";
+              ctx.beginPath();
+              ctx.ellipse(px + tileSize / 2, py + tileSize / 2, tileSize * 0.28, tileSize * 0.18, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = palette.sewerPoolDark || "#325a52";
+              ctx.stroke();
+            }
+          }
         }
 
         if (tile === "D" && !(game.floorBoss && game.pickup?.taken && game.door?.open)) {
@@ -127,24 +191,24 @@ export const runtimeSceneDrawMethods = {
           const frameY = py + 3;
           const frameW = tileSize - 10;
           const frameH = tileSize - 6;
-          ctx.fillStyle = "#3b2b1d";
+          ctx.fillStyle = palette.doorFrame || "#3b2b1d";
           ctx.fillRect(frameX, frameY, frameW, frameH);
-          ctx.fillStyle = "#6b4a2e";
+          ctx.fillStyle = palette.doorInner || "#6b4a2e";
           ctx.fillRect(frameX + 2, frameY + 2, frameW - 4, frameH - 4);
           if (game.door.open) {
             const glow = ctx.createRadialGradient(px + tileSize / 2, py + tileSize / 2, 2, px + tileSize / 2, py + tileSize / 2, tileSize * 0.72);
-            glow.addColorStop(0, "rgba(132, 255, 188, 0.7)");
-            glow.addColorStop(1, "rgba(65, 149, 109, 0)");
+            glow.addColorStop(0, palette.doorOpenGlowInner || "rgba(132, 255, 188, 0.7)");
+            glow.addColorStop(1, palette.doorOpenGlowOuter || "rgba(65, 149, 109, 0)");
             ctx.fillStyle = glow;
             ctx.beginPath();
             ctx.arc(px + tileSize / 2, py + tileSize / 2, tileSize * 0.72, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = "#4f9f6f";
+            ctx.fillStyle = palette.doorOpenFill || "#4f9f6f";
             ctx.fillRect(frameX + 4, frameY + 4, frameW - 8, frameH - 8);
           } else {
-            ctx.fillStyle = "#8f5a39";
+            ctx.fillStyle = palette.doorClosed || "#8f5a39";
             ctx.fillRect(frameX + 4, frameY + 4, frameW - 8, frameH - 8);
-            ctx.strokeStyle = "#b47a4c";
+            ctx.strokeStyle = palette.doorClosedMark || "#b47a4c";
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(frameX + 7, frameY + 7);

@@ -64,7 +64,8 @@ export function spawnAnimatedArmor(game, x, y) {
     maxHp: hp,
     hpBarTimer: 0,
     damageMin: game.config.enemy.armorDamageMin,
-    damageMax: game.config.enemy.armorDamageMax
+    damageMax: game.config.enemy.armorDamageMax,
+    variant: typeof game.getAnimatedArmorVariant === "function" ? game.getAnimatedArmorVariant() : null
   };
 }
 

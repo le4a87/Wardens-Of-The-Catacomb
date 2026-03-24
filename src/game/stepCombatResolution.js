@@ -242,6 +242,36 @@ export function resolveCombatAndDrops({
       }
       continue;
     }
+    if (zone.zoneType === "acid") {
+      const touchDamage = () => {
+        const multiplier = Number.isFinite(zone.damageMultiplier) ? Math.max(0, zone.damageMultiplier) : 0.2;
+        const rawDamage = typeof game.rollWallTrapDamage === "function"
+          ? game.rollWallTrapDamage()
+          : game.rollEnemyContactDamage({ damageMin: zone.damageMin, damageMax: zone.damageMax });
+        return rawDamage * game.getEnemyDamageScale() * multiplier;
+      };
+      const touchingPlayer = vecLength(zone.x - game.player.x, zone.y - game.player.y) < zone.radius + playerEnemyRadius * 0.8;
+      if (touchingPlayer && !zone.touchingPlayer) {
+        const reducedByDefense = Math.max(1, Math.round(touchDamage() - game.getDefenseFlatReduction()));
+        game.applyPlayerDamage(game.getWarriorRageDamageTaken(reducedByDefense));
+      }
+      zone.touchingPlayer = touchingPlayer;
+      if (!zone.touches || typeof zone.touches.add !== "function") zone.touches = new WeakSet();
+      for (const enemy of activeEnemies) {
+        if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) continue;
+        if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+        const touching = vecLength(zone.x - enemy.x, zone.y - enemy.y) < zone.radius + enemy.size * 0.35;
+        if (touching) {
+          if (!zone.touches.has(enemy)) {
+            game.applyEnemyDamage(enemy, touchDamage(), "acid");
+            zone.touches.add(enemy);
+          }
+        } else {
+          zone.touches.delete(enemy);
+        }
+      }
+      continue;
+    }
     if (zone.zoneType && zone.zoneType !== "fire") continue;
     for (const br of activeBreakables) {
       if (vecLength(zone.x - br.x, zone.y - br.y) < zone.radius + br.size * 0.32) br.hp = 0;
