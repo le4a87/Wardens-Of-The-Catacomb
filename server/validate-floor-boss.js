@@ -63,6 +63,19 @@ function validateTriggerLevels() {
   return floors;
 }
 
+function validateSonyaBirthdayVariant() {
+  const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
+  game.isHaleyBirthday = () => true;
+  game._floorBossVariantByFloor = {};
+  game.floorBoss = game.createFloorBossState(1);
+  assert(game.getFloorBossVariant(1) === "sonya", `floor 1 variant expected sonya, got ${game.getFloorBossVariant(1)}`);
+  assert(game.floorBoss?.bossName === "Sonya", `floor 1 boss name expected Sonya, got ${game.floorBoss?.bossName}`);
+  return {
+    floor: 1,
+    variant: game.getFloorBossVariant(1)
+  };
+}
+
 function validateSafePlayerSpawn() {
   const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
   const playerRadius = (game.player.size || 20) * 0.5;
@@ -92,6 +105,8 @@ function validateLocalProgression() {
   const variant = game.getFloorBossVariant();
   const boss = game.floorBoss?.bossType === "minotaur"
     ? game.spawnMinotaur(game.player.x + 96, game.player.y)
+    : variant === "sonya"
+    ? game.spawnSonyaBoss(game.player.x + 96, game.player.y)
     : variant === "leprechaun"
     ? game.spawnLeprechaunBoss(game.player.x + 96, game.player.y)
     : game.spawnNecromancer(game.player.x + 96, game.player.y);
@@ -125,6 +140,8 @@ function validateNetworkReconciliation() {
   const variant = sim.getFloorBossVariant();
   const boss = sim.floorBoss?.bossType === "minotaur"
     ? sim.spawnMinotaur(sim.player.x + 96, sim.player.y)
+    : variant === "sonya"
+    ? sim.spawnSonyaBoss(sim.player.x + 96, sim.player.y)
     : variant === "leprechaun"
     ? sim.spawnLeprechaunBoss(sim.player.x + 96, sim.player.y)
     : sim.spawnNecromancer(sim.player.x + 96, sim.player.y);
@@ -254,6 +271,7 @@ function validateRegressionSurface() {
 function main() {
   const results = {
     triggerLevels: validateTriggerLevels(),
+    sonyaBirthdayVariant: validateSonyaBirthdayVariant(),
     safePlayerSpawn: validateSafePlayerSpawn(),
     localProgression: validateLocalProgression(),
     networkReconciliation: validateNetworkReconciliation(),

@@ -119,6 +119,10 @@ export const rendererEffectsProjectileMethods = {
         this.drawNecroticBolt(b, cameraX, cameraY, game.time);
         continue;
       }
+      if (b.projectileType === "sonyaFireball") {
+        this.drawSonyaFireball(b, cameraX, cameraY, game.time);
+        continue;
+      }
       if (b.projectileType === "luckyCharm") {
         this.drawLuckyCharmProjectile(b, cameraX, cameraY, game.time);
         continue;
@@ -201,6 +205,40 @@ export const rendererEffectsProjectileMethods = {
       ctx.arc(Math.cos((i / 4) * Math.PI * 2) * 3, Math.sin((i / 4) * Math.PI * 2) * 3, 2.2, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
+  },
+
+  drawSonyaFireball(projectile, cameraX, cameraY, time = 0) {
+    const ctx = this.ctx;
+    const x = projectile.x - cameraX;
+    const y = projectile.y - cameraY;
+    const size = Number.isFinite(projectile.size) ? projectile.size : 13;
+    const pulse = 0.9 + Math.sin(time * 16 + projectile.x * 0.03) * 0.1;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Number.isFinite(projectile.angle) ? projectile.angle : 0);
+    const outer = ctx.createRadialGradient(0, 0, 1, 0, 0, size * 1.05);
+    outer.addColorStop(0, "rgba(255, 248, 181, 0.95)");
+    outer.addColorStop(0.4, "rgba(255, 156, 72, 0.88)");
+    outer.addColorStop(1, "rgba(165, 35, 18, 0)");
+    ctx.fillStyle = outer;
+    ctx.beginPath();
+    ctx.arc(0, 0, size * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ff6d33";
+    ctx.beginPath();
+    ctx.moveTo(size * 0.72, 0);
+    ctx.lineTo(-size * 0.48, -size * 0.34);
+    ctx.lineTo(-size * 0.12, 0);
+    ctx.lineTo(-size * 0.48, size * 0.34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 233, 178, 0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.18, 0);
+    ctx.lineTo(size * 0.48, 0);
+    ctx.stroke();
     ctx.restore();
   },
 
@@ -316,6 +354,27 @@ export const rendererEffectsProjectileMethods = {
         const a = (i / 4) * Math.PI * 2 + time * 1.5;
         ctx.beginPath();
         ctx.arc(x + Math.cos(a) * zone.radius * 0.28, y + Math.sin(a) * zone.radius * 0.18, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    if (zone.zoneType === "sonyaFire") {
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / (this.config.enemy?.sonyaFirePatchDuration || 3.6)));
+      const radius = Number.isFinite(zone.radius) ? Math.max(0, zone.radius) : 0;
+      const pulse = 0.92 + Math.sin(time * 9 + zone.x * 0.03 + zone.y * 0.02) * 0.08;
+      const outer = ctx.createRadialGradient(x, y, 2, x, y, radius * pulse);
+      outer.addColorStop(0, `rgba(255, 235, 162, ${0.22 * lifeFrac + 0.12})`);
+      outer.addColorStop(0.45, `rgba(255, 127, 59, ${0.24 * lifeFrac + 0.12})`);
+      outer.addColorStop(1, `rgba(135, 28, 14, ${0.08 * lifeFrac})`);
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255, 207, 121, ${0.18 * lifeFrac + 0.08})`;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + time * 1.8;
+        ctx.beginPath();
+        ctx.ellipse(x + Math.cos(a) * radius * 0.28, y + Math.sin(a) * radius * 0.18, 3.4, 1.5, a, 0, Math.PI * 2);
         ctx.fill();
       }
       return;

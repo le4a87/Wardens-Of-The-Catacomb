@@ -150,6 +150,73 @@ export const runtimeSceneBossDrawMethods = {
     ctx.fill();
   },
 
+  drawSonyaBoss(enemy, screenX, screenY, time = 0) {
+    const ctx = this.ctx;
+    const half = enemy.size * 0.5;
+    const pulse = Math.sin(time * 8 + screenX * 0.01) * 0.5 + 0.5;
+    const blink = Math.max(0, enemy.blinkFlashTimer || 0);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.86, half * 1.08, half * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const glow = ctx.createRadialGradient(screenX, screenY - half * 0.1, 2, screenX, screenY - half * 0.1, half * (1.3 + blink * 0.8));
+    glow.addColorStop(0, `rgba(255, 216, 130, ${0.18 + pulse * 0.14 + blink * 0.3})`);
+    glow.addColorStop(0.55, `rgba(255, 108, 54, ${0.15 + pulse * 0.14 + blink * 0.22})`);
+    glow.addColorStop(1, "rgba(120, 28, 14, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - half * 0.05, half * (1.25 + blink * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#8e1f1b";
+    ctx.beginPath();
+    ctx.moveTo(screenX, screenY - half * 1.02);
+    ctx.lineTo(screenX + half * 0.76, screenY - half * 0.1);
+    ctx.lineTo(screenX + half * 0.48, screenY + half * 0.94);
+    ctx.lineTo(screenX - half * 0.48, screenY + half * 0.94);
+    ctx.lineTo(screenX - half * 0.76, screenY - half * 0.1);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#c93a2a";
+    ctx.fillRect(screenX - half * 0.36, screenY - half * 0.18, half * 0.72, half * 1.03);
+    ctx.fillStyle = "#e4b44f";
+    ctx.fillRect(screenX - half * 0.42, screenY + half * 0.18, half * 0.84, half * 0.08);
+
+    ctx.fillStyle = "#f4dac5";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - half * 0.4, half * 0.34, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#f0cf58";
+    ctx.beginPath();
+    ctx.ellipse(screenX - half * 0.16, screenY - half * 0.58, half * 0.16, half * 0.24, -0.2, 0, Math.PI * 2);
+    ctx.ellipse(screenX + half * 0.16, screenY - half * 0.58, half * 0.16, half * 0.24, 0.2, 0, Math.PI * 2);
+    ctx.ellipse(screenX, screenY - half * 0.7, half * 0.26, half * 0.18, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#7d1414";
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.56, screenY - half * 0.52);
+    ctx.lineTo(screenX, screenY - half * 0.95);
+    ctx.lineTo(screenX + half * 0.56, screenY - half * 0.52);
+    ctx.lineTo(screenX + half * 0.4, screenY - half * 0.15);
+    ctx.lineTo(screenX - half * 0.4, screenY - half * 0.15);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#612012";
+    ctx.fillRect(screenX - 5, screenY - half * 0.42, 3, 2.5);
+    ctx.fillRect(screenX + 2, screenY - half * 0.42, 3, 2.5);
+    ctx.strokeStyle = "#7a2415";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.1, screenY - half * 0.26);
+    ctx.lineTo(screenX + half * 0.12, screenY - half * 0.24);
+    ctx.stroke();
+  },
+
   drawMinotaur(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size * 0.5;

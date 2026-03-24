@@ -150,6 +150,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       else if (enemy.type === "prisoner") this.drawPrisoner(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "rat_archer") this.drawRatArcher(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "skeleton_warrior") this.drawSkeletonWarrior(enemy, enemy.x - cameraX, enemy.y - cameraY);
+      else if (enemy.type === "sonya") this.drawSonyaBoss(enemy, enemy.x - cameraX, enemy.y - cameraY, game.time);
       else if (enemy.type === "necromancer") this.drawNecromancer(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "leprechaun") this.drawLeprechaunBoss(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "minotaur") this.drawMinotaur(enemy, enemy.x - cameraX, enemy.y - cameraY);
@@ -194,7 +195,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       ctx.textAlign = "center";
       ctx.fillStyle = `rgba(243, 240, 232, ${titleAlpha})`;
       ctx.font = "bold 64px Trebuchet MS";
-      ctx.fillText("GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 18);
+      ctx.fillText(game.gameOverTitle || "GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 18);
       ctx.fillStyle = `rgba(208, 203, 194, ${subtitleAlpha})`;
       ctx.font = "20px Trebuchet MS";
       if (!drawMultiplayerResultsOverlay(ctx, game, this.canvas)) {

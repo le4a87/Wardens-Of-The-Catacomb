@@ -9,6 +9,7 @@ export {
   spawnSkeletonWarrior,
   spawnNecromancer,
   spawnMinotaur,
+  spawnSonyaBoss,
   spawnLeprechaunBoss,
   spawnSkeleton
 } from "./enemySpawnFactories.js";
@@ -23,6 +24,7 @@ export {
   updateSkeletonWarrior,
   updateNecromancer,
   updateMinotaur,
+  updateSonyaBoss,
   updateLeprechaunBoss
 } from "./enemyAi.js";
 

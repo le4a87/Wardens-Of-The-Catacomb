@@ -84,9 +84,10 @@ export function drawHud(renderer, game, layout) {
     ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, 17);
     ctx.fillStyle = "#3a1f48";
     ctx.fillRect(barX + 4, barY + 4, barW - 8, 10);
-    const bossLabel = game.floorBoss?.bossName || (boss.type === "leprechaun" ? "Leprechaun" : "Necromancer");
+    const bossLabel = game.floorBoss?.bossName || (boss.type === "leprechaun" ? "Leprechaun" : boss.type === "sonya" ? "Sonya" : "Necromancer");
     const isLeprechaun = boss.type === "leprechaun";
-    ctx.fillStyle = isLeprechaun ? "#74d74d" : "#b86cff";
+    const isSonya = boss.type === "sonya";
+    ctx.fillStyle = isLeprechaun ? "#74d74d" : isSonya ? "#ff8a4a" : "#b86cff";
     ctx.fillRect(barX + 4, barY + 4, Math.floor((barW - 8) * ratio), 10);
     ctx.fillStyle = "#f7e8ff";
     ctx.font = "bold 12px Trebuchet MS";

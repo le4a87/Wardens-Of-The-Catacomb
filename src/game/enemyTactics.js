@@ -8,6 +8,7 @@ import {
   updateSkeletonWarrior,
   updateNecromancer,
   updateMinotaur,
+  updateSonyaBoss,
   updateLeprechaunBoss
 } from "./enemyAi.js";
 
@@ -23,6 +24,7 @@ const DEFAULT_TACTIC_KEY_BY_TYPE = {
   skeleton: "skeleton",
   mummy: "mummy",
   minotaur: "minotaur",
+  sonya: "sonya",
   leprechaun: "leprechaun"
 };
 
@@ -89,6 +91,11 @@ const TACTIC_DEFINITIONS = {
     key: "minotaur",
     label: "Rush Bruiser",
     update: updateMinotaur
+  },
+  sonya: {
+    key: "sonya",
+    label: "Birthday Fire Mage",
+    update: updateSonyaBoss
   },
   leprechaun: {
     key: "leprechaun",

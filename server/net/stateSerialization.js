@@ -264,6 +264,7 @@ export function serializeMetaState(source) {
     skillPoints: sim.skillPoints,
     hasKey: sim.hasKey,
     gameOver: sim.gameOver,
+    gameOverTitle: typeof sim.gameOverTitle === "string" && sim.gameOverTitle ? sim.gameOverTitle : "GAME OVER",
     paused: sim.paused,
     shopOpen: sim.shopOpen,
     skillTreeOpen: sim.skillTreeOpen,

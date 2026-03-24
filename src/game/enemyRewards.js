@@ -38,7 +38,7 @@ export function xpFromEnemy(game, enemy) {
   const baseXp =
     enemy.type === "leprechaun"
       ? 140
-      : enemy.type === "necromancer"
+      : enemy.type === "necromancer" || enemy.type === "sonya"
       ? 90
       : enemy.type === "minotaur"
       ? 120

@@ -375,6 +375,7 @@ export function applyMetaStateToGame(game, state) {
   if (!isActiveMultiplayer && Number.isFinite(state.skillPoints)) game.skillPoints = state.skillPoints;
   if (hasOwn(state, "hasKey")) game.hasKey = !!state.hasKey;
   if (hasOwn(state, "gameOver")) game.gameOver = !!state.gameOver;
+  if (hasOwn(state, "gameOverTitle")) game.gameOverTitle = typeof state.gameOverTitle === "string" && state.gameOverTitle ? state.gameOverTitle : "GAME OVER";
   if (hasOwn(state, "paused")) game.paused = !!state.paused;
   if (hasOwn(state, "shopOpen")) {
     if (!isActiveMultiplayer || isLocalPauseOwner) game.shopOpen = !!state.shopOpen;

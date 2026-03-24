@@ -234,6 +234,39 @@ export function spawnNecromancer(game, x, y) {
   };
 }
 
+export function spawnSonyaBoss(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.sonyaHpMin, game.config.enemy.sonyaHpMax);
+  return {
+    type: "sonya",
+    tacticKey: "sonya",
+    x,
+    y,
+    size: 30,
+    speed: game.config.enemy.sonyaSpeed,
+    hp,
+    maxHp: hp,
+    baseMaxHp: hp,
+    baseSpeed: game.config.enemy.sonyaSpeed,
+    hpBarTimer: 9999,
+    damageMin: game.config.enemy.sonyaDamageMin,
+    damageMax: game.config.enemy.sonyaDamageMax,
+    isFloorBoss: true,
+    bossVariant: "sonya",
+    bossName: "Sonya",
+    phase: "intro",
+    introTimer: 2.8,
+    invincible: true,
+    strafeDir: Math.random() < 0.5 ? -1 : 1,
+    strafeTimer: 0.7 + Math.random() * 1.2,
+    castCooldown: 1.15,
+    castWindup: 0,
+    castPattern: "single",
+    blinkCooldown: 1.8,
+    blinkFlashTimer: 0,
+    speechCooldown: 0
+  };
+}
+
 export function spawnMinotaur(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.minotaurHpMin, game.config.enemy.minotaurHpMax);
   return {

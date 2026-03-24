@@ -10,6 +10,7 @@ import {
   spawnSkeletonWarrior as spawnSkeletonWarriorEntity,
   spawnNecromancer as spawnNecromancerEntity,
   spawnMinotaur as spawnMinotaurEntity,
+  spawnSonyaBoss as spawnSonyaBossEntity,
   spawnLeprechaunBoss as spawnLeprechaunBossEntity,
   spawnSkeleton as spawnSkeletonEntity
 } from "../enemySystems.js";
@@ -100,6 +101,10 @@ export function spawnNecromancer(game, x, y) {
 
 export function spawnMinotaur(game, x, y) {
   return spawnMinotaurEntity(game, x, y);
+}
+
+export function spawnSonyaBoss(game, x, y) {
+  return spawnSonyaBossEntity(game, x, y);
 }
 
 export function spawnLeprechaunBoss(game, x, y) {

@@ -47,6 +47,7 @@ export class GameRuntimeBase {
     this.expToNextLevel = this.config.progression.baseXpToLevel;
     this.hasKey = false;
     this.gameOver = false;
+    this.gameOverTitle = "GAME OVER";
     this.deathTransitionDuration = 7;
     this.deathTransition = {
       active: false,

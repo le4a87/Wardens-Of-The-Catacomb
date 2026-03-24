@@ -345,14 +345,17 @@ export const runtimeBaseSupportMethods = {
     }
   },
 
-  applyDamageToPlayerEntity(entity, amount, damageType = "physical") {
+  applyDamageToPlayerEntity(entity, amount, damageType = "physical", source = null) {
     if (!entity || amount <= 0) return;
     if (this.isPrimaryPlayerEntity(entity) && typeof this.recordRunDamageTaken === "function") this.recordRunDamageTaken(amount);
     this.spawnFloatingText(entity.x, entity.y - 18, `-${Math.round(amount)}`, "#ef6d6d");
     entity.health = Math.max(0, (Number.isFinite(entity.health) ? entity.health : 0) - amount);
     entity.alive = entity.health > 0;
     this.markPlayerEntityHealthBarVisible(entity);
-    if (entity.health <= 0) this.handlePlayerEntityDeath(entity);
+    if (entity.health <= 0) {
+      if (source?.bossVariant === "sonya") this.gameOverTitle = "Haley Wins";
+      this.handlePlayerEntityDeath(entity);
+    }
   },
 
   ensureRunStats() {

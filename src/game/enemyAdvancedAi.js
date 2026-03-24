@@ -321,6 +321,186 @@ export function updateNecromancer(game, enemy, dt, speedScale) {
   );
 }
 
+function spawnSonyaVolley(game, enemy, count, spreadRad, leaveFirePatch) {
+  const ownerId = "sonya";
+  const baseAngle = Math.atan2(enemy.dirY || 0, enemy.dirX || 1);
+  const speed = game.config.enemy.sonyaFireballSpeed || 212;
+  const life = game.config.enemy.sonyaFireballLife || 2.8;
+  const size = game.config.enemy.sonyaFireballSize || 13;
+  const damage = game.config.enemy.sonyaFireballDamage || 18;
+  const originDistance = enemy.size * 0.76;
+  for (let i = 0; i < count; i++) {
+    const t = count <= 1 ? 0.5 : i / (count - 1);
+    const offset = count <= 1 ? 0 : (t - 0.5) * spreadRad;
+    const angle = baseAngle + offset;
+    game.bullets.push({
+      x: enemy.x + Math.cos(angle) * originDistance,
+      y: enemy.y + Math.sin(angle) * originDistance,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      angle,
+      life,
+      size,
+      faction: "enemy",
+      projectileType: "sonyaFireball",
+      damage,
+      damageType: "fire",
+      leaveFirePatch: !!leaveFirePatch,
+      ownerId
+    });
+  }
+}
+
+const SONYA_SPEECH_LINES = [
+  "Haley, this one's for you!",
+  "Make a wish.",
+  "Feel the birthday heat."
+];
+
+export function updateSonyaBoss(game, enemy, dt, speedScale) {
+  const tile = game.config?.map?.tile || 32;
+  const preferredRange = (game.config.enemy.sonyaPreferredRangeTiles || 5.5) * tile;
+  const retreatRange = (game.config.enemy.sonyaRetreatRangeTiles || 3.25) * tile;
+  const castCooldownMax = Math.max(0.6, game.config.enemy.sonyaCastCooldown || 1.8);
+  const castWindupMax = Math.max(0.18, game.config.enemy.sonyaCastWindup || 0.42);
+  const blinkCooldownMax = Math.max(1.4, game.config.enemy.sonyaBlinkCooldown || 4.8);
+  const blinkHealthThreshold = Math.max(0.2, Math.min(1, game.config.enemy.sonyaBlinkHealthThreshold || 0.6));
+  const targetPlayer = typeof game.getNearestPlayerEntity === "function" ? game.getNearestPlayerEntity(enemy.x, enemy.y) : game.player;
+  const dx = targetPlayer.x - enemy.x;
+  const dy = targetPlayer.y - enemy.y;
+  const playerDist = vecLength(dx, dy) || 1;
+  const dirX = dx / playerDist;
+  const dirY = dy / playerDist;
+  const perpX = -dirY;
+  const perpY = dirX;
+  const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 1;
+  const speed = (Number.isFinite(enemy.baseSpeed) ? enemy.baseSpeed : game.config.enemy.sonyaSpeed || 112) * (Number.isFinite(speedScale) ? speedScale : 1);
+  const seesPlayer = hasLineOfSight(game, enemy.x, enemy.y, targetPlayer.x, targetPlayer.y);
+
+  enemy.dirX = dirX;
+  enemy.dirY = dirY;
+  enemy.strafeTimer = Math.max(0, (enemy.strafeTimer || 0) - dt);
+  enemy.castCooldown = Math.max(0, (enemy.castCooldown || 0) - dt);
+  const prevCastWindup = Number.isFinite(enemy.castWindup) ? enemy.castWindup : 0;
+  enemy.castWindup = Math.max(0, prevCastWindup - dt);
+  enemy.blinkCooldown = Math.max(0, (enemy.blinkCooldown || 0) - dt);
+  enemy.blinkFlashTimer = Math.max(0, (enemy.blinkFlashTimer || 0) - dt);
+  enemy.speechCooldown = Math.max(0, (enemy.speechCooldown || 0) - dt);
+  if (enemy.strafeTimer <= 0) {
+    enemy.strafeTimer = 0.9 + Math.random() * 1.2;
+    enemy.strafeDir = Math.random() < 0.5 ? -1 : 1;
+  }
+
+  if (enemy.phase === "intro") {
+    enemy.invincible = true;
+    enemy.introTimer = Math.max(0, (enemy.introTimer || 0) - dt);
+    if (typeof game.setFloorBossEncounterPhase === "function") game.setFloorBossEncounterPhase("intro");
+    if (enemy.introTimer <= 0) {
+      enemy.phase = "solo";
+      enemy.invincible = false;
+      if (typeof game.queueFloorBossSpeech === "function") {
+        game.queueFloorBossSpeech("Let's light this birthday up.", enemy.x, enemy.y, 2.3);
+      }
+    }
+    return;
+  }
+
+  enemy.invincible = false;
+  const nextPhase = hpRatio <= 0.25 ? "candlestorm" : hpRatio <= 0.6 ? "chorus" : "solo";
+  if (enemy.phase !== nextPhase) {
+    enemy.phase = nextPhase;
+    if (typeof game.setFloorBossEncounterPhase === "function") game.setFloorBossEncounterPhase(nextPhase);
+    if (typeof game.queueFloorBossSpeech === "function") {
+      const line =
+        nextPhase === "candlestorm"
+          ? "Candles up. No more safe spots."
+          : nextPhase === "chorus"
+          ? "Now sing with me."
+          : "Happy birthday, Haley!";
+      game.queueFloorBossSpeech(line, enemy.x, enemy.y, 2.2);
+    }
+  }
+
+  if (enemy.speechCooldown <= 0 && typeof game.queueFloorBossSpeech === "function") {
+    const min = Math.max(1.5, game.config.enemy.sonyaSpeechCooldownMin || 4.4);
+    const max = Math.max(min, game.config.enemy.sonyaSpeechCooldownMax || 7.2);
+    game.queueFloorBossSpeech(SONYA_SPEECH_LINES[Math.floor(Math.random() * SONYA_SPEECH_LINES.length)], enemy.x, enemy.y, 1.9);
+    enemy.speechCooldown = min + Math.random() * Math.max(0, max - min);
+  }
+
+  if (
+    enemy.blinkCooldown <= 0 &&
+    hpRatio <= blinkHealthThreshold &&
+    (playerDist < retreatRange * 0.85 || (!seesPlayer && playerDist > preferredRange * 1.2))
+  ) {
+    const point = findNecromancerTeleportPoint(game, enemy);
+    if (point) {
+      enemy.x = point.x;
+      enemy.y = point.y;
+      enemy.blinkCooldown = blinkCooldownMax;
+      enemy.blinkFlashTimer = 0.3;
+      enemy.castCooldown = Math.min(enemy.castCooldown || 0, 0.25);
+      enemy.hpBarTimer = Math.max(enemy.hpBarTimer || 0, game.config.enemy.hpBarDuration);
+      if (typeof game.spawnFloatingText === "function") {
+        game.spawnFloatingText(enemy.x, enemy.y - enemy.size - 8, "Blink Step", "#ffbf82", 0.8, 13);
+      }
+      return;
+    }
+  }
+
+  if (prevCastWindup > 0) {
+    if (enemy.castWindup <= 0.0001) {
+      const isCandlestorm = enemy.phase === "candlestorm";
+      const isChorus = enemy.phase === "chorus";
+      if (enemy.castPattern === "fan") {
+        spawnSonyaVolley(
+          game,
+          enemy,
+          Math.max(3, Math.floor(game.config.enemy.sonyaVolleyCount || 3)),
+          ((game.config.enemy.sonyaFireballSpreadDeg || 22) * Math.PI) / 180,
+          isCandlestorm
+        );
+      } else {
+        spawnSonyaVolley(game, enemy, 1, 0, isCandlestorm);
+      }
+      enemy.castCooldown = castCooldownMax * (isCandlestorm ? 0.86 : isChorus ? 0.92 : 1);
+      enemy.castWindup = 0;
+      enemy.hpBarTimer = Math.max(enemy.hpBarTimer || 0, game.config.enemy.hpBarDuration);
+      if (enemy.phase === "candlestorm" && typeof game.spawnFloatingText === "function") {
+        game.spawnFloatingText(enemy.x, enemy.y - enemy.size - 10, "Candlestorm", "#ff9f54", 0.95, 13);
+      }
+    }
+    return;
+  }
+
+  if (playerDist < retreatRange) {
+    moveEnemyTowardPoint(game, enemy, { x: enemy.x - dirX * 96, y: enemy.y - dirY * 96 }, dt, Number.isFinite(speedScale) ? speedScale : 1);
+    return;
+  }
+  if (playerDist > preferredRange * 1.18 || !seesPlayer) {
+    moveEnemyTowardPoint(game, enemy, targetPlayer, dt, (Number.isFinite(speedScale) ? speedScale : 1) * 0.92);
+    return;
+  }
+
+  if (enemy.castCooldown <= 0) {
+    enemy.castPattern = enemy.phase === "solo" ? "single" : enemy.phase === "chorus" && Math.random() < 0.65 ? "fan" : "single";
+    if (enemy.phase === "candlestorm" && Math.random() < 0.8) enemy.castPattern = "fan";
+    enemy.castWindup = castWindupMax;
+    if (typeof game.spawnFloatingText === "function") {
+      game.spawnFloatingText(enemy.x, enemy.y - enemy.size - 8, enemy.castPattern === "fan" ? "Birthday Chorus" : "Fireball", "#ffd39a", 0.6, 12);
+    }
+    return;
+  }
+
+  moveEnemyTowardPoint(
+    game,
+    enemy,
+    { x: enemy.x + perpX * (enemy.strafeDir || 1) * 96, y: enemy.y + perpY * (enemy.strafeDir || 1) * 96 },
+    dt,
+    (speed / Math.max(1, enemy.speed || speed)) * (enemy.phase === "candlestorm" ? 0.86 : 0.72)
+  );
+}
+
 export function updateMinotaur(game, enemy, dt, speedScale) {
   const tile = game.config?.map?.tile || 32;
   const target = getPriorityTarget(game, enemy, tile * 12);

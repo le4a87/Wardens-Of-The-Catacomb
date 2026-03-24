@@ -344,6 +344,8 @@ export function stepGame(game, dt, controls = {}) {
       const point = game.randomEnemySpawnPoint() || { x: game.door.x || game.player.x, y: game.door.y || game.player.y };
       const boss = bossRequest.bossType === "minotaur"
         ? game.spawnMinotaur(point.x, point.y)
+        : bossRequest.variant === "sonya"
+        ? game.spawnSonyaBoss(point.x, point.y)
         : bossRequest.variant === "leprechaun"
         ? game.spawnLeprechaunBoss(point.x, point.y)
         : game.spawnNecromancer(point.x, point.y);
@@ -355,11 +357,24 @@ export function stepGame(game, dt, controls = {}) {
       }
       if (typeof game.spawnFloatingText === "function") {
         const bossLabel =
-          bossRequest.variant === "leprechaun"
+          bossRequest.variant === "sonya"
+            ? "Sonya Arrives"
+            : bossRequest.variant === "leprechaun"
             ? "Leprechaun Escapes"
             : `${bossRequest.bossName || "Boss"} Stirs`;
-        const bossColor = bossRequest.variant === "leprechaun" ? "#a2f06e" : "#d49dff";
+        const bossColor =
+          bossRequest.variant === "leprechaun"
+            ? "#a2f06e"
+            : bossRequest.variant === "sonya"
+            ? "#ff9f68"
+            : "#d49dff";
         game.spawnFloatingText(game.player.x, game.player.y - 96, bossLabel, bossColor, 1.5, 18);
+      }
+      if (bossRequest.variant === "sonya") {
+        if (typeof game.queueFloorBossSpeech === "function") {
+          game.queueFloorBossSpeech("Happy Birthday, Haley!", boss.x, boss.y, 3.2);
+        }
+        if (typeof game.playHappyBirthdayCue === "function") game.playHappyBirthdayCue();
       }
     }
   }
