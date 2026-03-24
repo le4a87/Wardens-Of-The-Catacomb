@@ -72,7 +72,9 @@ export const CONFIG = {
     tile: 32,
     width: 120,
     height: 90,
-    exploreRadiusTiles: 4
+    exploreRadiusTiles: 4,
+    defaultBiomeKey: "catacomb",
+    biomeCycle: ["catacomb", "catacomb", "catacomb", "sewer"]
   },
   player: {
     maxHealth: 100,

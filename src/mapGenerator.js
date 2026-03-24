@@ -160,3 +160,166 @@ export function createCastleMap(width, height) {
 
   return grid.map((row) => row.join(""));
 }
+
+function pickFrom(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function placeProgressionTiles(grid, width, height, floorTiles, dryTiles = null) {
+  const usable = Array.isArray(dryTiles) && dryTiles.length > 0 ? dryTiles : floorTiles;
+  const center = { x: Math.floor(width / 2), y: Math.floor(height / 2) };
+  let playerTile = usable[0] || floorTiles[0];
+  let closest = Number.POSITIVE_INFINITY;
+  for (const tile of usable) {
+    const d = vecLength(tile.x - center.x, tile.y - center.y);
+    if (d < closest) {
+      closest = d;
+      playerTile = tile;
+    }
+  }
+
+  let doorTile = usable[0] || floorTiles[0];
+  let farthest = -1;
+  for (const tile of usable) {
+    const d = vecLength(tile.x - playerTile.x, tile.y - playerTile.y);
+    if (d > farthest) {
+      farthest = d;
+      doorTile = tile;
+    }
+  }
+
+  const diag = vecLength(width, height);
+  const edgePadding = Math.max(6, Math.floor(Math.min(width, height) * 0.08));
+  let keyCandidates = usable.filter((tile) => {
+    const borderDist = Math.min(tile.x, tile.y, width - 1 - tile.x, height - 1 - tile.y);
+    if (borderDist < edgePadding) return false;
+    const dPlayer = vecLength(tile.x - playerTile.x, tile.y - playerTile.y);
+    const dDoor = vecLength(tile.x - doorTile.x, tile.y - doorTile.y);
+    return dPlayer > diag * 0.16 && dDoor > diag * 0.10;
+  });
+  if (keyCandidates.length === 0) {
+    keyCandidates = usable.filter((tile) => vecLength(tile.x - playerTile.x, tile.y - playerTile.y) > diag * 0.12);
+  }
+  if (keyCandidates.length === 0) keyCandidates = usable;
+  const keyTile = pickFrom(keyCandidates.length ? keyCandidates : floorTiles);
+
+  grid[playerTile.y][playerTile.x] = "P";
+  grid[doorTile.y][doorTile.x] = "D";
+  grid[keyTile.y][keyTile.x] = "K";
+}
+
+export function createSewerMap(width, height) {
+  const grid = Array.from({ length: height }, () => Array(width).fill("#"));
+  const hallCenters = [
+    Math.max(8, Math.floor(height * 0.22)),
+    Math.floor(height * 0.5),
+    Math.min(height - 9, Math.floor(height * 0.78))
+  ];
+  const hallHalfWidth = 2;
+  const marginX = 3;
+
+  function setTile(x, y, char) {
+    if (x <= 1 || y <= 1 || x >= width - 2 || y >= height - 2) return;
+    grid[y][x] = char;
+  }
+
+  function carveRect(x, y, w, h, char = ".") {
+    for (let yy = y; yy < y + h; yy++) {
+      for (let xx = x; xx < x + w; xx++) setTile(xx, yy, char);
+    }
+  }
+
+  function carveCorridor(x1, y1, x2, y2, widthTiles = 1, char = ".") {
+    const half = Math.floor(widthTiles / 2);
+    let cx = x1;
+    let cy = y1;
+    const draw = () => {
+      for (let yy = cy - half; yy <= cy + half; yy++) {
+        for (let xx = cx - half; xx <= cx + half; xx++) setTile(xx, yy, char);
+      }
+    };
+    draw();
+    while (cx !== x2) {
+      cx += x2 > cx ? 1 : -1;
+      draw();
+    }
+    while (cy !== y2) {
+      cy += y2 > cy ? 1 : -1;
+      draw();
+    }
+  }
+
+  for (const centerY of hallCenters) {
+    for (let y = centerY - hallHalfWidth; y <= centerY + hallHalfWidth; y++) {
+      for (let x = marginX; x < width - marginX; x++) setTile(x, y, "~");
+    }
+  }
+
+  const xStep = Math.max(16, Math.floor(width / 6));
+  for (let index = 0; index < hallCenters.length; index++) {
+    const hallY = hallCenters[index];
+    const aboveStart = index === 0 ? 3 : hallCenters[index - 1] + hallHalfWidth + 3;
+    const aboveEnd = hallY - hallHalfWidth - 3;
+    const belowStart = hallY + hallHalfWidth + 3;
+    const belowEnd = index === hallCenters.length - 1 ? height - 4 : hallCenters[index + 1] - hallHalfWidth - 3;
+    const bands = [];
+    if (aboveEnd - aboveStart >= 6) bands.push({ start: aboveStart, end: aboveEnd });
+    if (belowEnd - belowStart >= 6) bands.push({ start: belowStart, end: belowEnd });
+    if (bands.length === 0) continue;
+
+    for (let anchorX = 8 + (index % 2) * 5; anchorX < width - 14; anchorX += xStep) {
+      const band = pickFrom(bands);
+      const roomW = 6 + Math.floor(Math.random() * 7);
+      const roomH = 5 + Math.floor(Math.random() * 5);
+      const x = Math.max(3, Math.min(width - roomW - 3, anchorX + Math.floor(Math.random() * 7) - 3));
+      const yRange = Math.max(1, band.end - band.start - roomH + 2);
+      const y = Math.max(band.start, Math.min(band.end - roomH + 1, band.start + Math.floor(Math.random() * yRange)));
+      carveRect(x, y, roomW, roomH, ".");
+      const cy = y + Math.floor(roomH / 2);
+      const corridorY = cy < hallY ? hallY - hallHalfWidth - 1 : hallY + hallHalfWidth + 1;
+      const entryLeft = x + Math.max(1, Math.floor(roomW * 0.28));
+      const entryRight = x + Math.min(roomW - 2, Math.floor(roomW * 0.72));
+      carveCorridor(entryLeft, cy, entryLeft, corridorY, 2, ".");
+      carveCorridor(entryRight, cy, entryRight, corridorY, 2, ".");
+
+      if (roomW >= 7 && roomH >= 5 && Math.random() < 0.7) {
+        const poolW = Math.max(2, Math.min(roomW - 2, 2 + Math.floor(Math.random() * 3)));
+        const poolH = Math.max(2, Math.min(roomH - 2, 2 + Math.floor(Math.random() * 2)));
+        const poolX = x + 1 + Math.floor(Math.random() * Math.max(1, roomW - poolW - 1));
+        const poolY = y + 1 + Math.floor(Math.random() * Math.max(1, roomH - poolH - 1));
+        carveRect(poolX, poolY, poolW, poolH, "o");
+      }
+    }
+  }
+
+  for (let i = 0; i < hallCenters.length - 1; i++) {
+    const upper = hallCenters[i];
+    const lower = hallCenters[i + 1];
+    const connectorCount = 2 + Math.floor(Math.random() * 2);
+    for (let c = 0; c < connectorCount; c++) {
+      const x = 8 + Math.floor(Math.random() * Math.max(1, width - 16));
+      carveCorridor(x, upper + hallHalfWidth + 1, x, lower - hallHalfWidth - 1, 2, ".");
+    }
+  }
+
+  const allFloorTiles = [];
+  const dryTiles = [];
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const tile = grid[y][x];
+      if (tile === "#") continue;
+      allFloorTiles.push({ x, y });
+      if (tile !== "~" && tile !== "o") dryTiles.push({ x, y });
+    }
+  }
+
+  for (const tile of dryTiles) {
+    if (grid[tile.y][tile.x] !== ".") continue;
+    const roll = Math.random();
+    if (roll < 0.055) grid[tile.y][tile.x] = "g";
+    else if (roll < 0.095) grid[tile.y][tile.x] = "r";
+  }
+
+  placeProgressionTiles(grid, width, height, allFloorTiles, dryTiles);
+  return grid.map((row) => row.join(""));
+}

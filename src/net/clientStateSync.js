@@ -16,6 +16,7 @@ export function applyMapStateToGame(game, payload) {
       : 0;
   if (rowLength <= 0) return "";
   const tile = game.config.map.tile;
+  if (typeof game.setBiomeKey === "function" && typeof payload?.biomeKey === "string") game.setBiomeKey(payload.biomeKey);
   game.map = normalizedMap;
   game.mapWidth = Number.isFinite(payload.mapWidth) ? payload.mapWidth : rowLength;
   game.mapHeight = Number.isFinite(payload.mapHeight) ? payload.mapHeight : normalizedMap.length;
@@ -45,7 +46,7 @@ export function applyMapStateToGame(game, payload) {
     }
   }
   if (typeof game.ensurePlayerSafePosition === "function") game.ensurePlayerSafePosition(12);
-  return typeof payload.mapSignature === "string" ? payload.mapSignature : `${game.floor}:${game.mapWidth}x${game.mapHeight}`;
+  return typeof payload.mapSignature === "string" ? payload.mapSignature : `${game.biomeKey}:${game.floor}:${game.mapWidth}x${game.mapHeight}`;
 }
 
 export function applyMapMetaToGame(game, payload) {
@@ -53,6 +54,7 @@ export function applyMapMetaToGame(game, payload) {
   const mapHeight = Number.isFinite(payload?.mapHeight) ? Math.max(1, Math.floor(payload.mapHeight)) : 0;
   if (mapWidth <= 0 || mapHeight <= 0) return "";
   const tile = game.config.map.tile;
+  if (typeof game.setBiomeKey === "function" && typeof payload?.biomeKey === "string") game.setBiomeKey(payload.biomeKey);
   game.mapWidth = mapWidth;
   game.mapHeight = mapHeight;
   // Use a dedicated unknown marker so client-side prediction can avoid treating
@@ -63,7 +65,7 @@ export function applyMapMetaToGame(game, payload) {
   game.explored = Array.from({ length: mapHeight }, () => Array(mapWidth).fill(false));
   game.navDistance = Array.from({ length: mapHeight }, () => Array(mapWidth).fill(-1));
   game.navPlayerTile = { x: -1, y: -1 };
-  return typeof payload.mapSignature === "string" ? payload.mapSignature : `${game.floor}:${game.mapWidth}x${game.mapHeight}`;
+  return typeof payload.mapSignature === "string" ? payload.mapSignature : `${game.biomeKey}:${game.floor}:${game.mapWidth}x${game.mapHeight}`;
 }
 
 export function isKnownMapTileAt(game, x, y) {
@@ -363,6 +365,7 @@ export function applyMetaStateToGame(game, state) {
   if (hasOwn(state, "pauseOwnerId")) game.networkPauseOwnerId = typeof state.pauseOwnerId === "string" ? state.pauseOwnerId : null;
   if (Number.isFinite(state.time)) game.time = state.time;
   if (Number.isFinite(state.floor)) game.floor = state.floor;
+  if (typeof game.setBiomeKey === "function" && typeof state.biomeKey === "string") game.setBiomeKey(state.biomeKey);
   if (!isActiveMultiplayer && Number.isFinite(state.level)) game.level = state.level;
   if (!isActiveMultiplayer && Number.isFinite(state.score)) game.score = state.score;
   if (!isActiveMultiplayer && Number.isFinite(state.gold)) game.gold = state.gold;

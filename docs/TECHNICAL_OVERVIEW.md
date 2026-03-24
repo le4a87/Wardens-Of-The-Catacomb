@@ -5,6 +5,8 @@ This document summarizes the current high-level architecture and validation work
 ## Runtime Structure
 - [game.js](../game.js): browser bootstrap, splash/menu flow, and client session orchestration
 - `src/game/*`: simulation and gameplay runtime systems
+- `src/biomes.js`: biome definitions for floor layout, colors, traps, breakables, and special-rule hooks
+- `src/mapGenerator.js`: biome-specific procedural map generators for catacomb and sewer floors
 - `src/rendering/*`: renderer, HUD, scene drawing, and effects
 - `src/net/*`: client-side networking, prediction, interpolation, and map sync helpers
 - [server/networkServer.js](../server/networkServer.js): authoritative WebSocket server entrypoint

@@ -46,6 +46,10 @@ Wardens of the Catacomb is a top-down action roguelite built with vanilla JavaSc
 
 ## Project Snapshot
 - Procedural floor progression with alternating floor mini-bosses triggered by player level
+- Biome system for floor generation, visuals, traps, breakables, and future floor-specific rules
+- Floor biomes currently cycle as `catacomb`, `catacomb`, `catacomb`, `sewer`, then repeat
+- Default `catacomb` preserves the original stone crypt layout, arrow traps, and wooden breakables
+- `sewer` adds long flooded halls, two-entrance offshoot rooms, darker stonework, sludge water, grate/pool floor dressing, hidden gelatinous cubes, boosted rat archers, and poison traps that leave lingering acid
 - Playable classes: Archer, Fighter, and Necromancer
 - Class-specific passive level scaling, damage-type resistances, floor-based enemy caps, and progression-driven reward tuning
 - Enemy tactics framework with bespoke ghost, goblin, rat-archer, skeleton, mummy, necromancer, and minotaur behaviors

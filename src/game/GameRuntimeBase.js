@@ -1,8 +1,9 @@
 import { CONFIG } from "../config.js";
+import { DEFAULT_BIOME_KEY, getBiomeDefinition } from "../biomes.js";
 import { clamp } from "../utils.js";
-import { createCastleMap } from "../mapGenerator.js";
 import { InputController } from "../InputController.js";
 import { Renderer } from "../Renderer.js";
+import { runtimeBaseBiomeMethods } from "./runtimeBaseBiomeMethods.js";
 import { runtimeBasePlacementMethods } from "./runtimeBasePlacementMethods.js";
 import { runtimeBaseSupportMethods } from "./runtimeBaseSupportMethods.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
@@ -31,6 +32,8 @@ export class GameRuntimeBase {
     this.onFloorChanged = typeof options.onFloorChanged === "function" ? options.onFloorChanged : null;
     this.onGameOverChanged = typeof options.onGameOverChanged === "function" ? options.onGameOverChanged : null;
     this.floor = 1;
+    this.biomeKey = DEFAULT_BIOME_KEY;
+    this.biome = getBiomeDefinition(this.biomeKey);
     this.mapWidth = this.config.map.width;
     this.mapHeight = this.config.map.height;
     this.map = [];
@@ -196,43 +199,6 @@ export class GameRuntimeBase {
   spawnFloatingText(x, y, text, color, life = 0.75, size = 14) {
     this.floatingTexts.push({ x, y, text, color, life, maxLife: life, vy: 22, size });
   }
-  generateFloor(width, height) {
-    this.mapWidth = width;
-    this.mapHeight = height;
-    this.map = createCastleMap(width, height);
-    this.worldWidth = this.map[0].length * this.config.map.tile;
-    this.worldHeight = this.map.length * this.config.map.tile;
-    this.explored = Array.from({ length: this.map.length }, () => Array(this.map[0].length).fill(false));
-    this.bullets = [];
-    this.fireArrows = [];
-    this.fireZones = [];
-    this.meleeSwings = [];
-    this.drops = [];
-    this.enemies = [];
-    this.armorStands = [];
-    this.breakables = [];
-    this.wallTraps = [];
-    this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
-    this.recentPlayerShots = [];
-    this.warriorMomentumTimer = 0;
-    this.warriorRageActiveTimer = 0;
-    this.warriorRageCooldownTimer = 0;
-    this.warriorRageVictoryRushPool = 0;
-    this.warriorRageVictoryRushTimer = 0;
-    this.necromancerBeam = createNecromancerBeamState();
-    this.navDistance = Array.from({ length: this.map.length }, () => Array(this.map[0].length).fill(-1));
-    this.navPlayerTile = { x: -1, y: -1 };
-    this.hasKey = false;
-    this.door = { x: 0, y: 0, open: true };
-    this.pickup = { x: 0, y: 0, taken: true };
-    this.portal = { x: 0, y: 0, active: false };
-    this.floorBoss = this.createFloorBossState(this.floor);
-    this.parseMap();
-    this.placeArmorStands();
-    this.placeWallTraps();
-    this.placeBreakables();
-    this.ensurePlayerSafePosition(12);
-  }
 
   advanceToNextFloor() {
     if (typeof this.recordRunFloorCleared === "function") this.recordRunFloorCleared();
@@ -328,7 +294,10 @@ export class GameRuntimeBase {
 
   getPlayerMoveSpeed() {
     const levelBonus = Number.isFinite(this.classSpec.levelMoveSpeedGain) ? Math.max(0, this.classSpec.levelMoveSpeedGain) * Math.max(0, this.level - 1) : 0;
-    return (this.classSpec.baseMoveSpeed + levelBonus) * this.getMoveSpeedMultiplier() * this.getWarriorMomentumMultiplier();
+    return (this.classSpec.baseMoveSpeed + levelBonus) *
+      this.getMoveSpeedMultiplier() *
+      this.getWarriorMomentumMultiplier() *
+      this.getPlayerTerrainMoveMultiplier();
   }
 
   isArcherClass() {
@@ -568,6 +537,7 @@ export class GameRuntimeBase {
 }
 
 Object.assign(GameRuntimeBase.prototype, runtimeBasePlacementMethods);
+Object.assign(GameRuntimeBase.prototype, runtimeBaseBiomeMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeBaseSupportMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeBaseDifficultyMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeFloorBossMethods);

@@ -495,8 +495,8 @@ export const runtimeBaseSupportMethods = {
     this.player.hpBarTimer = this.config.player.hpBarDuration;
   },
 
-  applyPlayerHealing(amount) {
-    this.applyHealingToPlayerEntity(this.player, amount);
+  applyPlayerHealing(amount, options = {}) {
+    this.applyHealingToPlayerEntity(this.player, amount, options);
   },
 
   getHealthPickupAmount() {

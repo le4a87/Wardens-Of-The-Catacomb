@@ -300,6 +300,26 @@ export const rendererEffectsProjectileMethods = {
       }
       return;
     }
+    if (zone.zoneType === "acid") {
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / 5));
+      const pulse = 0.9 + Math.sin(time * 8 + zone.x * 0.02 + zone.y * 0.013) * 0.08;
+      const outer = ctx.createRadialGradient(x, y, 2, x, y, zone.radius * pulse);
+      outer.addColorStop(0, `rgba(172, 255, 106, ${0.28 * lifeFrac + 0.12})`);
+      outer.addColorStop(0.55, `rgba(96, 214, 64, ${0.22 * lifeFrac + 0.08})`);
+      outer.addColorStop(1, `rgba(43, 92, 25, ${0.08 * lifeFrac})`);
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(x, y, zone.radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(205, 255, 155, ${0.16 * lifeFrac + 0.08})`;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + time * 1.5;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * zone.radius * 0.28, y + Math.sin(a) * zone.radius * 0.18, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
     if (zone.zoneType === "deathBolt" || zone.zoneType === "deathBurst") {
       const lifeFrac = Math.max(0, Math.min(1, zone.life / (this.config.deathBolt?.visualLife || 0.35)));
       const outer = ctx.createRadialGradient(x, y, 2, x, y, zone.radius);

@@ -82,6 +82,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     const camera = game.getCamera();
     const cameraX = camera.x;
     const cameraY = camera.y;
+    const biomePalette = typeof game.getBiomeAppearance === "function" ? game.getBiomeAppearance() : null;
     const layout = {
       sidebarX: this.canvas.width - this.sidebarWidth,
       sidebarW: this.sidebarWidth,
@@ -134,20 +135,19 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
 
     for (const stand of game.armorStands) {
       if (stand.animated && stand.activated) continue;
-      this.drawArmorStand(stand, stand.x - cameraX, stand.y - cameraY);
+      this.drawArmorStand(game, stand, stand.x - cameraX, stand.y - cameraY);
     }
     for (const trap of game.wallTraps || []) {
       if (!trap.spotted) continue;
-      this.drawWallTrap(trap, trap.x - cameraX, trap.y - cameraY);
+      this.drawWallTrap(trap, trap.x - cameraX, trap.y - cameraY, biomePalette);
     }
-    for (const br of game.breakables || []) this.drawBreakable(br, br.x - cameraX, br.y - cameraY);
+    for (const br of game.breakables || []) this.drawBreakable(game, br, br.x - cameraX, br.y - cameraY);
 
     for (const enemy of game.enemies) {
       if (enemy.type === "goblin") this.drawTreasureGoblin(enemy, enemy.x - cameraX, enemy.y - cameraY);
-      else if (enemy.type === "armor") this.drawAnimatedArmor(enemy, enemy.x - cameraX, enemy.y - cameraY);
+      else if (enemy.type === "armor") this.drawAnimatedArmor(game, enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "mummy") this.drawMummy(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "prisoner") this.drawPrisoner(enemy, enemy.x - cameraX, enemy.y - cameraY);
-      else if (enemy.type === "mummy") this.drawMummy(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "rat_archer") this.drawRatArcher(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "skeleton_warrior") this.drawSkeletonWarrior(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "necromancer") this.drawNecromancer(enemy, enemy.x - cameraX, enemy.y - cameraY);
@@ -155,7 +155,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       else if (enemy.type === "minotaur") this.drawMinotaur(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "skeleton") this.drawSkeleton(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "mimic") {
-        if (enemy.dormant) this.drawBreakable({ type: "box", size: enemy.size }, enemy.x - cameraX, enemy.y - cameraY);
+        if (enemy.dormant) this.drawBreakable(game, { type: "box", size: enemy.size }, enemy.x - cameraX, enemy.y - cameraY);
         else this.drawMimic(enemy, enemy.x - cameraX, enemy.y - cameraY);
       } else {
         this.drawGhost(enemy, enemy.x - cameraX, enemy.y - cameraY, enemy.size);

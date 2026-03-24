@@ -116,7 +116,7 @@ export function stepGame(game, dt, controls = {}) {
   game.player.moving = !!(mx || my);
   if (primaryPlayerAlive) game.revealAroundPlayer();
 
-  const trapCfg = game.config?.traps?.wall || {};
+  const trapCfg = typeof game.getWallTrapConfig === "function" ? game.getWallTrapConfig() : game.config?.traps?.wall || {};
   const moveLen = vecLength(mx, my) || 1;
   const moveDirX = mx ? mx / moveLen : 0;
   const moveDirY = my ? my / moveLen : 0;
@@ -385,6 +385,8 @@ export function stepGame(game, dt, controls = {}) {
         activeMummies < game.config.enemy.maxActiveMummies &&
         Math.random() < (game.config.enemy.mummySpawnChance || 0.08);
       const ratArcherMinFloor = Number.isFinite(game.config.enemy.ratArcherMinFloor) ? game.config.enemy.ratArcherMinFloor : 3;
+      const ratArcherCap = typeof game.getMaxActiveRatArchers === "function" ? game.getMaxActiveRatArchers() : game.config.enemy.maxActiveRatArchers;
+      const ratArcherSpawnChance = typeof game.getRatArcherSpawnChance === "function" ? game.getRatArcherSpawnChance() : game.config.enemy.ratArcherSpawnChance;
       if (
         game.floor >= prisonerMinFloor &&
         activePrisoners < game.config.enemy.maxActivePrisoners &&
@@ -393,8 +395,8 @@ export function stepGame(game, dt, controls = {}) {
         game.enemies.push(game.spawnPrisoner(point.x, point.y));
       } else if (
         game.floor >= ratArcherMinFloor &&
-        activeRatArchers < game.config.enemy.maxActiveRatArchers &&
-        Math.random() < game.config.enemy.ratArcherSpawnChance
+        activeRatArchers < ratArcherCap &&
+        Math.random() < ratArcherSpawnChance
       ) {
         game.enemies.push(game.spawnRatArcher(point.x, point.y));
       } else if (spawnMummy) {
@@ -413,12 +415,15 @@ export function stepGame(game, dt, controls = {}) {
   }
 
   let armorActivations = 0;
+  const armorWakeRadius = typeof game.getArmorWakeRadius === "function" ? game.getArmorWakeRadius() : game.config.enemy.armorWakeRadius;
   const livingPlayersForWake = typeof game.getLivingPlayerEntities === "function" ? game.getLivingPlayerEntities() : [game.player];
   for (const stand of game.armorStands) {
     if (!stand.animated || stand.activated) continue;
     if (floorBossActive) break;
     if (game.enemies.length >= activeEnemyCap || armorActivations >= 4) break;
-    const shouldWake = livingPlayersForWake.some((player) => player && vecLength((player.x || 0) - stand.x, (player.y || 0) - stand.y) < game.config.enemy.armorWakeRadius);
+    const shouldWake = livingPlayersForWake.some(
+      (player) => player && vecLength((player.x || 0) - stand.x, (player.y || 0) - stand.y) < armorWakeRadius
+    );
     if (shouldWake) {
       stand.activated = true;
       game.enemies.push(game.spawnAnimatedArmor(stand.x, stand.y));

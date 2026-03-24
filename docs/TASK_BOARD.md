@@ -1,20 +1,19 @@
 # Task Board
 
-Branch: `qol`
+Branch: `biomes`
 
 Use this file as the working board for the current branch. Keep tasks finite, testable, and tied to concrete validation steps. When the feature is complete, roll durable summaries into the long-lived docs and reset this file to a clean state.
 
 ## Active Tasks
-- Pass 1: add multiplayer room scaffolding on the authoritative server and client session layer.
-  Validation: room messages include lobby/owner metadata, per-player roster fields, and remain backward-compatible with the current network path.
-- Pass 2: refactor authoritative gameplay state from one active player to a true player collection.
-  Validation: snapshots/meta encode multiple players, local ownership is explicit, and legacy single-player assumptions are isolated behind temporary compatibility shims where needed.
-- Pass 3: update runtime rules for multiplayer combat, death/spectate, pickups, floor transitions, progression, and ownership transfer.
-  Validation: targeted gameplay checks cover last-hit rewards, dead-until-run-end spectating, global pause ownership, disconnect removal, and shared floor progression.
-- Pass 4: implement multiplayer HUD/lobby/results surfaces.
-  Validation: shared lobby roster/countdown, remote world handles, minimap player colors, group panel, notifications, spectate highlighting, and final results render correctly.
-- Pass 5: expand network validation to cover the first playable multiplayer slice.
-  Validation: automation covers lobby flow, owner transfer, two-player gameplay/HUD sync, death/spectate, floor advance, disconnects, and final results.
+- [x] Add the `sewer` biome with a dedicated hallway-and-offshoot floor generator.
+  Scope: Create a sewer-specific map layout with three long water halls, connecting offshoots, and walkable decorative floor tiles for grates and room pools.
+  Validation: `npm run check`
+- [x] Add sewer biome rendering and encounter reskins.
+  Scope: Render sewer walls/floors/moss/water/grates, switch breakables to trashcans and crates, and reskin animated armor stands as disguised gelatinous cube pools.
+  Validation: `npm run check`
+- [x] Implement sewer biome gameplay modifiers and poison traps.
+  Scope: Increase rat archer spawn pressure in sewer floors and replace arrow traps with poison traps that leave damaging acid lines for 5 seconds against the player and allies.
+  Validation: `npm run check`, `npm run validate:boss`
 
 ## Follow-Ups
 - None.
@@ -134,13 +133,13 @@ Use this file as the working board for the current branch. Keep tasks finite, te
 
 ## Validation Commands
 - `npm run check`
-- `npm run validate:core`
-- `npm run validate:gameplay`
-- `npm run validate:solo-xp`
-- `npm run validate:dev-start`
-- `npm run validate:network`
-- `npm run validate:network-pause`
-- `npm run validate:network-two-client-damage`
-- `npm run validate:pre-commit`
-- `npm run validate:closeout`
-- `npm run perf:all`
+- `npm run validate:boss`
+- `npm run perf:test`
+
+## Validation Results
+- 2026-03-18: `npm run check` passed.
+- 2026-03-18: `npm run validate:boss` passed.
+- 2026-03-18: `npm run check` passed after the sewer biome, poison trap, and reskin changes.
+- 2026-03-18: `npm run validate:boss` passed after the sewer biome, poison trap, and reskin changes.
+- 2026-03-18: `npm run check` passed after widening sewer offshoots, adding second room entrances, and adding flooded-hall slow.
+- 2026-03-18: `npm run validate:boss` passed after widening sewer offshoots, adding second room entrances, and adding flooded-hall slow.
