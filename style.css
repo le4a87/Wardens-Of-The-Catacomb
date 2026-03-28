@@ -4,6 +4,8 @@
   --ink: #f3f2ea;
   --accent: #d9b26f;
   --danger: #c25555;
+  --page-pad: 16px;
+  --game-aspect: 1.5;
 }
 
 * {
@@ -24,9 +26,10 @@ body {
 .layout {
   display: grid;
   gap: 18px;
-  padding: 16px;
-  max-width: 1040px;
-  margin: 0 auto;
+  width: 100%;
+  min-height: 100vh;
+  padding: var(--page-pad);
+  margin: 0;
   justify-items: center;
 }
 
@@ -35,7 +38,7 @@ body {
 }
 
 .menu-shell {
-  width: min(100%, 960px);
+  width: min(100%, 1180px);
   background: color-mix(in srgb, var(--panel) 88%, black 12%);
   border: 2px solid #314060;
   border-radius: 14px;
@@ -577,8 +580,10 @@ body {
 }
 
 canvas {
-  width: min(100%, 960px);
+  display: block;
+  width: min(calc(100vw - (var(--page-pad) * 2)), calc((100vh - (var(--page-pad) * 2)) * var(--game-aspect)));
   height: auto;
+  max-height: calc(100vh - (var(--page-pad) * 2));
   border: 2px solid #344864;
   border-radius: 8px;
   background: #0c0f16;
@@ -608,7 +613,7 @@ canvas[hidden] {
 }
 
 .leaderboard-card {
-  width: min(920px, 100%);
+  width: min(1100px, 100%);
   max-height: min(85vh, 760px);
   overflow: auto;
   border: 2px solid #44597f;
