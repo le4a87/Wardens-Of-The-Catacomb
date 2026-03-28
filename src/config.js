@@ -25,7 +25,7 @@ export const CONFIG = {
       label: "Castle Warrior",
       usesRanged: false,
       combatStyle: "warrior",
-      baseLifeLeech: 0.02,
+      baseLifeLeech: 0.01,
       baseMaxHealth: 125,
       baseDefenseFlat: 2.5,
       baseResistances: {

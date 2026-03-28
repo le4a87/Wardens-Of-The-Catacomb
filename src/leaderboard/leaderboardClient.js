@@ -1,5 +1,7 @@
 export const PLAYER_HANDLE_STORAGE_KEY = "wardens.playerHandle";
 export const LEADERBOARD_REQUEST_TIMEOUT_MS = 5000;
+export const LEADERBOARD_BOARD_SOLO = "solo";
+export const LEADERBOARD_BOARD_GROUP = "group";
 
 const CLASS_LABELS = {
   archer: "Elvish Archer",
@@ -12,6 +14,10 @@ export function sanitizePlayerHandle(value, fallback = "") {
   if (typeof value !== "string") return fallback;
   const normalized = value.replace(/\s+/g, " ").trim().slice(0, 20);
   return normalized || fallback;
+}
+
+export function normalizeLeaderboardBoardType(value) {
+  return value === LEADERBOARD_BOARD_GROUP ? LEADERBOARD_BOARD_GROUP : LEADERBOARD_BOARD_SOLO;
 }
 
 export function loadStoredPlayerHandle(storage = globalThis?.localStorage) {
@@ -59,12 +65,25 @@ export function compareLeaderboardEntries(a, b) {
 }
 
 export function normalizeLeaderboardRow(row = {}) {
-  const classType = row.classType === "fighter" || row.classType === "warrior" || row.classType === "necromancer"
-    ? row.classType === "warrior" ? "fighter" : row.classType
-    : "archer";
+  const boardType = normalizeLeaderboardBoardType(row.boardType);
+  const handles = Array.isArray(row.handles) && row.handles.length > 0
+    ? row.handles.map((handle) => sanitizePlayerHandle(handle, "Player")).filter((handle) => !!handle)
+    : [sanitizePlayerHandle(row.handle, "Player")];
+  const classTypes = Array.isArray(row.classTypes) && row.classTypes.length > 0
+    ? row.classTypes.map((classType) => (
+      classType === "fighter" || classType === "warrior" || classType === "necromancer"
+        ? (classType === "warrior" ? "fighter" : classType)
+        : "archer"
+    ))
+    : [row.classType === "fighter" || row.classType === "warrior" || row.classType === "necromancer"
+      ? (row.classType === "warrior" ? "fighter" : row.classType)
+      : "archer"];
   return {
-    handle: sanitizePlayerHandle(row.handle, "Player"),
-    classType,
+    boardType,
+    handle: handles[0] || "Player",
+    classType: classTypes[0] || "archer",
+    handles,
+    classTypes,
     score: Number.isFinite(row.score) ? Math.max(0, Math.floor(row.score)) : 0,
     timeSeconds: Number.isFinite(row.timeSeconds) ? Math.max(0, Math.floor(row.timeSeconds)) : 0,
     floorReached: Number.isFinite(row.floorReached) ? Math.max(1, Math.floor(row.floorReached)) : 1,
@@ -74,6 +93,7 @@ export function normalizeLeaderboardRow(row = {}) {
 
 export function buildLocalRunSummary(game, handle) {
   return normalizeLeaderboardRow({
+    boardType: LEADERBOARD_BOARD_SOLO,
     handle,
     classType: game?.classType,
     score: game?.score,
@@ -81,6 +101,43 @@ export function buildLocalRunSummary(game, handle) {
     floorReached: game?.floor,
     submittedAt: Date.now()
   });
+}
+
+export function buildGroupRunSummary(game) {
+  const roster = Array.isArray(game?.networkRosterPlayers) ? game.networkRosterPlayers.filter((player) => !!player) : [];
+  if (roster.length < 2) return null;
+  const connectedPlayers = roster.map((player) => {
+    const entity =
+      typeof game?.getPlayerEntityById === "function" && player?.id
+        ? game.getPlayerEntityById(player.id)
+        : null;
+    return {
+      handle: sanitizePlayerHandle(player?.handle || player?.name, "Player"),
+      classType: player?.classType,
+      score: Number.isFinite(entity?.score) ? entity.score : 0
+    };
+  });
+  return normalizeLeaderboardRow({
+    boardType: LEADERBOARD_BOARD_GROUP,
+    handles: connectedPlayers.map((player) => sanitizePlayerHandle(player?.handle, "Player")),
+    classTypes: connectedPlayers.map((player) => player?.classType),
+    score: connectedPlayers.reduce((sum, player) => sum + (Number.isFinite(player?.score) ? player.score : 0), 0),
+    timeSeconds: game?.time,
+    floorReached: game?.floor,
+    submittedAt: Date.now()
+  });
+}
+
+export function getLeaderboardHandleText(entry = {}) {
+  const normalized = normalizeLeaderboardRow(entry);
+  if (normalized.boardType === LEADERBOARD_BOARD_GROUP) return normalized.handles.join(", ");
+  return normalized.handle;
+}
+
+export function getLeaderboardClassText(entry = {}) {
+  const normalized = normalizeLeaderboardRow(entry);
+  if (normalized.boardType === LEADERBOARD_BOARD_GROUP) return normalized.classTypes.map((classType) => getClassLabel(classType)).join(" / ");
+  return getClassLabel(normalized.classType);
 }
 
 export function formatLeaderboardDuration(totalSeconds) {
@@ -92,16 +149,19 @@ export function formatLeaderboardDuration(totalSeconds) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-async function requestLeaderboard(apiUrl, init = {}) {
+async function requestLeaderboard(apiUrl, init = {}, boardType = LEADERBOARD_BOARD_SOLO) {
   if (!apiUrl || typeof fetch !== "function") {
     throw new Error("Leaderboard connection is unavailable.");
   }
+  const normalizedBoardType = normalizeLeaderboardBoardType(boardType);
+  const requestUrl = new URL(apiUrl, globalThis?.location?.href || "http://localhost");
+  requestUrl.searchParams.set("board", normalizedBoardType);
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller
     ? setTimeout(() => controller.abort(), LEADERBOARD_REQUEST_TIMEOUT_MS)
     : null;
   try {
-    const response = await fetch(apiUrl, {
+    const response = await fetch(requestUrl.toString(), {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -130,15 +190,17 @@ async function requestLeaderboard(apiUrl, init = {}) {
   }
 }
 
-export function fetchGlobalLeaderboard(apiUrl) {
-  return requestLeaderboard(apiUrl, { method: "GET" });
+export function fetchGlobalLeaderboard(apiUrl, boardType = LEADERBOARD_BOARD_SOLO) {
+  return requestLeaderboard(apiUrl, { method: "GET" }, boardType);
 }
 
 export function submitLocalRunToLeaderboard(apiUrl, run) {
+  const normalizedRun = normalizeLeaderboardRow(run);
   return requestLeaderboard(apiUrl, {
     method: "POST",
     body: JSON.stringify({
-      run: normalizeLeaderboardRow(run)
+      boardType: normalizedRun.boardType,
+      run: normalizedRun
     })
-  });
+  }, normalizedRun.boardType);
 }

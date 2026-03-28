@@ -53,10 +53,14 @@ import {
   persistFloorBossOverride
 } from "./src/game/floorBossDebugOverride.js";
 import {
+  buildGroupRunSummary,
   buildLocalRunSummary,
   fetchGlobalLeaderboard,
   getDefaultLeaderboardApiUrl,
+  LEADERBOARD_BOARD_GROUP,
+  LEADERBOARD_BOARD_SOLO,
   loadStoredPlayerHandle,
+  normalizeLeaderboardBoardType,
   persistPlayerHandle,
   sanitizePlayerHandle,
   submitLocalRunToLeaderboard
@@ -112,6 +116,8 @@ const leaderboardSubtitle = document.getElementById("leaderboard-subtitle");
 const leaderboardStatus = document.getElementById("leaderboard-status");
 const leaderboardClose = document.getElementById("leaderboard-close");
 const leaderboardContinue = document.getElementById("leaderboard-continue");
+const leaderboardBoardSolo = document.getElementById("leaderboard-board-solo");
+const leaderboardBoardGroup = document.getElementById("leaderboard-board-group");
 const leaderboardTabGlobal = document.getElementById("leaderboard-tab-global");
 const leaderboardTabSession = document.getElementById("leaderboard-tab-session");
 const leaderboardGlobalBody = document.getElementById("leaderboard-global-body");
@@ -163,9 +169,16 @@ const menuState = {
   screen: "mode"
 };
 const leaderboardState = {
+  activeBoard: LEADERBOARD_BOARD_SOLO,
   activeTab: "global",
-  globalRows: [],
-  sessionRows: [],
+  globalRows: {
+    [LEADERBOARD_BOARD_SOLO]: [],
+    [LEADERBOARD_BOARD_GROUP]: []
+  },
+  sessionRows: {
+    [LEADERBOARD_BOARD_SOLO]: [],
+    [LEADERBOARD_BOARD_GROUP]: []
+  },
   loading: false,
   errorText: "",
   mode: "menu",
@@ -314,6 +327,16 @@ function getLeaderboardApiUrl() {
   return getDefaultLeaderboardApiUrl(window.location);
 }
 
+function getLeaderboardRows(bucket, boardType = leaderboardState.activeBoard) {
+  const normalizedBoardType = normalizeLeaderboardBoardType(boardType);
+  return Array.isArray(bucket?.[normalizedBoardType]) ? bucket[normalizedBoardType] : [];
+}
+
+function setLeaderboardRows(bucket, rows, boardType = leaderboardState.activeBoard) {
+  const normalizedBoardType = normalizeLeaderboardBoardType(boardType);
+  bucket[normalizedBoardType] = sortLeaderboardRows(rows);
+}
+
 function getActiveHandleInput() {
   return menuState.mode === MENU_MODE_NETWORK ? networkPlayerNameInput || playerNameInput : playerNameInput || networkPlayerNameInput;
 }
@@ -439,11 +462,14 @@ function renderLeaderboardModal() {
     status: leaderboardStatus,
     closeButton: leaderboardClose,
     continueButton: leaderboardContinue,
+    activeBoard: leaderboardState.activeBoard,
+    soloButton: leaderboardBoardSolo,
+    groupButton: leaderboardBoardGroup,
     activeTab: leaderboardState.activeTab,
     globalButton: leaderboardTabGlobal,
     sessionButton: leaderboardTabSession,
-    globalRows: leaderboardState.globalRows,
-    sessionRows: leaderboardState.sessionRows,
+    globalRows: getLeaderboardRows(leaderboardState.globalRows),
+    sessionRows: getLeaderboardRows(leaderboardState.sessionRows),
     globalTableBody: leaderboardGlobalBody,
     sessionTableBody: leaderboardSessionBody,
     errorText: leaderboardState.errorText,
@@ -469,21 +495,23 @@ function closeLeaderboardModal() {
   syncDeathLeaderboardCanvasVisibility();
 }
 
-function openLeaderboardModal(mode = "menu") {
+function openLeaderboardModal(mode = "menu", boardType = leaderboardState.activeBoard) {
   leaderboardState.mode = mode;
+  leaderboardState.activeBoard = normalizeLeaderboardBoardType(boardType);
   leaderboardState.activeTab = "global";
   leaderboardState.open = true;
   renderLeaderboardModal();
   syncDeathLeaderboardCanvasVisibility();
 }
 
-async function refreshGlobalLeaderboard() {
+async function refreshGlobalLeaderboard(boardType = leaderboardState.activeBoard) {
+  const normalizedBoardType = normalizeLeaderboardBoardType(boardType);
   leaderboardState.loading = true;
   leaderboardState.errorText = "";
   renderLeaderboardModal();
   try {
-    const response = await fetchGlobalLeaderboard(getLeaderboardApiUrl());
-    leaderboardState.globalRows = sortLeaderboardRows(response.rows);
+    const response = await fetchGlobalLeaderboard(getLeaderboardApiUrl(), normalizedBoardType);
+    setLeaderboardRows(leaderboardState.globalRows, response.rows, normalizedBoardType);
   } catch (error) {
     leaderboardState.errorText = error instanceof Error ? error.message : String(error);
   } finally {
@@ -495,14 +523,14 @@ async function refreshGlobalLeaderboard() {
 async function submitCompletedLocalRun(game) {
   const handle = ensurePlayerHandle();
   const run = buildLocalRunSummary(game, handle || "Player");
-  leaderboardState.sessionRows = sortLeaderboardRows([...leaderboardState.sessionRows, run]);
-  openLeaderboardModal("death");
+  setLeaderboardRows(leaderboardState.sessionRows, [...getLeaderboardRows(leaderboardState.sessionRows, LEADERBOARD_BOARD_SOLO), run], LEADERBOARD_BOARD_SOLO);
+  openLeaderboardModal("death", LEADERBOARD_BOARD_SOLO);
   leaderboardState.loading = true;
   leaderboardState.errorText = "";
   renderLeaderboardModal();
   try {
     const response = await submitLocalRunToLeaderboard(getLeaderboardApiUrl(), run);
-    leaderboardState.globalRows = sortLeaderboardRows(response.rows);
+    setLeaderboardRows(leaderboardState.globalRows, response.rows, LEADERBOARD_BOARD_SOLO);
   } catch (error) {
     leaderboardState.errorText = error instanceof Error ? error.message : String(error);
   } finally {
@@ -512,18 +540,20 @@ async function submitCompletedLocalRun(game) {
 }
 
 async function showNetworkGameOverLeaderboard(game, { includeSessionRun = false } = {}) {
-  if (includeSessionRun && game) {
-    const handle = sanitizePlayerHandle(game.playerHandle || currentPlayerHandle || "Player", "Player");
-    const run = buildLocalRunSummary(game, handle);
-    leaderboardState.sessionRows = sortLeaderboardRows([...leaderboardState.sessionRows, run]);
+  const run = game ? buildGroupRunSummary(game) : null;
+  if (includeSessionRun && run) {
+    setLeaderboardRows(leaderboardState.sessionRows, [...getLeaderboardRows(leaderboardState.sessionRows, LEADERBOARD_BOARD_GROUP), run], LEADERBOARD_BOARD_GROUP);
   }
-  openLeaderboardModal("death");
+  openLeaderboardModal("death", LEADERBOARD_BOARD_GROUP);
   leaderboardState.loading = true;
   leaderboardState.errorText = "";
   renderLeaderboardModal();
   try {
-    const response = await fetchGlobalLeaderboard(getLeaderboardApiUrl());
-    leaderboardState.globalRows = sortLeaderboardRows(response.rows);
+    const isOwner = !!(game?.networkRoomOwnerId && game?.networkLocalPlayerId && game.networkRoomOwnerId === game.networkLocalPlayerId);
+    const response = isOwner && run
+      ? await submitLocalRunToLeaderboard(getLeaderboardApiUrl(), run)
+      : await fetchGlobalLeaderboard(getLeaderboardApiUrl(), LEADERBOARD_BOARD_GROUP);
+    setLeaderboardRows(leaderboardState.globalRows, response.rows, LEADERBOARD_BOARD_GROUP);
   } catch (error) {
     leaderboardState.errorText = error instanceof Error ? error.message : String(error);
   } finally {
@@ -1178,8 +1208,9 @@ function startNetworkGameplay() {
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, nextGame) => syncMusicForGame(nextGame),
     onFloorChanged: (_floor, nextGame) => syncMusicForGame(nextGame),
-    onGameOverChanged: (_gameOver, nextGame) => {
+    onGameOverChanged: (gameOver, nextGame) => {
       syncMusicForGame(nextGame);
+      if (gameOver) showNetworkGameOverLeaderboardOnce(nextGame, { includeSessionRun: true });
     }
   });
   if (typeof game.applyDebugBossOverride === "function") {
@@ -1772,8 +1803,8 @@ for (const handleInput of [playerNameInput, networkPlayerNameInput]) {
 if (openLeaderboardButton) {
   openLeaderboardButton.addEventListener("click", async () => {
     syncStoredHandleFromInput();
-    openLeaderboardModal("menu");
-    await refreshGlobalLeaderboard();
+    openLeaderboardModal("menu", LEADERBOARD_BOARD_SOLO);
+    await refreshGlobalLeaderboard(LEADERBOARD_BOARD_SOLO);
   });
 }
 
@@ -1791,10 +1822,25 @@ if (leaderboardContinue) {
     returnToMenu();
   });
 }
+if (leaderboardBoardSolo) {
+  leaderboardBoardSolo.addEventListener("click", async () => {
+    leaderboardState.activeBoard = LEADERBOARD_BOARD_SOLO;
+    renderLeaderboardModal();
+    if (leaderboardState.activeTab === "global") await refreshGlobalLeaderboard(LEADERBOARD_BOARD_SOLO);
+  });
+}
+if (leaderboardBoardGroup) {
+  leaderboardBoardGroup.addEventListener("click", async () => {
+    leaderboardState.activeBoard = LEADERBOARD_BOARD_GROUP;
+    renderLeaderboardModal();
+    if (leaderboardState.activeTab === "global") await refreshGlobalLeaderboard(LEADERBOARD_BOARD_GROUP);
+  });
+}
 if (leaderboardTabGlobal) {
-  leaderboardTabGlobal.addEventListener("click", () => {
+  leaderboardTabGlobal.addEventListener("click", async () => {
     leaderboardState.activeTab = "global";
     renderLeaderboardModal();
+    await refreshGlobalLeaderboard();
   });
 }
 if (leaderboardTabSession) {
