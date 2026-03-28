@@ -1,4 +1,17 @@
+import { getStoredMasterVolume, normalizeMasterVolume } from "../audio/audioSettings.js";
+import { FLOOR_BOSS_OVERRIDE_AUTO, getForcedFloorBossVariant, normalizeFloorBossOverride } from "./floorBossDebugOverride.js";
+
 export const runtimeFloorBossMethods = {
+  applyDebugBossOverride(override = FLOOR_BOSS_OVERRIDE_AUTO) {
+    this.debugBossOverride = normalizeFloorBossOverride(override);
+    this._floorBossVariantByFloor = {};
+    if (this.floorBoss) {
+      this.floorBoss = this.createFloorBossState(this.floor);
+      this.lastFloorBossFeedbackPhase = null;
+    }
+    return this.debugBossOverride;
+  },
+
   getResolvedFloorBossVariant(floor = this.floor) {
     const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
     if (!this._floorBossVariantByFloor || typeof this._floorBossVariantByFloor !== "object") {
@@ -29,6 +42,8 @@ export const runtimeFloorBossMethods = {
 
   rollFloorBossVariant(floor = this.floor) {
     const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    const forcedVariant = getForcedFloorBossVariant(safeFloor, this.debugBossOverride);
+    if (forcedVariant) return forcedVariant;
     const bossType = this.getFloorBossType(safeFloor);
     if (bossType === "minotaur") return "minotaur";
     if (safeFloor === 1 && this.isHaleyBirthday()) return "sonya";
@@ -312,6 +327,13 @@ export const runtimeFloorBossMethods = {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (typeof AudioCtor !== "function") return null;
     this.feedbackAudioContext = new AudioCtor();
+    this.feedbackAudioMasterGain = typeof this.feedbackAudioContext.createGain === "function"
+      ? this.feedbackAudioContext.createGain()
+      : null;
+    if (this.feedbackAudioMasterGain) {
+      this.feedbackAudioMasterGain.gain.value = normalizeMasterVolume(window.__WOTC_MASTER_VOLUME__, getStoredMasterVolume());
+      this.feedbackAudioMasterGain.connect(this.feedbackAudioContext.destination);
+    }
     return this.feedbackAudioContext;
   },
 
@@ -322,6 +344,9 @@ export const runtimeFloorBossMethods = {
     if (audio.state === "suspended" && typeof audio.resume === "function") {
       audio.resume().catch(() => {});
     }
+    if (this.feedbackAudioMasterGain) {
+      this.feedbackAudioMasterGain.gain.value = normalizeMasterVolume(window.__WOTC_MASTER_VOLUME__, getStoredMasterVolume());
+    }
     const startAt = audio.currentTime + 0.01;
     for (const tone of sequence) {
       const oscillator = audio.createOscillator();
@@ -330,7 +355,7 @@ export const runtimeFloorBossMethods = {
       oscillator.frequency.value = Number.isFinite(tone.frequency) ? tone.frequency : 440;
       gain.gain.value = 0.0001;
       oscillator.connect(gain);
-      gain.connect(audio.destination);
+      gain.connect(this.feedbackAudioMasterGain || audio.destination);
       const toneStart = startAt + Math.max(0, tone.at || 0);
       const duration = Math.max(0.04, Number.isFinite(tone.duration) ? tone.duration : 0.12);
       const toneEnd = toneStart + duration;

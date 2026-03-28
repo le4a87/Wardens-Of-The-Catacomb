@@ -1,8 +1,9 @@
+import { getStoredMasterVolume, normalizeMasterVolume, persistMasterVolume, syncGlobalMasterVolume } from "./audioSettings.js";
+import { createMusicDebugState } from "./musicDebugState.js";
 const TITLE_TRACK = {
   title: "Ward the Catacombs",
   src: "./assets/music/Ward%20the%20Catacombs.mp3"
 };
-
 const GAMEPLAY_TRACKS = [
   {
     title: "Evil Lair",
@@ -17,12 +18,10 @@ const GAMEPLAY_TRACKS = [
     src: "./assets/music/The%20Crypt.mp3"
   }
 ];
-
 const DEATH_TRACK = {
   title: "World's End",
   src: "./assets/sounds/world%27s%20end.mp3"
 };
-
 const TRACKS = [TITLE_TRACK, ...GAMEPLAY_TRACKS];
 const FADE_DURATION_MS = 900;
 const IDLE_SOUND_SRC = "./assets/sounds/basic.mp3";
@@ -32,6 +31,7 @@ const IDLE_VOLUMES = [0.25, 0.5, 0.75, 1];
 
 export class MusicController {
   constructor() {
+    this.masterVolume = getStoredMasterVolume();
     this.tracks = TRACKS.map((track) => ({
       ...track,
       audio: this.createAudio(track.src)
@@ -50,24 +50,7 @@ export class MusicController {
     this.idleAudios = new Set();
     this.idleRaf = 0;
     this.idleLastFrameAt = performance.now();
-    this.debug = {
-      playAttempts: 0,
-      playSuccesses: 0,
-      playFailures: 0,
-      pauseCalls: 0,
-      resetCount: 0,
-      trackTransitions: 0,
-      interruptionCount: 0,
-      waitingCount: 0,
-      stalledCount: 0,
-      seekCount: 0,
-      focusCount: 0,
-      blurCount: 0,
-      visibilityChangeCount: 0,
-      activeTrackTitle: "",
-      activeTrackSrc: "",
-      recentEvents: []
-    };
+    this.debug = createMusicDebugState();
 
     this.handleUnlock = this.handleUnlock.bind(this);
     this.handleMuteToggle = this.handleMuteToggle.bind(this);
@@ -76,6 +59,8 @@ export class MusicController {
     this.handleWindowFocus = this.handleWindowFocus.bind(this);
     this.handleWindowBlur = this.handleWindowBlur.bind(this);
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
+
+    syncGlobalMasterVolume(this.masterVolume);
 
     window.addEventListener("pointerdown", this.handleUnlock, { passive: true });
     window.addEventListener("keydown", this.handleUnlock);
@@ -95,7 +80,7 @@ export class MusicController {
     const audio = new Audio(src);
     audio.loop = loop;
     audio.preload = "auto";
-    audio.volume = 1;
+    this.setAudioBaseVolume(audio, 1);
     audio.addEventListener("play", () => {
       this.debug.playSuccesses += 1;
       this.recordDebugEvent("play", { src, currentTime: audio.currentTime });
@@ -162,6 +147,7 @@ export class MusicController {
       ...this.debug,
       currentMode: this.currentMode,
       currentFloor: this.currentFloor,
+      masterVolume: this.masterVolume,
       muted: this.muted,
       idleGameplayActive: this.idleGameplayActive,
       idlePlayCount: this.idlePlayCount,
@@ -199,6 +185,39 @@ export class MusicController {
     const title = typeof trackLike.title === "string" ? trackLike.title : null;
     const src = typeof trackLike.src === "string" ? trackLike.src : null;
     return this.tracks.find((track) => (title && track.title === title) || (src && track.src === src)) || null;
+  }
+
+  scaleVolume(volume) {
+    return normalizeMasterVolume(volume, 1) * this.masterVolume;
+  }
+
+  setAudioBaseVolume(audio, volume) {
+    if (!audio) return;
+    const baseVolume = normalizeMasterVolume(volume, 1);
+    audio.__masterBaseVolume = baseVolume;
+    audio.volume = this.scaleVolume(baseVolume);
+  }
+
+  getAudioBaseVolume(audio, fallback = 1) {
+    if (!audio) return normalizeMasterVolume(fallback, 1);
+    return normalizeMasterVolume(audio.__masterBaseVolume, fallback);
+  }
+
+  refreshVolumeState() {
+    for (const track of this.tracks) {
+      this.setAudioBaseVolume(track.audio, this.getAudioBaseVolume(track.audio, 1));
+    }
+    this.setAudioBaseVolume(this.deathAudio, this.getAudioBaseVolume(this.deathAudio, 1));
+    for (const audio of this.idleAudios) {
+      this.setAudioBaseVolume(audio, this.getAudioBaseVolume(audio, 1));
+    }
+    syncGlobalMasterVolume(this.masterVolume);
+  }
+
+  setMasterVolume(volume, { persist = true } = {}) {
+    this.masterVolume = normalizeMasterVolume(volume);
+    if (persist) persistMasterVolume(this.masterVolume);
+    this.refreshVolumeState();
   }
 
   cancelFade() {
@@ -251,7 +270,7 @@ export class MusicController {
     if (!this.idleGameplayActive || this.muted) return;
     const audio = new Audio(IDLE_SOUND_SRC);
     audio.preload = "auto";
-    audio.volume = IDLE_VOLUMES[Math.min(this.idlePlayCount, IDLE_VOLUMES.length - 1)];
+    this.setAudioBaseVolume(audio, IDLE_VOLUMES[Math.min(this.idlePlayCount, IDLE_VOLUMES.length - 1)]);
     audio.muted = this.muted;
     const cleanup = () => {
       audio.removeEventListener("ended", cleanup);
@@ -300,18 +319,18 @@ export class MusicController {
     this.cancelFade();
     if (this.currentMode === "death") {
       this.deathAudio.pause();
-      this.deathAudio.volume = 1;
+      this.setAudioBaseVolume(this.deathAudio, 1);
       return;
     }
     if (this.currentTrack?.audio) {
       this.currentTrack.audio.pause();
-      this.currentTrack.audio.volume = 1;
+      this.setAudioBaseVolume(this.currentTrack.audio, 1);
     }
   }
 
   stopDeathMusic({ reset = true } = {}) {
     this.deathAudio.pause();
-    this.deathAudio.volume = 1;
+    this.setAudioBaseVolume(this.deathAudio, 1);
     if (reset) this.deathAudio.currentTime = 0;
   }
 
@@ -326,7 +345,7 @@ export class MusicController {
         src: audio.currentSrc || audio.src || ""
       });
     }
-    audio.volume = Math.max(0, Math.min(1, volume));
+    this.setAudioBaseVolume(audio, volume);
     if (!audio.paused && !reset) return;
     this.attemptAudioPlay(audio, reset ? "playCurrentTrack-reset" : "playCurrentTrack");
   }
@@ -337,7 +356,7 @@ export class MusicController {
       if (token !== this.transitionToken) return;
       const elapsed = Math.max(0, now - startedAt);
       const progress = durationMs <= 0 ? 1 : Math.min(1, elapsed / durationMs);
-      audio.volume = from + (to - from) * progress;
+      this.setAudioBaseVolume(audio, from + (to - from) * progress);
       if (progress >= 1) {
         this.fadeRaf = 0;
         if (typeof onDone === "function") onDone();
@@ -359,13 +378,13 @@ export class MusicController {
       this.cancelFade();
       if (previousAudio && previousAudio !== nextAudio) {
         previousAudio.pause();
-        previousAudio.volume = 1;
+        this.setAudioBaseVolume(previousAudio, 1);
       }
       this.currentTrack = track;
       this.debug.activeTrackTitle = track.title || "";
       this.debug.activeTrackSrc = track.src || "";
       if (reset) nextAudio.currentTime = 0;
-      nextAudio.volume = 1;
+      this.setAudioBaseVolume(nextAudio, 1);
       return;
     }
 
@@ -373,7 +392,7 @@ export class MusicController {
       this.cancelFade();
       if (previousAudio && previousAudio !== nextAudio) {
         previousAudio.pause();
-        previousAudio.volume = 1;
+        this.setAudioBaseVolume(previousAudio, 1);
       }
       this.currentTrack = track;
       this.debug.trackTransitions += 1;
@@ -387,15 +406,15 @@ export class MusicController {
       });
       if (fadeInMs > 0 && !this.muted) {
         if (reset) nextAudio.currentTime = 0;
-        nextAudio.volume = 0;
+        this.setAudioBaseVolume(nextAudio, 0);
         this.attemptAudioPlay(nextAudio, "transition-immediate-fade");
         const token = this.transitionToken;
         this.fadeAudio(nextAudio, 0, 1, fadeInMs, token, () => {
-          nextAudio.volume = 1;
+          this.setAudioBaseVolume(nextAudio, 1);
         });
         return;
       }
-      nextAudio.volume = 1;
+      this.setAudioBaseVolume(nextAudio, 1);
       this.playCurrentTrack({ reset });
       return;
     }
@@ -417,15 +436,15 @@ export class MusicController {
       reset
     });
 
-    this.fadeAudio(previousAudio, previousAudio.volume, 0, FADE_DURATION_MS * 0.5, token, () => {
+    this.fadeAudio(previousAudio, this.getAudioBaseVolume(previousAudio, 1), 0, FADE_DURATION_MS * 0.5, token, () => {
       previousAudio.pause();
-      previousAudio.volume = 1;
+      this.setAudioBaseVolume(previousAudio, 1);
       this.currentTrack = track;
       if (reset) nextAudio.currentTime = 0;
-      nextAudio.volume = 0;
+      this.setAudioBaseVolume(nextAudio, 0);
       this.attemptAudioPlay(nextAudio, "transition-fade");
       this.fadeAudio(nextAudio, 0, 1, FADE_DURATION_MS * 0.5, token, () => {
-        nextAudio.volume = 1;
+        this.setAudioBaseVolume(nextAudio, 1);
       });
     });
   }
@@ -464,7 +483,7 @@ export class MusicController {
     this.stopIdleSounds();
     if (this.currentTrack?.audio) {
       this.currentTrack.audio.pause();
-      this.currentTrack.audio.volume = 1;
+      this.setAudioBaseVolume(this.currentTrack.audio, 1);
     }
     this.currentTrack = null;
     this.currentMode = "death";
@@ -472,7 +491,7 @@ export class MusicController {
     this.debug.activeTrackTitle = DEATH_TRACK.title;
     this.debug.activeTrackSrc = DEATH_TRACK.src;
     if (reset) this.deathAudio.currentTime = 0;
-    this.deathAudio.volume = 1;
+    this.setAudioBaseVolume(this.deathAudio, 1);
     if (this.muted) return;
     if (!this.deathAudio.paused && !reset) return;
     this.attemptAudioPlay(this.deathAudio, reset ? "death-reset" : "death");

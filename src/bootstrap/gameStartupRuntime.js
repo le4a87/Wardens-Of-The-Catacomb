@@ -6,6 +6,7 @@ export function createLocalGame({
   returnToMenu,
   syncMusicForGame,
   startingFloor = 1,
+  bossOverride = "auto",
   onGameOverChanged = null
 }) {
   const game = new Game(canvas, {
@@ -20,6 +21,9 @@ export function createLocalGame({
   });
   game.playerHandle = playerHandle;
   game.deathTransitionDuration = 10;
+  if (typeof game.applyDebugBossOverride === "function") {
+    game.applyDebugBossOverride(bossOverride);
+  }
   if (startingFloor > 1 && typeof game.applyDebugStartingFloor === "function") {
     game.applyDebugStartingFloor(startingFloor);
   }

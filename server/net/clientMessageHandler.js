@@ -224,11 +224,25 @@ export function handleClientMessage(raw, context) {
       classType: typeof msg.classType === "string" ? normClassType(msg.classType) : undefined,
       locked: typeof msg.locked === "boolean" ? msg.locked : undefined
     });
-    const floorChanged = room.updateRequestedStartFloor(
-      client.id,
-      Number.isFinite(msg.startingFloor) ? msg.startingFloor : NaN
-    );
-    if (changed || floorChanged) room.broadcastRoster();
+    const floorChanged = Object.prototype.hasOwnProperty.call(msg, "startingFloor")
+      ? room.updateRequestedStartFloor(
+        client.id,
+        Number.isFinite(msg.startingFloor) ? msg.startingFloor : NaN
+      )
+      : false;
+    const bossChanged = Object.prototype.hasOwnProperty.call(msg, "bossOverride")
+      ? room.updateRequestedBossOverride(
+        client.id,
+        typeof msg.bossOverride === "string" ? msg.bossOverride : undefined
+      )
+      : false;
+    const deathRulesChanged = Object.prototype.hasOwnProperty.call(msg, "deathRulesMode")
+      ? room.updateRequestedDeathRulesMode(
+        client.id,
+        typeof msg.deathRulesMode === "string" ? msg.deathRulesMode : undefined
+      )
+      : false;
+    if (changed || floorChanged || bossChanged || deathRulesChanged) room.broadcastRoster();
     return;
   }
 

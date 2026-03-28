@@ -1,5 +1,6 @@
 import { RendererRuntimeBase } from "./RendererRuntimeBase.js";
 import { runtimeSceneDrawMethods } from "./runtimeSceneDrawMethods.js";
+import { getNetworkDeathRulesLabel } from "../net/networkDeathRules.js";
 
 function drawMultiplayerResultsOverlay(ctx, game, canvas) {
   const results = game?.networkFinalResults && typeof game.networkFinalResults === "object" ? game.networkFinalResults : null;
@@ -28,6 +29,16 @@ function drawMultiplayerResultsOverlay(ctx, game, canvas) {
   ctx.fillStyle = "#b8c4dc";
   ctx.font = "14px Trebuchet MS";
   ctx.fillText(`${results.teamOutcome || "Defeat"} • ${roster.length} participant${roster.length === 1 ? "" : "s"}`, panelX + 20, panelY + 52);
+  const rulesLabel = getNetworkDeathRulesLabel(game?.networkDeathRulesMode);
+  ctx.fillStyle = "rgba(80, 98, 132, 0.82)";
+  ctx.fillRect(panelX + panelW - 168, panelY + 18, 148, 28);
+  ctx.strokeStyle = "rgba(154, 176, 214, 0.56)";
+  ctx.strokeRect(panelX + panelW - 168, panelY + 18, 148, 28);
+  ctx.fillStyle = "#e7edf8";
+  ctx.font = "bold 12px Trebuchet MS";
+  ctx.textAlign = "center";
+  ctx.fillText(`Rules: ${rulesLabel}`, panelX + panelW - 94, panelY + 37);
+  ctx.textAlign = "left";
 
   const selfText = localEntry
     ? `You: Lvl ${localEntry.level || 1} • ${localEntry.outcome || "Dead"} • ${localEntry.kills || 0} kills • ${Math.round(localEntry.damageDealt || 0)} dmg`

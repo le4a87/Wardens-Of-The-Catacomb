@@ -1,5 +1,4 @@
 import { CONFIG } from "../config.js";
-import { DEFAULT_BIOME_KEY, getBiomeDefinition } from "../biomes.js";
 import { clamp } from "../utils.js";
 import { InputController } from "../InputController.js";
 import { Renderer } from "../Renderer.js";
@@ -9,7 +8,7 @@ import { runtimeBaseSupportMethods } from "./runtimeBaseSupportMethods.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
 import { runtimeCombatStatsMethods } from "./runtimeCombatStatsMethods.js";
 import { runtimeFloorBossMethods } from "./runtimeFloorBossMethods.js";
-import { createNecromancerBeamState, createPlayerState, createRunStats, createSkillState, createUpgradeState } from "./runtimeBaseStateFactories.js";
+import { initializeRuntimeBaseState } from "./runtimeBaseStateInit.js";
 
 export class GameRuntimeBase {
   constructor(canvas, options = {}) {
@@ -31,76 +30,11 @@ export class GameRuntimeBase {
     this.onPauseChanged = typeof options.onPauseChanged === "function" ? options.onPauseChanged : null;
     this.onFloorChanged = typeof options.onFloorChanged === "function" ? options.onFloorChanged : null;
     this.onGameOverChanged = typeof options.onGameOverChanged === "function" ? options.onGameOverChanged : null;
-    this.floor = 1;
-    this.biomeKey = DEFAULT_BIOME_KEY;
-    this.biome = getBiomeDefinition(this.biomeKey);
-    this.mapWidth = this.config.map.width;
-    this.mapHeight = this.config.map.height;
-    this.map = [];
-    this.worldWidth = 0;
-    this.worldHeight = 0;
-
-    this.score = 0;
-    this.gold = 0;
-    this.experience = 0;
-    this.level = 1;
-    this.expToNextLevel = this.config.progression.baseXpToLevel;
-    this.hasKey = false;
-    this.gameOver = false;
-    this.gameOverTitle = "GAME OVER";
-    this.deathTransitionDuration = 7;
-    this.deathTransition = {
-      active: false,
-      elapsed: 0,
-      returnTriggered: false
-    };
-    this.paused = false;
-    this.shopOpen = false;
-    this.skillTreeOpen = false;
-    this.time = 0;
-    this.skillPoints = 0;
-    this.statsPanelOpen = false; this.statsPanelView = "run"; this.statsPanelPausedGame = false;
-    this.activePlayerCount = 1;
-    this.remotePlayers = [];
-    this.spectateTargetId = null;
-    this.passiveRegenTimer = 2;
-    this.levelWeaponDamageBonus = 0;
-    this.floorBoss = this.createFloorBossState(this.floor);
-    this.lastFloorBossFeedbackPhase = null;
-    this.feedbackAudioContext = null;
-    this.bullets = [];
-    this.fireArrows = [];
-    this.fireZones = [];
-    this.meleeSwings = [];
-    this.drops = [];
-    this.enemies = [];
-    this.armorStands = [];
-    this.breakables = [];
-    this.wallTraps = [];
-    this.enemySpawnTimer = this.config.enemy.spawnIntervalStart;
-    this.explored = [];
-    this.navDistance = [];
-    this.navPlayerTile = { x: -1, y: -1 };
-    this.uiRects = {};
-    this.uiScroll = { skillTree: 0, shop: 0 };
-    this.floatingTexts = [];
-    this.recentPlayerShots = [];
-    this.skills = createSkillState();
-    this.runStats = createRunStats();
-    this.warriorMomentumTimer = 0;
-    this.warriorRageActiveTimer = 0;
-    this.warriorRageCooldownTimer = 0;
-    this.warriorRageVictoryRushPool = 0;
-    this.warriorRageVictoryRushTimer = 0;
-    this.necromancerBeam = createNecromancerBeamState();
-    this.upgrades = createUpgradeState();
-    this.shopOrder = ["moveSpeed", "attackSpeed", "damage", "defense"];
-
-    this.player = createPlayerState(this.classType, this.classSpec, this.config.player.maxHealth);
-
-    this.door = { x: 0, y: 0, open: false };
-    this.pickup = { x: 0, y: 0, taken: false };
-    this.portal = { x: 0, y: 0, active: false };
+    initializeRuntimeBaseState(this, {
+      classType: this.classType,
+      classSpec: this.classSpec,
+      config: this.config
+    });
 
     this.generateFloor(this.mapWidth, this.mapHeight);
     this.renderer = null;

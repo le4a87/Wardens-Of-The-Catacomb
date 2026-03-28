@@ -9,6 +9,7 @@ import { getStableId, serializeMetaState, serializeState } from "./net/stateSeri
 import { average, makeSamplePusher, monotonicNowMs, percentile } from "./net/telemetry.js";
 import { buildDeltaCollection } from "./net/deltaProtocol.js";
 import { buildMapChunkRows } from "./net/mapChunkStreaming.js";
+import { installRoomDevBossOverride } from "./net/installRoomDevBossOverride.js";
 import { chooseGameplayTrack } from "./musicCatalog.js";
 import { handleLeaderboardApiRequest } from "./leaderboardApi.js";
 import { LeaderboardStore } from "./leaderboardStore.js";
@@ -62,6 +63,7 @@ function getOrCreateRoom(roomId, classType) {
   if (!room) {
     if (rooms.size >= MAX_ROOMS) return null;
     room = new AuthoritativeRoom(roomId, classType, roomOptions);
+    installRoomDevBossOverride(room);
     rooms.set(roomId, room);
   }
   return room;

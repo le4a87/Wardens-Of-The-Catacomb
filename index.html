@@ -18,6 +18,7 @@
             <div class="screen-actions screen-actions--stack">
               <button type="button" id="menu-single" class="start-game">Single</button>
               <button type="button" id="menu-network" class="start-game alt">Network</button>
+              <button type="button" id="menu-options" class="start-game tertiary">Options</button>
               <button type="button" id="open-leaderboard" class="start-game secondary">Leaderboard</button>
             </div>
           </div>
@@ -25,6 +26,40 @@
             <img class="mode-select-logo" src="./assets/images/logo.png" alt="" />
           </div>
         </div>
+      </section>
+
+      <section id="options-screen" class="menu-screen options-screen" aria-label="Options" hidden>
+        <div class="screen-header">
+          <div>
+            <p class="menu-kicker">Game Options</p>
+            <h2>Options</h2>
+            <p class="menu-copy">Configure persistent game settings.</p>
+          </div>
+          <button type="button" id="options-back" class="start-game ghost mini">Back</button>
+        </div>
+        <section class="options-panel" aria-label="Audio settings">
+          <h3>Audio</h3>
+          <label for="menu-volume" class="menu-volume-control">
+            <span class="menu-volume-control__label">Master Volume</span>
+            <div class="menu-volume-control__row">
+              <input id="menu-volume" class="menu-volume-control__slider" type="range" min="0" max="100" step="1" value="50" />
+              <output id="menu-volume-value" class="menu-volume-control__value" for="menu-volume">50%</output>
+            </div>
+          </label>
+        </section>
+        <section id="dev-boss-options" class="options-panel" aria-label="Developer boss options" hidden>
+          <h3>Developer Boss Override</h3>
+          <label class="field-label" for="dev-boss-override">Forced Boss</label>
+          <select id="dev-boss-override" class="field-input">
+            <option value="auto">Auto</option>
+            <option value="necromancer">Necromancer</option>
+            <option value="minotaur">Minotaur</option>
+            <option value="sonya">Sonya</option>
+            <option value="leprechaun">Leprechaun</option>
+          </select>
+          <p id="dev-boss-override-hint" class="dev-start-hint">Use the normal boss rules and seasonal chance.</p>
+          <p class="dev-start-hint">Dev only.</p>
+        </section>
       </section>
 
       <section id="network-setup-screen" class="menu-screen" aria-label="Network setup" hidden>
@@ -96,7 +131,7 @@
         <div class="screen-header">
           <div>
             <p class="menu-kicker">Network Lobby</p>
-            <h2>Shared Lobby</h2>
+            <h2>Lobby</h2>
             <p class="menu-copy">Choose your class, mark yourself ready, and wait for the room countdown to begin.</p>
           </div>
           <button type="button" id="network-lobby-leave-top" class="start-game ghost mini">Leave</button>
@@ -152,7 +187,27 @@
               <h3>Dev Start</h3>
               <label class="field-label" for="network-lobby-dev-start-floor">Starting Floor</label>
               <input id="network-lobby-dev-start-floor" class="field-input" type="number" min="1" step="1" value="1" />
-              <p class="dev-start-hint">Owner-only. Sets the shared starting floor before the run begins.</p>
+              <p class="dev-start-hint">Sets the shared starting floor before the run begins.</p>
+            </section>
+            <section id="network-lobby-game-rules" class="network-lobby-game-rules" aria-label="Game rules">
+              <h3>Game Rules</h3>
+              <span class="field-label">Death Rules</span>
+              <div class="radio-group" role="radiogroup" aria-label="Death rules">
+                <label class="radio-option">
+                  <input id="network-lobby-death-rules-survival" type="radio" name="network-lobby-death-rules" value="survival" checked />
+                  <span class="radio-option__copy">
+                    <strong>Survival</strong>
+                    <span>Dead allies stay dead until the run ends.</span>
+                  </span>
+                </label>
+                <label class="radio-option">
+                  <input id="network-lobby-death-rules-friendly" type="radio" name="network-lobby-death-rules" value="friendly" />
+                  <span class="radio-option__copy">
+                    <strong>Friendly</strong>
+                    <span>Dead allies revive at 30% health when the floor changes.</span>
+                  </span>
+                </label>
+              </div>
             </section>
             <div class="screen-actions network-lobby-actions">
               <button type="button" id="network-lobby-toggle-ready" class="start-game alt">Ready</button>
