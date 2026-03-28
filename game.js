@@ -163,6 +163,7 @@ let netLatestLocalVitals = null;
 let netLastSnapshotRecvAtMs = 0, netSnapshotIntervalMeanMs = 33, netSnapshotJitterMs = 0, netLastSnapshotGapMs = 33;
 let netInitialSnapshotApplied = false;
 let splashActive = true, splashDismissed = false, splashRaf = 0, splashStartedAt = 0, splashReady = false;
+let splashPromptReady = false;
 const isDevMode = new URLSearchParams(window.location.search).get("dev") === "1";
 const menuState = {
   mode: null,
@@ -232,6 +233,65 @@ function getConfiguredWsUrl() {
 
 function getConfiguredLeaderboardApiUrl() {
   return typeof runtimeConfig.leaderboardApiUrl === "string" ? runtimeConfig.leaderboardApiUrl.trim() : "";
+}
+
+function waitForImageSource(src) {
+  return new Promise((resolve) => {
+    if (typeof src !== "string" || !src.trim()) {
+      resolve();
+      return;
+    }
+    const image = new Image();
+    const finish = () => {
+      image.removeEventListener("load", finish);
+      image.removeEventListener("error", finish);
+      resolve();
+    };
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
+    image.src = src;
+    if (image.complete) finish();
+  });
+}
+
+function waitForAudioElement(audio) {
+  return new Promise((resolve) => {
+    if (!audio) {
+      resolve();
+      return;
+    }
+    if ((audio.readyState || 0) >= 2 || audio.error) {
+      resolve();
+      return;
+    }
+    const finish = () => {
+      audio.removeEventListener("loadeddata", finish);
+      audio.removeEventListener("canplaythrough", finish);
+      audio.removeEventListener("error", finish);
+      resolve();
+    };
+    audio.addEventListener("loadeddata", finish, { once: true });
+    audio.addEventListener("canplaythrough", finish, { once: true });
+    audio.addEventListener("error", finish, { once: true });
+    if (typeof audio.load === "function") audio.load();
+  });
+}
+
+function preloadStartupAssets() {
+  const imageSources = new Set([
+    "./assets/images/logo.png",
+    ...Array.from(document.querySelectorAll(".menu-shell img"))
+      .map((img) => img?.getAttribute("src") || img?.currentSrc || "")
+      .filter(Boolean)
+  ]);
+  const startupAudios = [
+    ...((Array.isArray(music?.tracks) ? music.tracks : []).map((track) => track?.audio).filter(Boolean)),
+    music?.deathAudio
+  ].filter(Boolean);
+  return Promise.all([
+    ...Array.from(imageSources, (src) => waitForImageSource(src)),
+    ...startupAudios.map((audio) => waitForAudioElement(audio))
+  ]);
 }
 
 if (playerNameInput) {
@@ -995,7 +1055,8 @@ const drawSplash = (now) => {
     fadeMs: SPLASH_FADE_MS,
     splashReady,
     splashLogo,
-    now
+    now,
+    promptReady: splashPromptReady
   });
   splashRaf = requestAnimationFrame(drawSplash);
 };
@@ -1044,6 +1105,7 @@ const dismissSplash = () => {
 };
 
 const handleSplashKeydown = (event) => {
+  if (!splashPromptReady) return;
   handleSplashKeydownRuntime(event, splashActive, dismissSplash);
 };
 
@@ -1931,6 +1993,9 @@ if (networkLobbyLeaveTop) {
 renderLeaderboardModal();
 renderMenuScreen();
 startSplashScreen();
+preloadStartupAssets().finally(() => {
+  splashPromptReady = true;
+});
 
 const networkLobbyTick = () => {
   if (menuState.screen === "lobby") renderNetworkLobby();

@@ -60,7 +60,7 @@ export function clearSplashRender(canvas) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-export function drawSplashFrame({ canvas, splashStartedAt, fadeMs, splashReady, splashLogo, now }) {
+export function drawSplashFrame({ canvas, splashStartedAt, fadeMs, splashReady, splashLogo, now, promptReady = true }) {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -103,6 +103,7 @@ export function drawSplashFrame({ canvas, splashStartedAt, fadeMs, splashReady, 
   }
 
   const promptAlpha = fade >= 0.92 ? 0.92 : fade * 0.65;
+  const promptText = promptReady ? "Press any key to continue" : "Loading...";
   ctx.save();
   ctx.textAlign = "center";
   ctx.fillStyle = `rgba(244, 236, 222, ${0.82 * fade})`;
@@ -110,7 +111,7 @@ export function drawSplashFrame({ canvas, splashStartedAt, fadeMs, splashReady, 
   ctx.fillText("Wardens of the Catacomb", width * 0.5, height * 0.74);
   ctx.fillStyle = `rgba(216, 203, 182, ${promptAlpha})`;
   ctx.font = "15px Trebuchet MS, Segoe UI, sans-serif";
-  ctx.fillText("Press any key to continue", width * 0.5, height * 0.82);
+  ctx.fillText(promptText, width * 0.5, height * 0.82);
   ctx.restore();
 }
 
