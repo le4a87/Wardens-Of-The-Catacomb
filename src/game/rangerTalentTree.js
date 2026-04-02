@@ -542,5 +542,6 @@ export function getRangerSkillPointGainForLevel(level, classType) {
   if (classType !== "archer") return 1;
   const safeLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
   if (safeLevel < 2) return 0;
-  return safeLevel >= 18 ? 2 : 1;
+  if (safeLevel <= 9) return 1;
+  return safeLevel % 2 === 0 ? 1 : 0;
 }

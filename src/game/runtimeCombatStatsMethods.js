@@ -32,6 +32,12 @@ import {
   getWarriorBloodheatAttackSpeedBonus,
   getWarriorBloodheatMoveSpeedBonus,
   getWarriorBloodheatRageMoveSpeedBonus,
+  getWarriorConsecratedDps,
+  getWarriorConsecratedHealingMultiplier,
+  getWarriorConsecratedRadiusTiles,
+  getWarriorConsecratedShredPct,
+  getWarriorConsecratedUndeadMultiplier,
+  getWarriorCrusaderUndeadDamageBonus,
   getWarriorExecutionerExecuteChance,
   getWarriorExecutionerRageRangeBonus,
   getWarriorHeavyHandDamageBonus,
@@ -43,17 +49,12 @@ import {
   getWarriorRedTempestTempHpPct,
   getWarriorSecondWindAllyHealPct,
   getWarriorSecondWindHealPct,
-  getWarriorStonewallAllyDefenseAuraPct,
-  getWarriorStonewallLifeLeechBonus,
   getWarriorTalentPoints,
-  getWarriorUnbrokenDamageReduction,
-  getWarriorUnbrokenLifeLeechBonus,
   hasWarriorCleaveDiscipline,
   hasWarriorButchersPath,
+  hasWarriorGuardedAdvance,
   hasWarriorRageMastery,
   hasWarriorRedTempest,
-  hasWarriorStonewall,
-  hasWarriorUnbrokenCheatDeath,
   isWarriorRaging,
   isWarriorTalentGame,
   spendWarriorNode,
@@ -133,10 +134,6 @@ export const runtimeCombatStatsMethods = {
   getLifeLeechPercent() {
     const base = Number.isFinite(this.classSpec.baseLifeLeech) ? this.classSpec.baseLifeLeech : 0;
     const levelGain = Number.isFinite(this.classSpec.levelLifeLeechGain) ? Math.max(0, this.classSpec.levelLifeLeechGain) * Math.max(0, this.level - 1) : 0;
-    if (isWarriorTalentGame(this)) {
-      const hpRatio = this.player?.maxHealth > 0 ? (this.player?.health || 0) / this.player.maxHealth : 1;
-      return Math.max(0, base + levelGain + getWarriorUnbrokenLifeLeechBonus(this, hpRatio) + getWarriorStonewallLifeLeechBonus(this));
-    }
     return Math.max(0, base + levelGain);
   },
 
@@ -514,6 +511,25 @@ export const runtimeCombatStatsMethods = {
       this.warriorRuntime.tempHpTimer = this.warriorRageActiveTimer;
       this.warriorRuntime.rageArcTimer = hasWarriorRedTempest(this) ? 5 : 0;
     }
+    if (isWarriorTalentGame(this) && hasWarriorGuardedAdvance(this)) {
+      const tile = this.config?.map?.tile || 32;
+      this.fireZones.push({
+        x: this.player.x,
+        y: this.player.y,
+        radius: tile * getWarriorConsecratedRadiusTiles(this),
+        life: this.warriorRageActiveTimer,
+        totalLife: this.warriorRageActiveTimer,
+        zoneType: "crusaderAura",
+        ownerId: this.player.id || null,
+        dps: getWarriorConsecratedDps(this),
+        undeadDamageMultiplier: getWarriorConsecratedUndeadMultiplier(this),
+        healingMultiplier: getWarriorConsecratedHealingMultiplier(this),
+        defenseShredPct: getWarriorConsecratedShredPct(this),
+        tickInterval: 0.3,
+        tickTimer: 0.05
+      });
+      this.spawnFloatingText(this.player.x, this.player.y - 36, "Consecrated Ground", "#f5cf6f", 0.9, 15);
+    }
     return true;
   },
 
@@ -563,8 +579,8 @@ export const runtimeCombatStatsMethods = {
       }
       if (!canSpendWarriorNode(this, skillKey) && !canSpendWarriorUtility(this, skillKey)) return false;
       if (spendWarriorNode(this, skillKey)) {
-        if (skillKey === "ironGuard" || skillKey === "stonewall") {
-          const hpGain = skillKey === "ironGuard" ? 8 : 20;
+        if (skillKey === "ironGuard") {
+          const hpGain = 8;
           this.player.maxHealth += hpGain;
           this.player.health = Math.min(this.player.maxHealth, this.player.health + hpGain);
           this.markPlayerHealthBarVisible();

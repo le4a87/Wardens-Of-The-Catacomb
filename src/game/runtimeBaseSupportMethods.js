@@ -1,6 +1,7 @@
 import { getRangerDodgeChance, getRangerSkillPointGainForLevel, hasFoxstep } from "./rangerTalentTree.js";
 import {
   getWarriorBattleFrenzyDuration,
+  getWarriorConsecratedHealingMultiplier,
   getWarriorGuardedAdvanceCounterChance,
   getWarriorGuardedAdvanceMeleeDefenseBonusPct,
   getWarriorGuardedAdvanceMissileReflectChance,
@@ -10,10 +11,8 @@ import {
   getWarriorRageMasteryMoveSpeedBonus,
   getWarriorRedTempestMoveSpeedBonus,
   getWarriorSkillPointGainForLevel,
-  getWarriorStonewallAllyDefenseAuraPct,
   getWarriorUnbrokenDamageReduction,
   hasWarriorReflectShare,
-  hasWarriorStonewall,
   hasWarriorUnbrokenCheatDeath,
   isWarriorRaging,
   isWarriorTalentGame
@@ -43,6 +42,16 @@ export const runtimeBaseSupportMethods = {
 
   isLivingPlayerEntity(entity) {
     return !!entity && (Number.isFinite(entity?.health) ? entity.health > 0 : entity?.alive !== false);
+  },
+
+  getCrusaderConsecratedZoneForEntity(entity) {
+    if (!entity || !Array.isArray(this.fireZones)) return null;
+    const entityRadius = (entity.size || this.player?.size || 22) * 0.4;
+    for (const zone of this.fireZones) {
+      if (!zone || zone.zoneType !== "crusaderAura" || (zone.life || 0) <= 0) continue;
+      if (Math.hypot((zone.x || 0) - (entity.x || 0), (zone.y || 0) - (entity.y || 0)) <= (zone.radius || 0) + entityRadius) return zone;
+    }
+    return null;
   },
 
   getNearestPlayerEntity(x, y, maxRange = Infinity) {
@@ -288,16 +297,6 @@ export const runtimeBaseSupportMethods = {
           : getWarriorGuardedAdvanceMeleeDefenseBonusPct(entity);
         if (meleeReduction > 0) amount *= 1 - meleeReduction;
       }
-      if ((damageType === "melee" || damageType === "arrow" || damageType === "physical") && entity.classType === "fighter") {
-        for (const other of this.getLivingPlayerEntities()) {
-          if (!other || other === entity || other.classType !== "fighter") continue;
-          if ((other?.warriorTalents?.stonewall?.points || 0) <= 0) continue;
-          if (!isWarriorRaging(other)) continue;
-          if (Math.hypot((other.x || 0) - (entity.x || 0), (other.y || 0) - (entity.y || 0)) > (this.config?.map?.tile || 32) * 3) continue;
-          amount *= 1 - getWarriorStonewallAllyDefenseAuraPct(other);
-          break;
-        }
-      }
     }
     if (this.isPrimaryPlayerEntity(entity) && typeof this.getPlayerDamageTaken === "function") {
       return this.getPlayerDamageTaken(amount, damageType);
@@ -426,8 +425,8 @@ export const runtimeBaseSupportMethods = {
     projectile.hitTargets = new Set();
     projectile.remainingRicochets = 0;
     const reflectMult = entity === this.player
-      ? (this.warriorTalents?.stonewall?.points || 0) > 0 ? 1.5 : 1
-      : (entity?.warriorTalents?.stonewall?.points || 0) > 0 ? 1.5 : 1;
+      ? (this.warriorTalents?.judgmentWave?.points || this.warriorTalents?.stonewall?.points || 0) > 0 ? 1.5 : 1
+      : (entity?.warriorTalents?.judgmentWave?.points || entity?.warriorTalents?.stonewall?.points || 0) > 0 ? 1.5 : 1;
     const rawDamage = Number.isFinite(projectile.damage) ? projectile.damage : this.rollEnemyContactDamage({ damageMin: projectile.damageMin, damageMax: projectile.damageMax });
     projectile.damage = rawDamage * reflectMult;
     this.spawnFloatingText(entity.x, entity.y - 28, "Reflect", "#b7d8ff", 0.9, 14);
@@ -479,6 +478,11 @@ export const runtimeBaseSupportMethods = {
 
   applyHealingToPlayerEntity(entity, amount, options = {}) {
     if (!entity || amount <= 0) return;
+    const consecratedZone = this.getCrusaderConsecratedZoneForEntity(entity);
+    if (consecratedZone) {
+      const zoneBoost = Number.isFinite(consecratedZone.healingMultiplier) ? consecratedZone.healingMultiplier : getWarriorConsecratedHealingMultiplier(this);
+      amount *= Math.max(1, zoneBoost);
+    }
     const before = Number.isFinite(entity.health) ? entity.health : 0;
     entity.health = Math.min(Number.isFinite(entity.maxHealth) ? entity.maxHealth : before, before + amount);
     entity.alive = entity.health > 0;
@@ -549,8 +553,8 @@ export const runtimeBaseSupportMethods = {
     }
     if (entity.classType === "fighter" && entity.health <= 0) {
       const canCheatDeath = entity === this.player
-        ? hasWarriorUnbrokenCheatDeath(this) || hasWarriorStonewall(this)
-        : ((entity?.warriorTalents?.unbroken?.points || 0) >= 3 || (entity?.warriorTalents?.stonewall?.points || 0) > 0);
+        ? hasWarriorUnbrokenCheatDeath(this)
+        : false;
       if (canCheatDeath && (entity.warriorRuntime.cheatDeathCooldown || 0) <= 0) {
         entity.warriorRuntime.cheatDeathCooldown = 60;
         entity.health = 1;

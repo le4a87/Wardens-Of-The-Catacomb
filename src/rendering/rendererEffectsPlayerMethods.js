@@ -1,3 +1,5 @@
+import { hasWarriorCrusaderInvestment, isWarriorRaging } from "../game/warriorTalentTree.js";
+
 export const rendererEffectsPlayerMethods = {
   getReplicatedPlayerClassSpec(player) {
     const classType = player?.classType;
@@ -24,6 +26,8 @@ export const rendererEffectsPlayerMethods = {
     const drawX = screenX - renderSize / 2;
     const drawY = screenY - renderSize * 0.56;
     const foxstepActive = (player?.rangerRuntime?.foxstepActiveTimer || 0) > 0;
+    const crusaderInvested = hasWarriorCrusaderInvestment(player);
+    const warriorRaging = isWarriorRaging(player);
     this.drawPlayerSpriteFrame(
       frameX,
       frameY,
@@ -31,9 +35,9 @@ export const rendererEffectsPlayerMethods = {
       drawX,
       drawY,
       renderSize,
-      null,
-      0,
-      foxstepActive ? "saturate(50%) brightness(0.95)" : "none"
+      warriorRaging ? (crusaderInvested ? "#f5cf6f" : "#ff2a2a") : null,
+      warriorRaging ? (crusaderInvested ? 0.78 : 0.5) : 0,
+      foxstepActive ? "saturate(50%) brightness(0.95)" : (warriorRaging && crusaderInvested ? "brightness(1.08) contrast(1.05)" : "none")
     );
     return { movingVisual, walkPhase: movingVisual ? player._renderAnimPhase * 0.1 : 0 };
   },
@@ -45,7 +49,10 @@ export const rendererEffectsPlayerMethods = {
       return;
     }
     if (!usesRanged) {
+      if ((player?.warriorRageActiveTimer || 0) > 0 && crusaderInvested) this.ctx.save();
+      if ((player?.warriorRageActiveTimer || 0) > 0 && crusaderInvested) this.ctx.filter = "brightness(1.08) saturate(1.15)";
       this.drawPlayerFighterRig(player, screenX, screenY, walkPhase, 0);
+      if ((player?.warriorRageActiveTimer || 0) > 0 && crusaderInvested) this.ctx.restore();
       return;
     }
     this.drawPlayerAimingRig(player, screenX, screenY, walkPhase, 0);
@@ -116,11 +123,12 @@ export const rendererEffectsPlayerMethods = {
       tintColor = "#a6a8ad";
       tintAlpha = 0.5;
     } else if (!game.classSpec?.usesRanged) {
-      if ((game.warriorRageActiveTimer || 0) > 0) {
-        tintColor = "#ff2a2a";
-        tintAlpha = 0.5;
+      const crusaderInvested = hasWarriorCrusaderInvestment(game);
+      if (isWarriorRaging(game)) {
+        tintColor = crusaderInvested ? "#f5cf6f" : "#ff2a2a";
+        tintAlpha = crusaderInvested ? 0.78 : 0.5;
       } else if ((game.warriorRageCooldownTimer || 0) > 0 && game.isWarriorRageUnlocked && game.isWarriorRageUnlocked()) {
-        tintColor = "#ff9b9b";
+        tintColor = crusaderInvested ? "#f2dfad" : "#ff9b9b";
         tintAlpha = 0.32;
       }
     }
@@ -133,13 +141,14 @@ export const rendererEffectsPlayerMethods = {
       renderSize,
       tintColor,
       tintAlpha,
-      foxstepActive ? "saturate(50%) brightness(0.95)" : "none"
+      foxstepActive ? "saturate(50%) brightness(0.95)" : (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game) ? "brightness(1.08) contrast(1.05)" : "none")
     );
     const baseCd = game.getPlayerFireCooldown ? game.getPlayerFireCooldown() : this.config.player.baseFireCooldown;
     const firePulse = baseCd > 0 ? Math.max(0, Math.min(1, p.fireCooldown / baseCd)) : 0;
     const walkPhase = movingVisual ? p._renderAnimPhase * 0.1 : 0;
-    if (foxstepActive) this.ctx.save();
+    if (foxstepActive || (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game))) this.ctx.save();
     if (foxstepActive) this.ctx.filter = "saturate(50%) brightness(0.95)";
+    else if (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game)) this.ctx.filter = "brightness(1.08) saturate(1.15)";
     if (game.isNecromancerClass && game.isNecromancerClass()) {
       this.drawPlayerNecromancerRig(p, playerScreenX, playerScreenY, walkPhase, firePulse);
     } else if (game.classSpec && !game.classSpec.usesRanged) {
@@ -147,7 +156,7 @@ export const rendererEffectsPlayerMethods = {
     } else {
       this.drawPlayerAimingRig(p, playerScreenX, playerScreenY, walkPhase, firePulse);
     }
-    if (foxstepActive) this.ctx.restore();
+    if (foxstepActive || (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game))) this.ctx.restore();
   },
 
   drawPlayerSpriteFrame(frameX, frameY, frameSize, drawX, drawY, renderSize, tintColor = null, tintAlpha = 0, filter = "none") {

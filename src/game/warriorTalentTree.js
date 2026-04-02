@@ -29,16 +29,16 @@ const WARRIOR_TALENT_DEFS = [
   },
   {
     key: "ironGuard",
-    label: "Iron Guard",
+    label: "Sanctified Steel",
     row: 1,
     lane: "vanguard",
     maxRanks: 3,
-    icon: "IG",
-    color: "#7ea7d8",
+    icon: "SS",
+    color: "#d8c77e",
     description: [
-      "Rank 1: +8 max health.",
-      "Rank 2: +8 max health, +4% defense.",
-      "Rank 3: +8 max health, +0.25% passive regen."
+      "Rank 1: +4% defense.",
+      "Rank 2: +4% defense, +8 max health.",
+      "Rank 3: +4% defense, +8 max health, +6% damage against undead."
     ]
   },
   {
@@ -71,16 +71,16 @@ const WARRIOR_TALENT_DEFS = [
   },
   {
     key: "guardedAdvance",
-    label: "Defensive Stance",
+    label: "Consecrated Rage",
     row: 2,
     lane: "vanguard",
     maxRanks: 1,
-    icon: "DS",
-    color: "#97b8df",
+    icon: "CR",
+    color: "#ead692",
     description: [
-      "+5% defense against melee attacks.",
-      "10% chance to immediately counter melee damage.",
-      "While raging, 20% chance to reflect projectile attacks."
+      "While raging, create a consecrated area where Rage was activated.",
+      "Consecrated area radius: 4 tiles before Purging Light.",
+      "Consecrated area deals holy damage over time, stronger against undead, and increases healing received within it."
     ]
   },
   {
@@ -112,18 +112,18 @@ const WARRIOR_TALENT_DEFS = [
   },
   {
     key: "unbroken",
-    label: "Unbroken",
+    label: "Purging Light",
     row: 3,
     lane: "vanguard",
     maxRanks: 3,
-    icon: "UB",
-    color: "#c2d7ef",
+    icon: "PL",
+    color: "#f2e6b8",
     description: [
-      "Rank 1: While below 50% health, gain 8% damage reduction.",
-      "Rank 2: While below 25% health, gain 8% damage reduction and +0.2% life leech.",
-      "Rank 3: While below 10% health, you are treated as raging without consuming your active Rage.",
-      "Rage grants Second Wind, healing 25% max health over 10 seconds.",
-      "Nearby allies gain 10% max health over 10 seconds when Rage is triggered."
+      "Rank 1: +15% consecrated area radius.",
+      "Rank 2: +15% consecrated area holy damage.",
+      "Rank 3: Undead inside the consecrated area take 20% more damage.",
+      "Rage still grants Second Wind, healing 25% max health over 10 seconds.",
+      "Nearby allies still gain 10% max health over 10 seconds when Rage is triggered."
     ]
   },
   {
@@ -155,17 +155,17 @@ const WARRIOR_TALENT_DEFS = [
     ]
   },
   {
-    key: "stonewall",
-    label: "Stonewall",
+    key: "judgmentWave",
+    label: "Judgment Wave",
     row: 4,
     lane: "vanguard",
     maxRanks: 1,
-    icon: "SW",
-    color: "#dce8f7",
+    icon: "JW",
+    color: "#fff0bd",
     description: [
-      "+20 max health and +0.5% life leech.",
-      "When you would be reduced to 0 HP, survive at 1 HP and become immune for 5s. 60s cooldown.",
-      "All allies gain +15% defense for 5 seconds while you are raging."
+      "Cleave attacks have a chance to release a holy wave in the swing arc.",
+      "Holy wave travels forward, damaging enemies it passes through.",
+      "Holy wave weakens undead defenses, causing them to take more damage."
     ]
   },
   {
@@ -216,7 +216,7 @@ export function cloneWarriorTalentState(source = null) {
   const next = createWarriorTalentState();
   if (!source || typeof source !== "object") return next;
   for (const [key, node] of Object.entries(next)) {
-    const raw = source[key];
+    const raw = source[key] || (key === "judgmentWave" ? source.stonewall : null);
     if (!raw || typeof raw !== "object") continue;
     if (Number.isFinite(raw.points)) node.points = Math.max(0, Math.min(node.maxPoints, Math.floor(raw.points)));
   }
@@ -280,7 +280,7 @@ function getWarriorPreviousRowOptions(def) {
 }
 
 export function getWarriorSelectedCapstones(game) {
-  return ["butchersPath", "stonewall", "redTempest"].reduce((sum, key) => sum + (getWarriorTalentPoints(game, key) > 0 ? 1 : 0), 0);
+  return ["butchersPath", "judgmentWave", "redTempest"].reduce((sum, key) => sum + (getWarriorTalentPoints(game, key) > 0 ? 1 : 0), 0);
 }
 
 export function getWarriorUnlockRequirementText(game, def) {
@@ -352,7 +352,7 @@ export function spendWarriorUtility(game, key) {
 }
 
 export function formatWarriorLaneLabel(lane) {
-  if (lane === "vanguard") return "Vanguard";
+  if (lane === "vanguard") return "Crusader";
   if (lane === "executioner") return "Executioner";
   if (lane === "berserker") return "Berserker";
   return "Core";
@@ -394,15 +394,23 @@ export function getWarriorIronGuardMaxHealthBonusPct(game) {
 
 export function getWarriorIronGuardMaxHealthFlat(game) {
   const rank = getWarriorTalentPoints(game, "ironGuard");
-  return 8 * rank + (hasWarriorStonewall(game) ? 20 : 0);
+  return rank >= 2 ? 8 : 0;
 }
 
 export function getWarriorIronGuardDefenseBonusPct(game) {
-  return getWarriorTalentPoints(game, "ironGuard") >= 2 ? 0.04 : 0;
+  return getWarriorTalentPoints(game, "ironGuard") >= 1 ? 0.04 : 0;
 }
 
 export function getWarriorPassiveRegenBonusPct(game) {
-  return getWarriorTalentPoints(game, "ironGuard") >= 3 ? 0.0025 : 0;
+  return 0;
+}
+
+export function getWarriorCrusaderUndeadDamageBonus(game, enemy = null) {
+  if (getWarriorTalentPoints(game, "ironGuard") < 3) return 0;
+  if (!enemy) return 0;
+  return enemy?.type === "ghost" || enemy?.type === "skeleton_warrior" || enemy?.type === "skeleton" || enemy?.type === "necromancer" || enemy?.type === "mummy"
+    ? 0.06
+    : 0;
 }
 
 export function getWarriorHeavyHandDamageBonus(game, enemy = null) {
@@ -452,7 +460,7 @@ export function hasWarriorGuardedAdvance(game) {
 }
 
 export function getWarriorGuardedAdvanceMeleeDefenseBonusPct(game) {
-  return getWarriorTalentPoints(game, "guardedAdvance") > 0 ? 0.05 : 0;
+  return 0;
 }
 
 export function getWarriorGuardedAdvanceRetaliationDamage(game) {
@@ -460,7 +468,7 @@ export function getWarriorGuardedAdvanceRetaliationDamage(game) {
 }
 
 export function getWarriorGuardedAdvanceCounterChance(game) {
-  return getWarriorTalentPoints(game, "guardedAdvance") > 0 ? 0.1 : 0;
+  return 0;
 }
 
 export function getWarriorGuardedAdvanceIgnoreHitChance(game) {
@@ -472,8 +480,7 @@ export function getWarriorGuardedAdvanceAllyFlatReduction(game, damageType = "ph
 }
 
 export function getWarriorGuardedAdvanceMissileReflectChance(game, entity = null) {
-  const source = entity || game;
-  return isWarriorRaging(source) && getWarriorTalentPoints(source, "guardedAdvance") > 0 ? 0.2 : 0;
+  return 0;
 }
 
 export function hasWarriorReflectShare(game, entity = null) {
@@ -533,14 +540,10 @@ export function getWarriorBattleFrenzyLifeLeechBonus() {
 }
 
 export function getWarriorUnbrokenLifeLeechBonus(game, healthRatio = 1) {
-  return getWarriorTalentPoints(game, "unbroken") >= 2 && healthRatio <= 0.25 ? 0.002 : 0;
+  return 0;
 }
 
 export function getWarriorUnbrokenDamageReduction(game, healthRatio = 1) {
-  const rank = getWarriorTalentPoints(game, "unbroken");
-  if (rank <= 0) return 0;
-  if (rank >= 2 && healthRatio <= 0.25) return 0.08;
-  if (rank >= 1 && healthRatio <= 0.5) return 0.08;
   return 0;
 }
 
@@ -557,10 +560,7 @@ export function getWarriorSecondWindAllyHealPct(game) {
 }
 
 export function isWarriorPassiveRageActive(game) {
-  const hp = Number.isFinite(game?.player?.health) ? game.player.health : Number.isFinite(game?.health) ? game.health : 0;
-  const maxHp = Number.isFinite(game?.player?.maxHealth) ? game.player.maxHealth : Number.isFinite(game?.maxHealth) ? game.maxHealth : 0;
-  if (maxHp <= 0) return false;
-  return getWarriorTalentPoints(game, "unbroken") >= 3 && hp / maxHp <= 0.1;
+  return false;
 }
 
 export function isWarriorRaging(game) {
@@ -569,7 +569,7 @@ export function isWarriorRaging(game) {
 }
 
 export function hasWarriorStonewall(game) {
-  return getWarriorTalentPoints(game, "stonewall") > 0;
+  return getWarriorTalentPoints(game, "judgmentWave") > 0;
 }
 
 export function hasWarriorButchersPath(game) {
@@ -581,11 +581,58 @@ export function hasWarriorRedTempest(game) {
 }
 
 export function getWarriorStonewallLifeLeechBonus(game) {
-  return hasWarriorStonewall(game) ? 0.005 : 0;
+  return 0;
 }
 
 export function getWarriorStonewallAllyDefenseAuraPct(game) {
-  return hasWarriorStonewall(game) ? 0.15 : 0;
+  return 0;
+}
+
+export function hasWarriorCrusaderInvestment(game) {
+  return getWarriorTalentPoints(game, "ironGuard") > 0 ||
+    getWarriorTalentPoints(game, "guardedAdvance") > 0 ||
+    getWarriorTalentPoints(game, "unbroken") > 0 ||
+    getWarriorTalentPoints(game, "judgmentWave") > 0;
+}
+
+export function getWarriorConsecratedRadiusTiles(game) {
+  let radius = 3;
+  if (getWarriorTalentPoints(game, "unbroken") >= 1) radius *= 1.15;
+  return radius;
+}
+
+export function getWarriorConsecratedDps(game) {
+  let dps = 9;
+  if (getWarriorTalentPoints(game, "unbroken") >= 2) dps *= 1.15;
+  return dps;
+}
+
+export function getWarriorConsecratedUndeadMultiplier(game) {
+  return 1.5;
+}
+
+export function getWarriorConsecratedHealingMultiplier(game) {
+  return hasWarriorGuardedAdvance(game) ? 1.25 : 1;
+}
+
+export function getWarriorConsecratedShredPct(game) {
+  return getWarriorTalentPoints(game, "unbroken") >= 3 ? 0.2 : 0;
+}
+
+export function hasWarriorJudgmentWave(game) {
+  return hasWarriorStonewall(game);
+}
+
+export function getWarriorJudgmentWaveChance(game) {
+  return hasWarriorStonewall(game) ? 0.25 : 0;
+}
+
+export function getWarriorJudgmentWaveDamageMultiplier(game) {
+  return hasWarriorStonewall(game) ? 0.7 : 0;
+}
+
+export function getWarriorJudgmentWaveShredPct(game) {
+  return hasWarriorStonewall(game) ? 0.2 : 0;
 }
 
 export function getWarriorRedTempestMoveSpeedBonus(game) {
@@ -604,5 +651,6 @@ export function getWarriorSkillPointGainForLevel(level, classType) {
   if (classType !== "fighter") return 1;
   const safeLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
   if (safeLevel < 2) return 0;
-  return safeLevel >= 18 ? 2 : 1;
+  if (safeLevel <= 9) return 1;
+  return safeLevel % 2 === 0 ? 1 : 0;
 }

@@ -171,11 +171,26 @@ export function resolveCombatAndDrops({
         const projectileDamage = typeof game.getRangerArrowDamageAgainst === "function"
           ? game.getRangerArrowDamageAgainst(enemy, b)
           : (Number.isFinite(b.damage) ? b.damage : game.rollPrimaryDamage()) * Math.max(0.01, Number.isFinite(b.damageMult) ? b.damageMult : 1);
-        game.applyEnemyDamage(enemy, projectileDamage, "arrow", b.ownerId || null);
-        if (typeof game.applyRangerOnHitEffects === "function") game.applyRangerOnHitEffects(enemy, b.x, b.y);
+        const damageType = b.projectileType === "holyWave" ? "holy" : "arrow";
+        game.applyEnemyDamage(enemy, projectileDamage, damageType, b.ownerId || null);
+        if (
+          b.projectileType === "holyWave" &&
+          typeof game.isUndeadEnemy === "function" &&
+          game.isUndeadEnemy(enemy) &&
+          Number.isFinite(b.undeadDefenseShredPct) &&
+          b.undeadDefenseShredPct > 0
+        ) {
+          enemy.crusaderDefenseShredPct = Math.max(enemy.crusaderDefenseShredPct || 0, b.undeadDefenseShredPct);
+          enemy.crusaderDefenseShredTimer = Math.max(enemy.crusaderDefenseShredTimer || 0, 4);
+        }
+        if (b.projectileType !== "holyWave" && typeof game.applyRangerOnHitEffects === "function") game.applyRangerOnHitEffects(enemy, b.x, b.y);
         b.hitTargets.add(enemy);
         b.linebreakerHits = (Number.isFinite(b.linebreakerHits) ? b.linebreakerHits : 0) + 1;
-        if (Math.random() >= game.getPiercingChance()) b.life = 0;
+        if (b.projectileType === "holyWave") {
+          // Holy waves travel through enemies once per target.
+        } else if (Math.random() >= game.getPiercingChance()) {
+          b.life = 0;
+        }
         break;
       }
     }
@@ -277,6 +292,30 @@ export function resolveCombatAndDrops({
       }
       continue;
     }
+    if (zone.zoneType === "crusaderAura") {
+      const tickInterval = Math.max(0.15, zone.tickInterval || 0.3);
+      zone.tickTimer = Math.max(-2, (Number.isFinite(zone.tickTimer) ? zone.tickTimer : tickInterval) - dt);
+      while (zone.life > 0 && zone.tickTimer <= 0) {
+        const baseDps = Number.isFinite(zone.dps) ? zone.dps : 10;
+        const pulseDamageBase = baseDps * tickInterval;
+        const undeadMult = Number.isFinite(zone.undeadDamageMultiplier) ? zone.undeadDamageMultiplier : 1.5;
+        const shredPct = Number.isFinite(zone.defenseShredPct) ? zone.defenseShredPct : 0;
+        for (const enemy of activeEnemies) {
+          if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
+          if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+          if (vecLength(zone.x - enemy.x, zone.y - enemy.y) >= zone.radius + enemy.size * 0.35) continue;
+          const isUndead = typeof game.isUndeadEnemy === "function" && game.isUndeadEnemy(enemy);
+          const pulseDamage = pulseDamageBase * (isUndead ? undeadMult : 1);
+          game.applyEnemyDamage(enemy, pulseDamage, "holy", zone.ownerId || null);
+          if (isUndead && shredPct > 0) {
+            enemy.crusaderDefenseShredPct = Math.max(enemy.crusaderDefenseShredPct || 0, shredPct);
+            enemy.crusaderDefenseShredTimer = Math.max(enemy.crusaderDefenseShredTimer || 0, tickInterval + 0.2);
+          }
+        }
+        zone.tickTimer += tickInterval;
+      }
+      continue;
+    }
     if (zone.zoneType && zone.zoneType !== "fire" && zone.zoneType !== "pinningFire") continue;
     for (const br of activeBreakables) {
       if (vecLength(zone.x - br.x, zone.y - br.y) < zone.radius + br.size * 0.32) br.hp = 0;
@@ -302,6 +341,8 @@ export function resolveCombatAndDrops({
 
   for (const enemy of activeEnemies) {
     if (!enemy || (enemy.hp || 0) <= 0) continue;
+    enemy.crusaderDefenseShredTimer = Math.max(0, (Number.isFinite(enemy.crusaderDefenseShredTimer) ? enemy.crusaderDefenseShredTimer : 0) - dt);
+    if ((enemy.crusaderDefenseShredTimer || 0) <= 0) enemy.crusaderDefenseShredPct = 0;
     if ((enemy.burningTimer || 0) <= 0 || !Number.isFinite(enemy.burningDps) || enemy.burningDps <= 0) continue;
     game.applyEnemyDamage(enemy, enemy.burningDps * dt, "fire", enemy.lastDamageOwnerId || null);
   }

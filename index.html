@@ -8,6 +8,11 @@
 </head>
 <body>
   <main class="layout">
+    <section id="top-ad-banner" class="top-ad-banner" hidden aria-label="Advertisement">
+      <div class="top-ad-banner__frame">
+        <img id="top-ad-image" class="top-ad-banner__image" alt="Advertisement" />
+      </div>
+    </section>
     <section class="menu-shell" hidden>
       <section id="mode-select" class="menu-screen" aria-label="Mode selection">
         <div class="mode-select-layout">
@@ -45,6 +50,13 @@
               <input id="menu-volume" class="menu-volume-control__slider" type="range" min="0" max="100" step="1" value="50" />
               <output id="menu-volume-value" class="menu-volume-control__value" for="menu-volume">50%</output>
             </div>
+          </label>
+        </section>
+        <section class="options-panel" aria-label="Display settings">
+          <h3>Display</h3>
+          <label for="disable-ads" class="menu-toggle-control">
+            <span class="menu-toggle-control__label">Disable Ads</span>
+            <input id="disable-ads" class="menu-toggle-control__checkbox" type="checkbox" />
           </label>
         </section>
         <section id="dev-boss-options" class="options-panel" aria-label="Developer boss options" hidden>

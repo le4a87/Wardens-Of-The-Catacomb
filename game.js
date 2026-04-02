@@ -82,6 +82,9 @@ const optionsScreen = document.getElementById("options-screen");
 const optionsBackButton = document.getElementById("options-back");
 const menuVolumeInput = document.getElementById("menu-volume");
 const menuVolumeValue = document.getElementById("menu-volume-value");
+const disableAdsInput = document.getElementById("disable-ads");
+const topAdBanner = document.getElementById("top-ad-banner");
+const topAdImage = document.getElementById("top-ad-image");
 const devBossOptionsPanel = document.getElementById("dev-boss-options");
 const devBossOverrideSelect = document.getElementById("dev-boss-override");
 const devBossOverrideHint = document.getElementById("dev-boss-override-hint");
@@ -193,9 +196,36 @@ let selectedNetworkDeathRulesMode = getStoredNetworkDeathRulesMode();
 const runtimeConfig = window.__WOTC_CONFIG__ && typeof window.__WOTC_CONFIG__ === "object" ? window.__WOTC_CONFIG__ : {};
 const MIN_DEV_START_FLOOR = 1;
 const MAX_DEV_START_FLOOR = 15;
+const ADS_DISABLED_STORAGE_KEY = "wotcDisableAds";
+const AD_ROTATION_MS = 60000;
+const AD_IMAGE_SOURCES = [
+  "./assets/ads/barovia.png",
+  "./assets/ads/elfbucks.png",
+  "./assets/ads/shark.png",
+  "./assets/ads/wizards.png"
+];
+let adsDisabled = loadStoredAdsDisabled();
+let currentAdIndex = 0;
+let adRotationTimer = 0;
 
 function normalizeDevStartingFloor(value) {
   return Math.max(MIN_DEV_START_FLOOR, Math.min(MAX_DEV_START_FLOOR, Number.parseInt(value || "1", 10) || 1));
+}
+
+function loadStoredAdsDisabled() {
+  try {
+    return window.localStorage.getItem(ADS_DISABLED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistAdsDisabled(value) {
+  try {
+    window.localStorage.setItem(ADS_DISABLED_STORAGE_KEY, value ? "1" : "0");
+  } catch {
+    // Ignore storage failures and keep the current session preference.
+  }
 }
 
 function syncMenuVolumeControl() {
@@ -203,6 +233,46 @@ function syncMenuVolumeControl() {
   const percent = Math.round(music.masterVolume * 100);
   menuVolumeInput.value = String(percent);
   if (menuVolumeValue) menuVolumeValue.textContent = `${percent}%`;
+}
+
+function syncDisableAdsControl() {
+  if (!disableAdsInput) return;
+  disableAdsInput.checked = !!adsDisabled;
+}
+
+function rotateTopAd(force = false) {
+  if (!topAdImage || AD_IMAGE_SOURCES.length === 0) return;
+  if (force) {
+    currentAdIndex = Math.max(0, currentAdIndex % AD_IMAGE_SOURCES.length);
+  } else {
+    currentAdIndex = (currentAdIndex + 1) % AD_IMAGE_SOURCES.length;
+  }
+  topAdImage.src = AD_IMAGE_SOURCES[currentAdIndex];
+}
+
+function stopAdRotation() {
+  if (!adRotationTimer) return;
+  window.clearInterval(adRotationTimer);
+  adRotationTimer = 0;
+}
+
+function startAdRotation() {
+  if (adRotationTimer || AD_IMAGE_SOURCES.length <= 1) return;
+  adRotationTimer = window.setInterval(() => {
+    rotateTopAd();
+  }, AD_ROTATION_MS);
+}
+
+function syncTopAdVisibility() {
+  const shouldShow = !splashActive && !adsDisabled && AD_IMAGE_SOURCES.length > 0;
+  if (topAdBanner) topAdBanner.hidden = !shouldShow;
+  if (layout) layout.classList.toggle("has-top-banner", shouldShow);
+  if (!shouldShow) {
+    stopAdRotation();
+    return;
+  }
+  if (topAdImage && !topAdImage.getAttribute("src")) rotateTopAd(true);
+  startAdRotation();
 }
 
 function getBossOverrideHint(override) {
@@ -317,7 +387,10 @@ if (serverUrlInput) {
 
 if (devStartOptions) devStartOptions.hidden = !isDevMode;
 syncMenuVolumeControl();
+syncDisableAdsControl();
 syncDevBossOverrideControl();
+if (topAdImage && AD_IMAGE_SOURCES.length > 0) rotateTopAd(true);
+syncTopAdVisibility();
 
 function setCanvasVisible(visible) {
   if (!canvas) return;
@@ -352,6 +425,7 @@ function showModeSelect() {
   if (networkSession) networkSession.hidden = true;
   setCanvasVisible(false);
   renderMenuScreen();
+  syncTopAdVisibility();
 }
 
 function showNetworkSetup() {
@@ -361,6 +435,7 @@ function showNetworkSetup() {
   if (networkSession) networkSession.hidden = true;
   setCanvasVisible(false);
   renderMenuScreen();
+  syncTopAdVisibility();
 }
 
 function showOptionsScreen() {
@@ -369,6 +444,7 @@ function showOptionsScreen() {
   if (networkSession) networkSession.hidden = true;
   setCanvasVisible(false);
   renderMenuScreen();
+  syncTopAdVisibility();
 }
 
 function showCharacterSelect(mode) {
@@ -378,6 +454,7 @@ function showCharacterSelect(mode) {
   if (networkSession) networkSession.hidden = true;
   setCanvasVisible(false);
   renderMenuScreen();
+  syncTopAdVisibility();
 }
 
 function showNetworkLobby() {
@@ -387,6 +464,7 @@ function showNetworkLobby() {
   if (networkSession) networkSession.hidden = true;
   setCanvasVisible(false);
   renderMenuScreen();
+  syncTopAdVisibility();
 }
 
 function getLeaderboardApiUrl() {
@@ -553,9 +631,11 @@ function syncDeathLeaderboardCanvasVisibility() {
   if (!currentGame) return;
   if (leaderboardState.open && leaderboardState.mode === "death") {
     setCanvasVisible(false);
+    syncTopAdVisibility();
     return;
   }
   if (menuPanel?.hidden) setCanvasVisible(true);
+  syncTopAdVisibility();
 }
 
 function closeLeaderboardModal() {
@@ -563,6 +643,7 @@ function closeLeaderboardModal() {
   leaderboardState.mode = "menu";
   renderLeaderboardModal();
   syncDeathLeaderboardCanvasVisibility();
+  syncTopAdVisibility();
 }
 
 function resetDeathReturnCountdown(game = currentGame) {
@@ -1058,6 +1139,7 @@ function returnNetworkGameToLobby() {
   showNetworkLobby();
   renderNetworkLobby();
   music.playMenuMusic();
+  syncTopAdVisibility();
 }
 
 function returnToMenu() {
@@ -1082,6 +1164,7 @@ function returnToMenu() {
       else showCharacterSelect(targetMode);
     }
   });
+  syncTopAdVisibility();
 }
 
 const drawSplash = (now) => {
@@ -1139,6 +1222,7 @@ const dismissSplash = () => {
       }
     }
   });
+  syncTopAdVisibility();
 };
 
 const handleSplashKeydown = (event) => {
@@ -1163,6 +1247,7 @@ const startSplashScreen = () => {
   });
   splashStartedAt = next.splashStartedAt;
   splashRaf = next.splashRaf;
+  syncTopAdVisibility();
 };
 const isNetworkController = () => !!(netControllerId && netPlayerId && netControllerId === netPlayerId);
 const hasLocalPrediction = (game = currentGame) => !!(game?.networkEnabled && netPlayerId && (game.networkRoomPhase || netRoomPhase) === "active");
@@ -1279,6 +1364,7 @@ function startLocalGame() {
   stopNetworkSession();
   if (menuPanel) menuPanel.hidden = true;
   setCanvasVisible(true);
+  syncTopAdVisibility();
   currentGame = cleanupCurrentGameRuntime(currentGame);
   const requestedStartFloor = isDevMode && devStartFloorInput
     ? normalizeDevStartingFloor(devStartFloorInput.value)
@@ -1308,6 +1394,7 @@ function startNetworkGameplay() {
   menuState.mode = MENU_MODE_NETWORK;
   if (menuPanel) menuPanel.hidden = true;
   setCanvasVisible(true);
+  syncTopAdVisibility();
   if (networkSession) networkSession.hidden = true;
   currentGame = cleanupCurrentGameRuntime(currentGame);
   const game = new Game(canvas, {
@@ -1854,6 +1941,15 @@ if (menuVolumeInput) {
     const nextVolume = Number(menuVolumeInput.value) / 100;
     music.setMasterVolume(nextVolume);
     syncMenuVolumeControl();
+  });
+}
+
+if (disableAdsInput) {
+  disableAdsInput.addEventListener("change", () => {
+    adsDisabled = !!disableAdsInput.checked;
+    persistAdsDisabled(adsDisabled);
+    syncDisableAdsControl();
+    syncTopAdVisibility();
   });
 }
 

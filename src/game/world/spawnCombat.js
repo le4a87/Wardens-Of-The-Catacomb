@@ -129,6 +129,15 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical", o
     return;
   }
   let adjusted = amount;
+  if (
+    enemy &&
+    typeof game.isUndeadEnemy === "function" &&
+    game.isUndeadEnemy(enemy) &&
+    (enemy.crusaderDefenseShredTimer || 0) > 0
+  ) {
+    const shredPct = Number.isFinite(enemy.crusaderDefenseShredPct) ? enemy.crusaderDefenseShredPct : 0;
+    if (shredPct > 0) adjusted *= 1 + shredPct;
+  }
   if (enemy?.type === "mimic") {
     if (damageType === "arrow") adjusted *= game.config.enemy.mimicArrowResistance;
     else if (damageType === "fire") adjusted *= game.config.enemy.mimicFireVulnerability;

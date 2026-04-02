@@ -13,11 +13,16 @@ import {
 } from "./rangerTalentTree.js";
 import {
   getWarriorBattleFrenzyDamageBonus,
+  getWarriorCrusaderUndeadDamageBonus,
   getWarriorExecutionerRageRangeBonus,
   getWarriorHeavyHandCleaveArcBonus,
   getWarriorHeavyHandDamageBonus,
+  getWarriorJudgmentWaveChance,
+  getWarriorJudgmentWaveDamageMultiplier,
+  getWarriorJudgmentWaveShredPct,
   hasWarriorButchersPath,
   hasWarriorCleaveDiscipline,
+  hasWarriorJudgmentWave,
   isWarriorRaging,
   isWarriorTalentGame
 } from "./warriorTalentTree.js";
@@ -152,6 +157,7 @@ export const runtimePlayerAttackMethods = {
         let damage = this.rollPrimaryDamage();
         if (isWarriorTalentGame(this)) {
           damage *= 1 + getWarriorHeavyHandDamageBonus(this, enemy);
+          damage *= 1 + getWarriorCrusaderUndeadDamageBonus(this, enemy);
           if ((this.warriorMomentumTimer || 0) > 0) damage *= 1 + getWarriorBattleFrenzyDamageBonus(this);
           damage *= critMultiplier;
         }
@@ -200,6 +206,28 @@ export const runtimePlayerAttackMethods = {
       swing.executeProc = true;
       swing.life += 0.5;
       swing.maxLife += 0.5;
+    }
+    if (isWarriorTalentGame(this) && hasWarriorJudgmentWave(this) && Math.random() < getWarriorJudgmentWaveChance(this)) {
+      const tile = this.config?.map?.tile || 32;
+      const life = 0.9;
+      const speed = (tile * 10) / life;
+      this.bullets.push({
+        x: this.player.x + Math.cos(angle) * (range * 0.45),
+        y: this.player.y + Math.sin(angle) * (range * 0.45),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        angle,
+        life,
+        size: 28,
+        faction: "player",
+        projectileType: "holyWave",
+        damage: this.rollPrimaryDamage() * getWarriorJudgmentWaveDamageMultiplier(this),
+        damageType: "holy",
+        hitTargets: new Set(),
+        ownerId: this.player.id || null,
+        undeadDefenseShredPct: getWarriorJudgmentWaveShredPct(this),
+        waveArc: arc
+      });
     }
   },
 

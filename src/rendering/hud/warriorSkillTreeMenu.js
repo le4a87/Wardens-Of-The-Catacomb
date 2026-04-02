@@ -32,7 +32,8 @@ function drawIcon(ctx, rect, icon, fill, locked) {
   ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   ctx.strokeStyle = locked ? "rgba(119, 124, 134, 0.82)" : "rgba(242, 236, 224, 0.62)";
   ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
-  ctx.fillStyle = "#f4efe3";
+  const useDarkText = !locked && typeof fill === "string" && ["#d8c77e", "#ead692", "#f2e6b8", "#fff0bd"].includes(fill.toLowerCase());
+  ctx.fillStyle = useDarkText ? "#16110b" : "#f4efe3";
   ctx.font = "bold 11px Trebuchet MS";
   ctx.textAlign = "center";
   ctx.fillText(icon, rect.x + rect.w * 0.5, rect.y + rect.h * 0.62);

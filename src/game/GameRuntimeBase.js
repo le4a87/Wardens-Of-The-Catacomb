@@ -70,6 +70,7 @@ export class GameRuntimeBase {
     if (type === "fire") return "#ff9a3c";
     if (type === "acid") return "#4fe44a";
     if (type === "poison") return "#b7d94c";
+    if (type === "holy") return "#f0d56f";
     if (type === "necrotic" || type === "death" || type === "unholy") return "#b38dff";
     if (type === "arrow") return "#ff7676";
     if (type === "melee" || type === "physical") return "#ef5f5f";
