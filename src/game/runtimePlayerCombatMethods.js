@@ -23,7 +23,7 @@ export const runtimePlayerCombatMethods = {
       this.skillPoints += this.getSkillPointGainForLevel(this.level, this.classType);
       const hpGain = Number.isFinite(this.classSpec.levelHpGain) ? this.classSpec.levelHpGain : 10;
       const adjustedHpGain = this.classType === "archer"
-        ? hpGain * (1 + getRangerTalentPoints(this, "fleetstep") * 0.02)
+        ? hpGain * (1 + (getRangerTalentPoints(this, "fleetstep") > 0 ? 0.06 : 0))
         : hpGain;
       this.player.maxHealth += adjustedHpGain;
       this.player.health = Math.min(this.player.maxHealth, this.player.health + adjustedHpGain);

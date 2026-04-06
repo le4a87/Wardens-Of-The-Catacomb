@@ -80,7 +80,8 @@ const WARRIOR_TALENT_DEFS = [
     description: [
       "While raging, create a consecrated area where Rage was activated.",
       "Consecrated area radius: 4 tiles before Purging Light.",
-      "Consecrated area deals holy damage over time, stronger against undead, and increases healing received within it."
+      "Consecrated area deals holy damage over time, stronger against undead, and increases healing received within it.",
+      "While standing in it, gain 5% damage reduction."
     ]
   },
   {
@@ -93,7 +94,8 @@ const WARRIOR_TALENT_DEFS = [
     color: "#ebb089",
     description: [
       "The first attack after Rage activates is a guaranteed critical hit.",
-      "Rage increases critical damage by 20%."
+      "Rage increases critical damage by 20%.",
+      "While raging, cleave width is increased by 10%."
     ]
   },
   {
@@ -106,7 +108,7 @@ const WARRIOR_TALENT_DEFS = [
     color: "#f08a78",
     description: [
       "Rage increases attack speed by 25%.",
-      "Rage increases movement speed by 15%.",
+      "Rage increases movement speed by 10%.",
       "Rage lasts 15% longer."
     ]
   },
@@ -148,7 +150,7 @@ const WARRIOR_TALENT_DEFS = [
     icon: "BF",
     color: "#f2a08f",
     description: [
-      "Rank 1: While raging, kills grant Battle Frenzy for 3s: +10% move speed and +5% damage. Each kill adds 0.1s.",
+      "Rank 1: While raging, kills grant Battle Frenzy for 3s: +10% move speed and +5% damage. 10s internal cooldown.",
       "Rank 2: While under Battle Frenzy, gain another +10% move speed and +5% damage.",
       "Rank 3: While under Battle Frenzy, gain another +10% move speed and +5% damage.",
       "Kills during Rage also feed a shared Victory Rush-style heal-over-time pool."
@@ -178,7 +180,8 @@ const WARRIOR_TALENT_DEFS = [
     color: "#ffd2a9",
     description: [
       "After executing an enemy, your next hit is a guaranteed critical.",
-      "While raging, your execution chance is doubled."
+      "While raging, your execution chance is doubled.",
+      "After executing an enemy, your next cleave gains +20% width and +20% damage."
     ]
   },
   {
@@ -496,7 +499,7 @@ export function getWarriorRageMasteryAttackSpeedBonus(game) {
 }
 
 export function getWarriorRageMasteryMoveSpeedBonus(game) {
-  return hasWarriorRageMastery(game) ? 0.15 : 0;
+  return hasWarriorRageMastery(game) ? 0.10 : 0;
 }
 
 export function hasWarriorRageMastery(game) {
@@ -615,6 +618,10 @@ export function getWarriorConsecratedHealingMultiplier(game) {
   return hasWarriorGuardedAdvance(game) ? 1.25 : 1;
 }
 
+export function getWarriorConsecratedDamageReductionPct(game) {
+  return hasWarriorGuardedAdvance(game) ? 0.05 : 0;
+}
+
 export function getWarriorConsecratedShredPct(game) {
   return getWarriorTalentPoints(game, "unbroken") >= 3 ? 0.2 : 0;
 }
@@ -647,10 +654,23 @@ export function getWarriorRedTempestFullArcDuration(game) {
   return hasWarriorRedTempest(game) ? 5 : 0;
 }
 
+export function getWarriorExecutionerRageCleaveWidthBonus(game) {
+  return hasWarriorCleaveDiscipline(game) ? 0.10 : 0;
+}
+
+export function getWarriorButchersPathNextHitDamageBonus(game) {
+  return hasWarriorButchersPath(game) ? 0.2 : 0;
+}
+
+export function getWarriorButchersPathNextHitArcBonus(game) {
+  return hasWarriorButchersPath(game) ? 0.2 : 0;
+}
+
 export function getWarriorSkillPointGainForLevel(level, classType) {
   if (classType !== "fighter") return 1;
   const safeLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
   if (safeLevel < 2) return 0;
-  if (safeLevel <= 9) return 1;
+  if (safeLevel === 2) return 2;
+  if (safeLevel <= 11) return 1;
   return safeLevel % 2 === 0 ? 1 : 0;
 }

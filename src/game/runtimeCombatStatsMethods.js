@@ -60,6 +60,14 @@ import {
   spendWarriorNode,
   spendWarriorUtility
 } from "./warriorTalentTree.js";
+import {
+  canSpendNecromancerNode,
+  canSpendNecromancerUtility,
+  getNecromancerVigorDefenseBonusPct,
+  isNecromancerTalentGame,
+  spendNecromancerNode,
+  spendNecromancerUtility
+} from "./necromancerTalentTree.js";
 
 export const runtimeCombatStatsMethods = {
   getPlayerResistancePct(damageType = "physical") {
@@ -76,7 +84,10 @@ export const runtimeCombatStatsMethods = {
   getPlayerDamageTaken(rawDamage, damageType = "physical") {
     const safeDamage = Math.max(0, Number.isFinite(rawDamage) ? rawDamage : 0);
     const resistancePct = this.getPlayerResistancePct(damageType);
-    const resisted = Math.max(1, Math.round(safeDamage * (1 - resistancePct)));
+    let resisted = Math.max(1, Math.round(safeDamage * (1 - resistancePct)));
+    if (isNecromancerTalentGame(this)) {
+      resisted = Math.max(1, Math.round(resisted * (1 - getNecromancerVigorDefenseBonusPct(this))));
+    }
     const reducedByDefense = Math.max(1, Math.round(resisted - this.getDefenseFlatReduction()));
     return this.getWarriorRageDamageTaken(reducedByDefense, damageType);
   },
@@ -537,8 +548,11 @@ export const runtimeCombatStatsMethods = {
     if (this.classSpec.usesRanged) return;
     if (isWarriorTalentGame(this)) {
       if (getWarriorTalentPoints(this, "battleFrenzy") <= 0) return;
+      this.warriorRuntime = this.warriorRuntime && typeof this.warriorRuntime === "object" ? this.warriorRuntime : {};
+      if ((this.warriorRuntime.battleFrenzyCooldownTimer || 0) > 0) return;
       const wasInactive = (this.warriorMomentumTimer || 0) <= 0;
-      this.warriorMomentumTimer = Math.max(this.warriorMomentumTimer || 0, this.getWarriorMomentumDuration()) + 0.1;
+      this.warriorMomentumTimer = this.getWarriorMomentumDuration();
+      this.warriorRuntime.battleFrenzyCooldownTimer = 10;
       if (wasInactive && typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("warrior", "frenzies", 1);
       return;
     }
@@ -558,7 +572,7 @@ export const runtimeCombatStatsMethods = {
       if (!canSpendRangerNode(this, skillKey) && !canSpendRangerUtility(this, skillKey)) return false;
       if (spendRangerNode(this, skillKey)) {
         if (skillKey === "fleetstep") {
-          const hpGain = Math.max(1, this.player.maxHealth * 0.02);
+          const hpGain = Math.max(1, this.player.maxHealth * 0.06);
           this.player.maxHealth += hpGain;
           this.player.health = Math.min(this.player.maxHealth, this.player.health + hpGain);
           this.markPlayerHealthBarVisible();
@@ -568,6 +582,19 @@ export const runtimeCombatStatsMethods = {
         } else {
           this.spawnFloatingText(this.player.x, this.player.y - 26, "Talent improved", "#9fd9ff", 0.85, 14);
         }
+        return true;
+      }
+      return false;
+    }
+    if (isNecromancerTalentGame(this)) {
+      if (spendNecromancerUtility(this, skillKey)) {
+        this.spawnFloatingText(this.player.x, this.player.y - 26, "Training improved", "#b7e38a", 0.85, 14);
+        return true;
+      }
+      if (!canSpendNecromancerNode(this, skillKey) && !canSpendNecromancerUtility(this, skillKey)) return false;
+      if (spendNecromancerNode(this, skillKey)) {
+        if (skillKey === "deathBoltActive") this.spawnFloatingText(this.player.x, this.player.y - 26, "Death Bolt Unlocked!", "#c4a0ff", 1.0, 15);
+        else this.spawnFloatingText(this.player.x, this.player.y - 26, "Talent improved", "#c4a0ff", 0.85, 14);
         return true;
       }
       return false;

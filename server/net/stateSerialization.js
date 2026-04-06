@@ -16,8 +16,10 @@ function shallowPlayerState(simPlayer) {
     skills: simPlayer.skills,
     rangerTalents: simPlayer.rangerTalents,
     warriorTalents: simPlayer.warriorTalents,
+    necromancerTalents: simPlayer.necromancerTalents,
     rangerRuntime: simPlayer.rangerRuntime,
     warriorRuntime: simPlayer.warriorRuntime,
+    necromancerRuntime: simPlayer.necromancerRuntime,
     upgrades: simPlayer.upgrades,
     dirX: simPlayer.dirX,
     dirY: simPlayer.dirY,
@@ -64,9 +66,11 @@ function shallowActivePlayerState(player) {
     skills: player.skills,
     rangerTalents: player.rangerTalents,
     warriorTalents: player.warriorTalents,
+    necromancerTalents: player.necromancerTalents,
     upgrades: player.upgrades,
     rangerRuntime: player.rangerRuntime,
     warriorRuntime: player.warriorRuntime,
+    necromancerRuntime: player.necromancerRuntime,
     dirX: player.dirX,
     dirY: player.dirY,
     facing: player.facing,
@@ -141,6 +145,9 @@ function serializeEnemy(room, e) {
   };
   if (e.isControlledUndead) base.isControlledUndead = true;
   if (typeof e.controllerPlayerId === "string" && e.controllerPlayerId) base.controllerPlayerId = e.controllerPlayerId;
+  if (Number.isFinite(e.curseTimer) && e.curseTimer > 0) base.curseTimer = e.curseTimer;
+  if (Number.isFinite(e.rotTimer) && e.rotTimer > 0) base.rotTimer = e.rotTimer;
+  if (Number.isFinite(e.rotDps) && e.rotDps > 0) base.rotDps = e.rotDps;
   const controlledColor = resolveControlledEnemyColor(room, e);
   if (controlledColor) base.controlledColor = controlledColor;
   switch (e.type) {

@@ -1,6 +1,7 @@
 import { getRangerDodgeChance, getRangerSkillPointGainForLevel, hasFoxstep } from "./rangerTalentTree.js";
 import {
   getWarriorBattleFrenzyDuration,
+  getWarriorConsecratedDamageReductionPct,
   getWarriorConsecratedHealingMultiplier,
   getWarriorGuardedAdvanceCounterChance,
   getWarriorGuardedAdvanceMeleeDefenseBonusPct,
@@ -17,6 +18,7 @@ import {
   isWarriorRaging,
   isWarriorTalentGame
 } from "./warriorTalentTree.js";
+import { getNecromancerRotTouchedRetaliationDamage, getNecromancerSkillPointGainForLevel, getNecromancerVigorMoveSpeedBonusPct } from "./necromancerTalentTree.js";
 
 export const runtimeBaseSupportMethods = {
   getActivePlayerEntities() {
@@ -196,6 +198,11 @@ export const runtimeBaseSupportMethods = {
         moveBonus += entity === this.player ? getWarriorRedTempestMoveSpeedBonus(this) : ((entity?.warriorTalents?.redTempest?.points || 0) > 0 ? 0.2 : 0);
       }
     }
+    if (entity?.classType === "necromancer") {
+      moveBonus += entity === this.player
+        ? getNecromancerVigorMoveSpeedBonusPct(this)
+        : ((entity?.necromancerRuntime?.vigorTimer || 0) > 0 ? 0.25 : 0);
+    }
     return (classSpec.baseMoveSpeed + levelBonus) * (1 + moveBonus);
   },
 
@@ -242,6 +249,7 @@ export const runtimeBaseSupportMethods = {
       }
       player.warriorRuntime = player.warriorRuntime && typeof player.warriorRuntime === "object" ? player.warriorRuntime : {};
       player.warriorRuntime.secondWindTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.secondWindTimer) ? player.warriorRuntime.secondWindTimer : 0) - dt);
+      player.warriorRuntime.battleFrenzyCooldownTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.battleFrenzyCooldownTimer) ? player.warriorRuntime.battleFrenzyCooldownTimer : 0) - dt);
       player.warriorRuntime.tempHpTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.tempHpTimer) ? player.warriorRuntime.tempHpTimer : 0) - dt);
       player.warriorRuntime.rageArcTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.rageArcTimer) ? player.warriorRuntime.rageArcTimer : 0) - dt);
       player.warriorRuntime.cheatDeathCooldown = Math.max(0, (Number.isFinite(player.warriorRuntime.cheatDeathCooldown) ? player.warriorRuntime.cheatDeathCooldown : 0) - dt);
@@ -255,6 +263,19 @@ export const runtimeBaseSupportMethods = {
       } else if ((player.warriorRuntime.secondWindTimer || 0) <= 0) {
         player.warriorRuntime.secondWindPool = 0;
       }
+      player.necromancerRuntime = player.necromancerRuntime && typeof player.necromancerRuntime === "object" ? player.necromancerRuntime : {};
+      player.necromancerRuntime.vigorTimer = Math.max(0, (Number.isFinite(player.necromancerRuntime.vigorTimer) ? player.necromancerRuntime.vigorTimer : 0) - dt);
+      player.necromancerRuntime.vigorBeamTimer = Math.max(0, (Number.isFinite(player.necromancerRuntime.vigorBeamTimer) ? player.necromancerRuntime.vigorBeamTimer : 0) - dt);
+      if ((player.necromancerRuntime.vigorTimer || 0) > 0 && (player.necromancerRuntime.vigorHealPool || 0) > 0 && player.alive) {
+        const timer = Math.max(dt, player.necromancerRuntime.vigorTimer);
+        const healAmount = Math.min(player.necromancerRuntime.vigorHealPool, (player.necromancerRuntime.vigorHealPool / timer) * dt);
+        player.necromancerRuntime.vigorHealPool = Math.max(0, player.necromancerRuntime.vigorHealPool - healAmount);
+        if (this.isPrimaryPlayerEntity(player)) this.applyPlayerHealing(healAmount, { suppressText: true });
+        else player.health = Math.min(player.maxHealth || player.health || 0, (player.health || 0) + healAmount);
+      } else if ((player.necromancerRuntime.vigorTimer || 0) <= 0) {
+        player.necromancerRuntime.vigorHealPool = 0;
+      }
+      player.necromancerRuntime.tempHp = Math.max(0, Number.isFinite(player.necromancerRuntime.tempHp) ? player.necromancerRuntime.tempHp : 0);
       if (!this.isPrimaryPlayerEntity(player)) {
         player.warriorMomentumTimer = Math.max(0, (Number.isFinite(player.warriorMomentumTimer) ? player.warriorMomentumTimer : 0) - dt);
         player.warriorRageActiveTimer = Math.max(0, (Number.isFinite(player.warriorRageActiveTimer) ? player.warriorRageActiveTimer : 0) - dt);
@@ -282,10 +303,12 @@ export const runtimeBaseSupportMethods = {
     if (!Number.isFinite(amount) || amount <= 0) return 0;
     const rangerDodgeChance = entity === this.player
       ? getRangerDodgeChance(this)
-      : ((entity?.rangerTalents?.fleetstep?.points || 0) * 0.05);
+      : ((entity?.rangerTalents?.fleetstep?.points || 0) > 0 ? 0.15 : 0);
     if (entity?.classType === "archer" && Math.random() < rangerDodgeChance) return 0;
     if (entity?.classType === "archer" && (entity?.rangerRuntime?.foxstepActiveTimer || 0) > 0) return amount * 0.5;
     if (entity?.classType === "fighter") {
+      const consecratedZone = this.getCrusaderConsecratedZoneForEntity(entity);
+      if (consecratedZone) amount *= 1 - (entity === this.player ? getWarriorConsecratedDamageReductionPct(this) : ((entity?.warriorTalents?.guardedAdvance?.points || 0) > 0 ? 0.05 : 0));
       const hpRatio = Number.isFinite(entity?.maxHealth) && entity.maxHealth > 0 ? (entity.health || 0) / entity.maxHealth : 1;
       const lowHealthReduction = entity === this.player
         ? getWarriorUnbrokenDamageReduction(this, hpRatio)
@@ -306,6 +329,7 @@ export const runtimeBaseSupportMethods = {
 
   getSkillPointGainForLevel(level, classType = this.classType) {
     if (classType === "fighter") return getWarriorSkillPointGainForLevel(level, classType);
+    if (classType === "necromancer") return getNecromancerSkillPointGainForLevel(level, classType);
     return getRangerSkillPointGainForLevel(level, classType);
   },
 
@@ -363,7 +387,7 @@ export const runtimeBaseSupportMethods = {
       entity.skillPoints += this.getSkillPointGainForLevel(entity.level, entity.classType);
       const hpGain = Number.isFinite(classSpec.levelHpGain) ? classSpec.levelHpGain : 10;
       let adjustedHpGain = hpGain;
-      if (entity.classType === "archer") adjustedHpGain = hpGain * (1 + (entity?.rangerTalents?.fleetstep?.points || 0) * 0.02);
+      if (entity.classType === "archer") adjustedHpGain = hpGain * (1 + ((entity?.rangerTalents?.fleetstep?.points || 0) > 0 ? 0.06 : 0));
       else if (entity.classType === "fighter") adjustedHpGain = hpGain * (1 + getWarriorIronGuardMaxHealthBonusPct(entity));
       entity.maxHealth = (Number.isFinite(entity.maxHealth) ? entity.maxHealth : 0) + adjustedHpGain;
       entity.health = Math.min(entity.maxHealth, (Number.isFinite(entity.health) ? entity.health : 0) + adjustedHpGain);
@@ -398,7 +422,14 @@ export const runtimeBaseSupportMethods = {
       : this.getPlayerSkillPointsFor(entity, "warriorMomentum");
     if (points <= 0) return;
     const wasInactive = (entity.warriorMomentumTimer || 0) <= 0;
-    entity.warriorMomentumTimer = Math.max(entity.warriorMomentumTimer || 0, entity?.classType === "fighter" ? getWarriorBattleFrenzyDuration() : 0.85 + 0.9 * Math.log1p(1.2 * Math.max(0, points))) + (entity?.classType === "fighter" ? 0.1 : 0);
+    if (entity?.classType === "fighter") {
+      entity.warriorRuntime = entity.warriorRuntime && typeof entity.warriorRuntime === "object" ? entity.warriorRuntime : {};
+      if ((entity.warriorRuntime.battleFrenzyCooldownTimer || 0) > 0) return;
+      entity.warriorMomentumTimer = getWarriorBattleFrenzyDuration();
+      entity.warriorRuntime.battleFrenzyCooldownTimer = 10;
+    } else {
+      entity.warriorMomentumTimer = Math.max(entity.warriorMomentumTimer || 0, 0.85 + 0.9 * Math.log1p(1.2 * Math.max(0, points)));
+    }
     if (wasInactive) entity.speed = this.getPlayerMoveSpeedFor(entity);
   },
 
@@ -505,9 +536,19 @@ export const runtimeBaseSupportMethods = {
   applyDamageToPlayerEntity(entity, amount, damageType = "physical", source = null) {
     if (!entity || amount <= 0) return;
     entity.warriorRuntime = entity.warriorRuntime && typeof entity.warriorRuntime === "object" ? entity.warriorRuntime : {};
+    entity.necromancerRuntime = entity.necromancerRuntime && typeof entity.necromancerRuntime === "object" ? entity.necromancerRuntime : {};
     if ((entity.warriorRuntime.tempHp || 0) > 0) {
       const absorbed = Math.min(entity.warriorRuntime.tempHp, amount);
       entity.warriorRuntime.tempHp = Math.max(0, entity.warriorRuntime.tempHp - absorbed);
+      amount = Math.max(0, amount - absorbed);
+      if (amount <= 0) {
+        this.spawnFloatingText(entity.x, entity.y - 18, "Blocked", "#d9d1ff", 0.65, 13);
+        return;
+      }
+    }
+    if ((entity.necromancerRuntime.tempHp || 0) > 0) {
+      const absorbed = Math.min(entity.necromancerRuntime.tempHp, amount);
+      entity.necromancerRuntime.tempHp = Math.max(0, entity.necromancerRuntime.tempHp - absorbed);
       amount = Math.max(0, amount - absorbed);
       if (amount <= 0) {
         this.spawnFloatingText(entity.x, entity.y - 18, "Blocked", "#d9d1ff", 0.65, 13);
@@ -549,6 +590,18 @@ export const runtimeBaseSupportMethods = {
           Math.hypot((enemy.x || 0) - (entity.x || 0), (enemy.y || 0) - (entity.y || 0)) <= ((enemy.size || 20) + (entity.size || 22)) * 0.8
         );
         if (target) this.applyEnemyDamage(target, Math.max(1, amount), "melee", entity.id || null);
+      }
+    }
+    if (entity.classType === "necromancer") {
+      const retaliationDamage = entity === this.player ? getNecromancerRotTouchedRetaliationDamage(this) : ((entity?.necromancerTalents?.rotTouched?.points || 0) > 0 ? 5 : 0);
+      if (retaliationDamage > 0) {
+        const target = (this.enemies || []).find((enemy) =>
+          enemy &&
+          (enemy.hp || 0) > 0 &&
+          !this.isEnemyFriendlyToPlayer(enemy) &&
+          Math.hypot((enemy.x || 0) - (entity.x || 0), (enemy.y || 0) - (entity.y || 0)) <= ((enemy.size || 20) + (entity.size || 22)) * 0.9
+        );
+        if (target) this.applyEnemyDamage(target, retaliationDamage, "poison", entity.id || null);
       }
     }
     if (entity.classType === "fighter" && entity.health <= 0) {

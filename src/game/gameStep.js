@@ -1,6 +1,17 @@
 import { vecLength, directionIndexFromVector } from "../utils.js";
 import { resolveCombatAndDrops } from "./stepCombatResolution.js";
 import { getWarriorPassiveRegenBonusPct, isWarriorTalentGame } from "./warriorTalentTree.js";
+import {
+  getNecromancerBlackCandleCursedBeamBonus,
+  getNecromancerBeamDamageMultiplier,
+  getNecromancerBeamPulseRateMultiplier,
+  getNecromancerCurseDuration,
+  getNecromancerDeathBoltMasteryTempHpOnKill,
+  getNecromancerTempHpCap,
+  getNecromancerVigorBeamDamageMultiplier,
+  hasNecromancerBlightstorm,
+  isNecromancerTalentGame
+} from "./necromancerTalentTree.js";
 
 export function stepGame(game, dt, controls = {}) {
   const segmentRectHit = (x0, y0, x1, y1, left, top, right, bottom) => {
@@ -74,6 +85,9 @@ export function stepGame(game, dt, controls = {}) {
   game.warriorRageCooldownTimer = Math.max(0, (Number.isFinite(game.warriorRageCooldownTimer) ? game.warriorRageCooldownTimer : 0) - dt);
   game.warriorRageVictoryRushTimer = Math.max(0, (Number.isFinite(game.warriorRageVictoryRushTimer) ? game.warriorRageVictoryRushTimer : 0) - dt);
   game.warriorRuntime = game.warriorRuntime && typeof game.warriorRuntime === "object" ? game.warriorRuntime : {};
+  game.warriorRuntime.battleFrenzyCooldownTimer = Math.max(0, (Number.isFinite(game.warriorRuntime.battleFrenzyCooldownTimer) ? game.warriorRuntime.battleFrenzyCooldownTimer : 0) - dt);
+  game.necromancerRuntime = game.necromancerRuntime && typeof game.necromancerRuntime === "object" ? game.necromancerRuntime : {};
+  game.necromancerRuntime.vigorTimer = Math.max(0, (Number.isFinite(game.necromancerRuntime.vigorTimer) ? game.necromancerRuntime.vigorTimer : 0) - dt);
   game.rangerDanceMoveTimer = Math.max(0, (Number.isFinite(game.rangerDanceMoveTimer) ? game.rangerDanceMoveTimer : 0) - dt);
   game.rangerDanceOfThornsTimer = Math.max(0, (Number.isFinite(game.rangerDanceOfThornsTimer) ? game.rangerDanceOfThornsTimer : 0) - dt);
   game.passiveRegenTimer = Math.max(-4, (Number.isFinite(game.passiveRegenTimer) ? game.passiveRegenTimer : 2) - dt);
@@ -95,6 +109,18 @@ export function stepGame(game, dt, controls = {}) {
     game.applyPlayerHealing(healAmount, { suppressText: true });
   } else if ((game.warriorRageVictoryRushTimer || 0) <= 0) {
     game.warriorRageVictoryRushPool = 0;
+  }
+  if (
+    (game.necromancerRuntime.vigorHealPool || 0) > 0 &&
+    (game.necromancerRuntime.vigorTimer || 0) > 0 &&
+    primaryPlayerAlive
+  ) {
+    const timer = Math.max(dt, game.necromancerRuntime.vigorTimer);
+    const healAmount = Math.min(game.necromancerRuntime.vigorHealPool, (game.necromancerRuntime.vigorHealPool / timer) * dt);
+    game.necromancerRuntime.vigorHealPool = Math.max(0, game.necromancerRuntime.vigorHealPool - healAmount);
+    game.applyPlayerHealing(healAmount, { suppressText: true });
+  } else if ((game.necromancerRuntime.vigorTimer || 0) <= 0) {
+    game.necromancerRuntime.vigorHealPool = 0;
   }
   while (game.passiveRegenTimer <= 0) {
     game.passiveRegenTimer += 2;
@@ -207,12 +233,15 @@ export function stepGame(game, dt, controls = {}) {
       targetY: 0,
       progress: 0,
       healTickTimer: 0,
+      mode: "idle",
       targetEnemy: null
     });
     for (const enemy of game.enemies || []) enemy.charmLocked = false;
     const beamRange = (game.config.necromancer?.controlRangeTiles || 10) * game.config.map.tile;
     const beamWidth = Number.isFinite(game.config.necromancer?.beamWidth) ? game.config.necromancer.beamWidth : 11;
+    const beamDamagePeriod = 1.0 / getNecromancerBeamPulseRateMultiplier(game);
     const held = !!controls.firePrimaryHeld && !!controls.hasAim;
+    const offensiveBeamEnabled = isNecromancerTalentGame(game);
     if (!beam.failLatch) beam.failLatch = false;
     beam.active = held;
     beam.targetId = null;
@@ -245,6 +274,7 @@ export function stepGame(game, dt, controls = {}) {
         beam.targetY = hitBreakable.y;
         beam.progress = 0;
         beam.healTickTimer = 0;
+        beam.mode = "idle";
         hitBreakable.hp = 0;
         beam.failLatch = false;
       }
@@ -268,10 +298,11 @@ export function stepGame(game, dt, controls = {}) {
         }
         return best;
       })();
-      if (!hitBreakable && invalidTarget && (!game.isUndeadEnemy(invalidTarget) || (!game.isControlledUndead(invalidTarget) && !game.canControlMoreUndead()))) {
+      if (!hitBreakable && invalidTarget && (!game.isUndeadEnemy(invalidTarget) || (!game.isControlledUndead(invalidTarget) && !game.canControlMoreUndead())) && !offensiveBeamEnabled) {
         beam.active = false;
         beam.progress = 0;
         beam.healTickTimer = 0;
+        beam.mode = "idle";
         if (!beam.failLatch) {
           game.spawnFloatingText(controls.aimX, controls.aimY - 10, "Fail!", "#ef5b5b", 0.7, 15);
           beam.failLatch = true;
@@ -281,13 +312,17 @@ export function stepGame(game, dt, controls = {}) {
       }
     } else {
       beam.failLatch = false;
+      beam.mode = "idle";
     }
     if (beam.active) {
       let bestTarget = null;
       let bestDist = Number.POSITIVE_INFINITY;
       for (const enemy of game.enemies) {
-        if (!game.isUndeadEnemy(enemy) || (enemy.hp || 0) <= 0) continue;
+        if ((enemy.hp || 0) <= 0) continue;
         if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+        const validCharmTarget = game.isUndeadEnemy(enemy);
+        const validBeamTarget = validCharmTarget || offensiveBeamEnabled;
+        if (!validBeamTarget) continue;
         const beamDist = vecLength(enemy.x - game.player.x, enemy.y - game.player.y);
         if (beamDist > beamRange) continue;
         if (!beamHasLineOfSight(game.player.x, game.player.y, enemy.x, enemy.y)) continue;
@@ -300,12 +335,13 @@ export function stepGame(game, dt, controls = {}) {
           bestTarget = enemy;
         }
       }
-      if (bestTarget) {
+        if (bestTarget) {
         beam.targetId = bestTarget.id || null;
         beam.targetEnemy = bestTarget;
         beam.targetX = bestTarget.x;
         beam.targetY = bestTarget.y;
         if (game.isControlledUndead(bestTarget)) {
+          beam.mode = "heal";
           beam.progress = 0;
           beam.healTickTimer = (beam.healTickTimer || 0) + dt;
           const healPeriod = game.config.necromancer?.healTickSeconds || 0.2;
@@ -313,7 +349,8 @@ export function stepGame(game, dt, controls = {}) {
             beam.healTickTimer -= healPeriod;
             game.healControlledUndead(bestTarget, game.getNecroticBeamHealAmount());
           }
-        } else {
+        } else if (game.isUndeadEnemy(bestTarget) && game.canControlMoreUndead()) {
+          beam.mode = "charm";
           beam.healTickTimer = 0;
           bestTarget.charmLocked = true;
           beam.progress += dt;
@@ -323,12 +360,41 @@ export function stepGame(game, dt, controls = {}) {
               game.spawnFloatingText(bestTarget.x, bestTarget.y - bestTarget.size * 0.7, "Charmed", "#8eb8ff", 0.9, 14);
             }
           }
+        } else if (offensiveBeamEnabled) {
+          const firstDamageDelay = 0.2;
+          if (beam.mode !== "offense") beam.healTickTimer = Math.max(0, beamDamagePeriod - firstDamageDelay);
+          beam.mode = "offense";
+          beam.progress = 0;
+          beam.healTickTimer = (beam.healTickTimer || 0) + dt;
+          while (beam.healTickTimer >= beamDamagePeriod) {
+            beam.healTickTimer -= beamDamagePeriod;
+            const damage = game.getDeathBoltBaseDamage() * 0.27 * getNecromancerBeamDamageMultiplier(game) * (1 + getNecromancerBlackCandleCursedBeamBonus(game, bestTarget)) * getNecromancerVigorBeamDamageMultiplier(game);
+            const hpBefore = Number.isFinite(bestTarget.hp) ? bestTarget.hp : 0;
+            game.applyEnemyDamage(bestTarget, damage, "necrotic", game.player.id || null);
+            if (hasNecromancerBlightstorm(game)) {
+              bestTarget.curseTimer = Math.max(bestTarget.curseTimer || 0, getNecromancerCurseDuration(game));
+            }
+            if (hpBefore > 0 && (bestTarget.hp || 0) <= 0) {
+              const tempHpGain = getNecromancerDeathBoltMasteryTempHpOnKill(game);
+              if (tempHpGain > 0) {
+                const runtime = game.necromancerRuntime || (game.necromancerRuntime = {});
+                const cap = getNecromancerTempHpCap(game);
+                runtime.tempHp = Math.min(cap, Math.max(0, Number.isFinite(runtime.tempHp) ? runtime.tempHp : 0) + tempHpGain);
+                if (typeof game.markPlayerHealthBarVisible === "function") game.markPlayerHealthBarVisible();
+                if (typeof game.spawnFloatingText === "function") {
+                  game.spawnFloatingText(game.player.x, game.player.y - 34, `+${tempHpGain} THP`, "#9edcff", 0.7, 13);
+                }
+              }
+            }
+          }
         }
       } else {
+        beam.mode = "idle";
         beam.progress = 0;
         beam.healTickTimer = 0;
       }
     } else {
+      beam.mode = "idle";
       beam.progress = 0;
       beam.healTickTimer = 0;
     }

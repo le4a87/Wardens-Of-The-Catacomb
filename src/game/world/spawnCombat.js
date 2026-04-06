@@ -144,6 +144,10 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical", o
     enemy.dormant = false;
     enemy.revealed = true;
   }
+  if ((enemy?.curseTimer || 0) > 0) {
+    adjusted *= 1.25;
+    if (damageType === "poison") adjusted *= 1.25;
+  }
   const defense = game.getEnemyDefenseScale() * (Number.isFinite(enemy?.controlledDefenseMultiplier) ? Math.max(0.1, enemy.controlledDefenseMultiplier) : 1);
   if (!Number.isFinite(defense) || defense <= 0) return;
   const effective = adjusted / defense;

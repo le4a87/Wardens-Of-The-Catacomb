@@ -1,6 +1,13 @@
 import { hasWarriorCrusaderInvestment, isWarriorRaging } from "../game/warriorTalentTree.js";
 
 export const rendererEffectsPlayerMethods = {
+  getPlayerTempHp(entity) {
+    if (!entity || typeof entity !== "object") return 0;
+    const warriorTemp = Number.isFinite(entity?.warriorRuntime?.tempHp) ? entity.warriorRuntime.tempHp : 0;
+    const necromancerTemp = Number.isFinite(entity?.necromancerRuntime?.tempHp) ? entity.necromancerRuntime.tempHp : 0;
+    return Math.max(0, warriorTemp + necromancerTemp);
+  },
+
   getReplicatedPlayerClassSpec(player) {
     const classType = player?.classType;
     return this.config.classes[classType] || this.config.classes.archer;
@@ -300,17 +307,38 @@ export const rendererEffectsPlayerMethods = {
     if (!game.shouldShowPlayerHealthBar || !game.shouldShowPlayerHealthBar()) return;
     const ctx = this.ctx;
     const ratio = p.maxHealth > 0 ? Math.max(0, Math.min(1, p.health / p.maxHealth)) : 0;
+    const tempHp = this.getPlayerTempHp(p);
+    const tempRatio = p.maxHealth > 0 ? Math.max(0, Math.min(0.2, tempHp / p.maxHealth)) : 0;
     const width = 52;
+    const totalWidth = Math.round(width * 1.2);
     const height = 6;
-    const x = Math.floor(p.x - cameraX - width / 2);
+    const x = Math.floor(p.x - cameraX - totalWidth / 2);
     const y = Math.floor(p.y - cameraY - 36);
 
     ctx.fillStyle = "rgba(15, 18, 24, 0.9)";
-    ctx.fillRect(x - 1, y - 1, width + 2, height + 2);
+    ctx.fillRect(x - 1, y - 1, totalWidth + 2, height + 2);
     ctx.fillStyle = "#2f3a4e";
-    ctx.fillRect(x, y, width, height);
+    ctx.fillRect(x, y, totalWidth, height);
+    ctx.fillStyle = "rgba(85, 122, 163, 0.3)";
+    ctx.fillRect(x + width, y, totalWidth - width, height);
     ctx.fillStyle = ratio > 0.5 ? "#76db8d" : ratio > 0.25 ? "#e1bf63" : "#df6767";
     ctx.fillRect(x, y, width * ratio, height);
+    if (tempRatio > 0) {
+      const tempStart = x + width * ratio;
+      const tempWidth = Math.min(width * tempRatio, totalWidth - width * ratio);
+      ctx.fillStyle = "#b8ecff";
+      ctx.fillRect(tempStart, y, tempWidth, height);
+      ctx.fillStyle = "rgba(184, 236, 255, 0.22)";
+      ctx.fillRect(tempStart, y - 1, tempWidth, 2);
+    }
+    ctx.strokeStyle = "rgba(175, 193, 222, 0.45)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, totalWidth - 1, height - 1);
+    ctx.strokeStyle = "rgba(114, 137, 171, 0.55)";
+    ctx.beginPath();
+    ctx.moveTo(x + width + 0.5, y + 0.5);
+    ctx.lineTo(x + width + 0.5, y + height - 0.5);
+    ctx.stroke();
   },
 
   drawFloatingTexts(game, cameraX, cameraY) {

@@ -68,7 +68,7 @@ function updateFriendlySkeletonBodyguard(game, enemy, dt, speedScale, attackRang
     enemy.dirY = dy / dist;
     if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "guard");
     if (attackRange > 0 && dist <= attackRange && (enemy.attackCooldown || 0) <= 0) {
-      enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+      enemy.attackCooldown = (game.config.enemy.skeletonWarriorAttackCooldown || 1.0) / Math.max(0.4, 1 + (enemy.controlledAttackSpeedBonusPct || 0));
       game.applyEnemyDamage(guardThreat, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical", ownerId);
       return true;
     }
@@ -256,7 +256,7 @@ export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
   enemy.dirX = dx / dist;
   enemy.dirY = dy / dist;
   if (dist <= range && enemy.attackCooldown <= 0) {
-    enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+    enemy.attackCooldown = (game.config.enemy.skeletonWarriorAttackCooldown || 1.0) / Math.max(0.4, 1 + (enemy.controlledAttackSpeedBonusPct || 0));
     if (game.isPlayerEntity && game.isPlayerEntity(target) && (target.hitCooldown || 0) <= 0) {
       target.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);

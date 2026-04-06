@@ -41,17 +41,18 @@ const RANGER_TALENT_DEFS = [
     ]
   },
   {
-    key: "fleetstep",
-    label: "Fleetstep",
+    key: "multiShotArrow",
+    label: "Multi-Shot Arrow",
     row: 1,
     lane: "skirmisher",
     maxRanks: 3,
-    icon: "FS",
+    icon: "MS",
     color: "#78dcb6",
     description: [
-      "+4% move speed per rank.",
-      "+2% max health per rank.",
-      "+5% dodge per rank. Dodge gameplay is scaffolded for now."
+      "+1 extra arrow per rank.",
+      "+25% trap perception per rank.",
+      "+25% hidden-monster perception per rank.",
+      "Perception gameplay is scaffolded for now."
     ]
   },
   {
@@ -78,22 +79,22 @@ const RANGER_TALENT_DEFS = [
     description: [
       "Fire Arrow replaces its circle with a 4-tile burning line.",
       "The line starts at detonation and extends forward in the shot direction.",
-      "Enemies in the line are slowed by 25%."
+      "Enemies in the line are slowed by 25%.",
+      "Arrows that pass through the line deal 10% more damage."
     ]
   },
   {
-    key: "multiShotArrow",
-    label: "Multi-Shot Arrow",
+    key: "fleetstep",
+    label: "Fleetstep",
     row: 2,
     lane: "skirmisher",
-    maxRanks: 3,
-    icon: "MS",
+    maxRanks: 1,
+    icon: "FS",
     color: "#7ad39f",
     description: [
-      "+1 extra arrow per rank.",
-      "+25% trap perception per rank.",
-      "+25% hidden-monster perception per rank.",
-      "Perception gameplay is scaffolded for now."
+      "+12% move speed.",
+      "+6% max health.",
+      "+15% dodge. Dodge gameplay is scaffolded for now."
     ]
   },
   {
@@ -149,7 +150,7 @@ const RANGER_TALENT_DEFS = [
     icon: "VC",
     color: "#ffc36e",
     description: [
-      "-0.33s Fire Arrow cooldown per rank.",
+      "-1.0s Fire Arrow cooldown per rank.",
       "+8% fire damage per rank.",
       "+10% Fire Arrow damage per rank.",
       "Increase Fire Arrow projectile size per rank."
@@ -193,7 +194,7 @@ const RANGER_TALENT_DEFS = [
       "Without Pinning Shot, Fire Arrow radius is increased by 50%.",
       "With Pinning Shot, the line grows from 4 tiles to 8 tiles.",
       "+20% fire damage.",
-      "Burning enemies take 25% more arrow damage.",
+      "Burning enemies take 15% more arrow damage.",
       "Burning enemies can spread fire to nearby enemies."
     ]
   }
@@ -418,15 +419,15 @@ export function getRangerDamageBonus(game) {
 }
 
 export function getRangerMoveSpeedBonus(game) {
-  return getRangerTalentPoints(game, "fleetstep") * 0.04;
+  return getRangerTalentPoints(game, "fleetstep") > 0 ? 0.12 : 0;
 }
 
 export function getRangerMaxHealthBonusPct(game) {
-  return getRangerTalentPoints(game, "fleetstep") * 0.02;
+  return getRangerTalentPoints(game, "fleetstep") > 0 ? 0.06 : 0;
 }
 
 export function getRangerDodgeChance(game) {
-  return getRangerTalentPoints(game, "fleetstep") * 0.05;
+  return getRangerTalentPoints(game, "fleetstep") > 0 ? 0.15 : 0;
 }
 
 export function getRangerIgniteChance(game) {
@@ -474,7 +475,7 @@ export function getRangerMultishotBonus(game) {
 }
 
 export function getRangerVolleyCooldownReduction(game) {
-  return getRangerTalentPoints(game, "volleycraft") * 0.33;
+  return getRangerTalentPoints(game, "volleycraft") * 1;
 }
 
 export function getRangerFireArrowProjectileSizeBonus(game) {
@@ -535,13 +536,14 @@ export function isEnemyBurning(game, enemy) {
 
 export function getRangerArrowBonusAgainstEnemy(game, enemy) {
   if (!isEnemyBurning(game, enemy)) return 1;
-  return hasWildfireVolley(game) ? 1.25 : 1;
+  return hasWildfireVolley(game) ? 1.15 : 1;
 }
 
 export function getRangerSkillPointGainForLevel(level, classType) {
   if (classType !== "archer") return 1;
   const safeLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
   if (safeLevel < 2) return 0;
-  if (safeLevel <= 9) return 1;
+  if (safeLevel === 2) return 2;
+  if (safeLevel <= 11) return 1;
   return safeLevel % 2 === 0 ? 1 : 0;
 }

@@ -1,4 +1,5 @@
 import { drawStatsGameOverActions } from "./statsGameOverActions.js";
+import { getNecromancerTalentPoints } from "../../game/necromancerTalentTree.js";
 
 function formatEnemyTypeLabel(type) {
   const raw = typeof type === "string" && type.length > 0 ? type : "unknown";
@@ -256,8 +257,11 @@ function buildRunColumns(game) {
 
 function buildCharacterColumns(game) {
   const dmgRange = game.getPrimaryDamageRange();
+  const tempHp =
+    Math.max(0, Number.isFinite(game.player?.warriorRuntime?.tempHp) ? game.player.warriorRuntime.tempHp : 0) +
+    Math.max(0, Number.isFinite(game.player?.necromancerRuntime?.tempHp) ? game.player.necromancerRuntime.tempHp : 0);
   const core = createSection("Core", [
-    ["Health", `${Math.round(game.player.health)}/${Math.round(game.player.maxHealth)}`],
+    ["Health", `${Math.round(game.player.health)}/${Math.round(game.player.maxHealth)}${tempHp > 0 ? ` (+${Math.round(tempHp)} THP)` : ""}`],
     ["XP", `${game.experience}/${game.expToNextLevel}`],
     ["Move Speed", `${game.getPlayerMoveSpeed().toFixed(1)}`],
     ["Pickup Radius", `${game.getPickupRadius().toFixed(1)}`],
@@ -306,12 +310,13 @@ function buildCharacterColumns(game) {
     ]);
   } else if (game.isNecromancerClass && game.isNecromancerClass()) {
     classKit = createSection("Necromancer Kit", [
-      ["Control Mastery", `Lv ${game.skills.undeadMastery.points}`],
+      ["Control Mastery", `Lv ${getNecromancerTalentPoints(game, "controlMastery")}`],
+      ["Cold Command", `Lv ${getNecromancerTalentPoints(game, "coldCommand")}`],
       ["Controlled Undead", `${game.getControlledUndeadCount()}/${game.getNecromancerControlCap()}`],
       ["Charm Time", `${game.getNecromancerCharmDuration().toFixed(2)}s`],
-      ["Death Bolt", `Lv ${game.skills.deathBolt.points}`],
+      ["Death Bolt", `Lv ${getNecromancerTalentPoints(game, "deathBoltActive")}`],
       ["Death Bolt Dmg", `${game.getDeathBoltBaseDamage().toFixed(1)}`],
-      ["Augment Death", `Lv ${game.skills.explodingDeath.points}`]
+      ["Plaguecraft", `Lv ${getNecromancerTalentPoints(game, "plaguecraft")}`]
     ]);
   }
 

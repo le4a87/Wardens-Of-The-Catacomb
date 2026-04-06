@@ -72,6 +72,43 @@ export const rendererEffectsProjectileMethods = {
       }
     }
 
+    const drawHarvesterAura = (player) => {
+      if (!player || player.classType !== "necromancer") return;
+      const hasHarvester = player === game.player
+        ? (game.necromancerTalents?.harvester?.points || 0) > 0
+        : (player?.necromancerTalents?.harvester?.points || 0) > 0;
+      if (!hasHarvester) return;
+      const x = (player.x || 0) - cameraX;
+      const y = (player.y || 0) - cameraY;
+      const radius = (game.config?.map?.tile || 32);
+      const pulse = 0.96 + Math.sin(game.time * 3.4 + (player.x || 0) * 0.01) * 0.05;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = "rgba(8, 4, 14, 0.14)";
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        const phase = game.time * (1.5 + i * 0.25) + i * 2.1;
+        const start = phase;
+        const end = phase + Math.PI * (1.05 + i * 0.08);
+        ctx.strokeStyle = `rgba(42, 18, 56, ${0.34 - i * 0.08})`;
+        ctx.lineWidth = 5 - i;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * (0.58 + i * 0.18), start, end);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(104, 74, 126, 0.28)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.98, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    drawHarvesterAura(game.player);
+    for (const player of game.remotePlayers || []) drawHarvesterAura(player);
+
     const drawArrowLikeProjectile = (projectile, alpha = 1) => {
       const x = projectile.x - cameraX;
       const y = projectile.y - cameraY;
@@ -410,7 +447,7 @@ export const rendererEffectsProjectileMethods = {
       }
       return;
     }
-    if (zone.zoneType === "deathBolt" || zone.zoneType === "deathBurst") {
+    if (zone.zoneType === "deathBolt") {
       const lifeFrac = Math.max(0, Math.min(1, zone.life / (this.config.deathBolt?.visualLife || 0.35)));
       const outer = ctx.createRadialGradient(x, y, 2, x, y, zone.radius);
       outer.addColorStop(0, `rgba(190, 255, 210, ${0.38 * lifeFrac})`);
@@ -420,6 +457,27 @@ export const rendererEffectsProjectileMethods = {
       ctx.beginPath();
       ctx.arc(x, y, zone.radius, 0, Math.PI * 2);
       ctx.fill();
+      return;
+    }
+    if (zone.zoneType === "deathBurst") {
+      const totalLife = this.config.deathBolt?.visualLife || 0.35;
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / totalLife));
+      const pulse = 0.9 + Math.sin(time * 14 + zone.x * 0.03 + zone.y * 0.02) * 0.09;
+      const outer = ctx.createRadialGradient(x, y, 2, x, y, zone.radius * pulse);
+      outer.addColorStop(0, `rgba(230, 176, 255, ${0.32 * lifeFrac + 0.18})`);
+      outer.addColorStop(0.42, `rgba(112, 48, 158, ${0.28 * lifeFrac + 0.14})`);
+      outer.addColorStop(1, `rgba(18, 6, 32, ${0.12 * lifeFrac})`);
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(x, y, zone.radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        ctx.strokeStyle = `rgba(148, 78, 198, ${0.44 * lifeFrac - i * 0.08})`;
+        ctx.lineWidth = 3 - i * 0.6;
+        ctx.beginPath();
+        ctx.arc(x, y, zone.radius * (0.46 + i * 0.18), time * (1.4 + i * 0.22), time * (1.4 + i * 0.22) + Math.PI * 1.35);
+        ctx.stroke();
+      }
       return;
     }
     if (zone.zoneType === "crusaderAura") {

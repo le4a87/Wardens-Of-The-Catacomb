@@ -444,7 +444,7 @@ export const CONFIG = {
     healTickSeconds: 0.2,
     healAmount: 3,
     healSelfCost: 1,
-    baseControlCap: 2,
+    baseControlCap: 3,
     followDistanceTiles: 2.2,
     leashDistanceTiles: 4.5,
     aggroRangeTiles: 6.5,

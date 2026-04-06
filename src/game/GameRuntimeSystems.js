@@ -270,7 +270,7 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
       this.skillPoints += this.getSkillPointGainForLevel(this.level, this.classType);
       const hpGain = Number.isFinite(this.classSpec.levelHpGain) ? this.classSpec.levelHpGain : 10;
       let adjustedHpGain = hpGain;
-      if (this.classType === "archer") adjustedHpGain = hpGain * (1 + getRangerTalentPoints(this, "fleetstep") * 0.02);
+      if (this.classType === "archer") adjustedHpGain = hpGain * (1 + (getRangerTalentPoints(this, "fleetstep") > 0 ? 0.06 : 0));
       else if (isWarriorTalentGame(this)) adjustedHpGain = hpGain * (1 + getWarriorIronGuardMaxHealthBonusPct(this));
       this.player.maxHealth += adjustedHpGain;
       this.player.health = Math.min(this.player.maxHealth, this.player.health + adjustedHpGain);

@@ -12,8 +12,11 @@ import {
   shouldSpreadWildfire
 } from "./rangerTalentTree.js";
 import {
+  getWarriorButchersPathNextHitArcBonus,
+  getWarriorButchersPathNextHitDamageBonus,
   getWarriorBattleFrenzyDamageBonus,
   getWarriorCrusaderUndeadDamageBonus,
+  getWarriorExecutionerRageCleaveWidthBonus,
   getWarriorExecutionerRageRangeBonus,
   getWarriorHeavyHandCleaveArcBonus,
   getWarriorHeavyHandDamageBonus,
@@ -26,6 +29,26 @@ import {
   isWarriorRaging,
   isWarriorTalentGame
 } from "./warriorTalentTree.js";
+import {
+  getNecromancerDeathBoltCooldownReduction,
+  getNecromancerDeathBoltZoneDurationMultiplier,
+  getNecromancerCurseDuration,
+  getNecromancerDeathBoltGhostSpawnChance,
+  getNecromancerDeathBoltMasteryTempHpOnKill,
+  getNecromancerTempHpCap,
+  getNecromancerExplodingDeathDamage,
+  getNecromancerExplodingDeathRadiusTiles,
+  getNecromancerRotDps,
+  getNecromancerRotDuration,
+  hasNecromancerBlightstorm,
+  hasNecromancerCurse,
+  hasNecromancerDeathBolt,
+  hasNecromancerExplodingDeath,
+  hasNecromancerPlaguecraftDeathBurst,
+  hasNecromancerPlaguecraftRot,
+  isNecromancerTalentGame
+} from "./necromancerTalentTree.js";
+import { spawnGhost } from "./enemySpawnFactories.js";
 
 export const runtimePlayerAttackMethods = {
   fire(dx, dy) {
@@ -93,11 +116,13 @@ export const runtimePlayerAttackMethods = {
     if (isWarriorTalentGame(this)) {
       range *= 1 + getWarriorExecutionerRageRangeBonus(this) * (raging ? 1 : 0);
       arcDeg *= 1 + getWarriorHeavyHandCleaveArcBonus(this);
+      if (raging) arcDeg *= 1 + getWarriorExecutionerRageCleaveWidthBonus(this);
       this.warriorRuntime = this.warriorRuntime && typeof this.warriorRuntime === "object"
         ? this.warriorRuntime
         : (this.player?.warriorRuntime && typeof this.player.warriorRuntime === "object" ? this.player.warriorRuntime : {});
       if (this.player) this.player.warriorRuntime = this.warriorRuntime;
       if ((this.warriorRuntime.rageArcTimer || 0) > 0) arcDeg = 360;
+      else if (this.warriorRuntime.butcherEmpowerReady) arcDeg *= 1 + getWarriorButchersPathNextHitArcBonus(this);
     }
     const arc = (arcDeg * Math.PI) / 180;
     let angle = Math.atan2(dy, dx);
@@ -124,6 +149,7 @@ export const runtimePlayerAttackMethods = {
     }
     if (snapTarget) angle = Math.atan2(snapTarget.y - this.player.y, snapTarget.x - this.player.x);
     let executeProc = false;
+    let consumedButcherEmpower = false;
     const guaranteedCrit = !!(this.warriorRuntime?.rageCritReady || this.warriorRuntime?.butcherCritReady);
     const critMultiplier = guaranteedCrit ? (raging && hasWarriorCleaveDiscipline(this) ? 2.2 : 2) : 1;
     if (isWarriorTalentGame(this)) {
@@ -159,6 +185,10 @@ export const runtimePlayerAttackMethods = {
           damage *= 1 + getWarriorHeavyHandDamageBonus(this, enemy);
           damage *= 1 + getWarriorCrusaderUndeadDamageBonus(this, enemy);
           if ((this.warriorMomentumTimer || 0) > 0) damage *= 1 + getWarriorBattleFrenzyDamageBonus(this);
+          if (this.warriorRuntime?.butcherEmpowerReady) {
+            damage *= 1 + getWarriorButchersPathNextHitDamageBonus(this);
+            consumedButcherEmpower = true;
+          }
           damage *= critMultiplier;
         }
         this.applyEnemyDamage(enemy, damage, "melee", this.player.id || null);
@@ -171,12 +201,13 @@ export const runtimePlayerAttackMethods = {
           enemy.hp = 0;
           enemy.pendingExecuteKill = true;
           executeProc = true;
-          if (isWarriorTalentGame(this) && hasWarriorButchersPath(this)) this.warriorRuntime.butcherCritReady = true;
+          if (isWarriorTalentGame(this) && hasWarriorButchersPath(this)) {
+            this.warriorRuntime.butcherCritReady = true;
+            this.warriorRuntime.butcherEmpowerReady = true;
+          }
         }
         if (isWarriorTalentGame(this) && hpBefore > 0 && enemy.hp <= 0 && raging && (!this.isEnemyFriendlyToPlayer || !this.isEnemyFriendlyToPlayer(enemy))) {
           if ((this.warriorTalents?.battleFrenzy?.points || 0) > 0) {
-            const duration = this.getWarriorMomentumDuration();
-            this.warriorMomentumTimer = Math.max(this.warriorMomentumTimer || 0, duration) + 0.1;
             const victoryRushHeal = this.getWarriorRageVictoryRushHeal();
             if (victoryRushHeal > 0) {
               this.warriorRageVictoryRushPool = Math.min(this.getWarriorRageVictoryRushPoolCap(), (this.warriorRageVictoryRushPool || 0) + victoryRushHeal);
@@ -190,6 +221,7 @@ export const runtimePlayerAttackMethods = {
         }
       }
     }
+    if (consumedButcherEmpower && this.warriorRuntime?.butcherEmpowerReady) this.warriorRuntime.butcherEmpowerReady = false;
     for (const br of this.breakables || []) {
       const ex = br.x - this.player.x;
       const ey = br.y - this.player.y;
@@ -339,12 +371,13 @@ export const runtimePlayerAttackMethods = {
     const damageMult = Number.isFinite(projectile?.damageMult) ? projectile.damageMult : 1;
     const critMult = Number.isFinite(projectile?.critMultiplier) ? projectile.critMultiplier : 1;
     const linebreakerMult = 1 + this.getRangerLinebreakerDamageBonus(projectile?.linebreakerHits || 0);
-    return projectileDamage * damageMult * critMult * linebreakerMult * getRangerArrowBonusAgainstEnemy(this, enemy);
+    const pinningLineMult = projectile?.passedPinningFire ? 1.1 : 1;
+    return projectileDamage * damageMult * critMult * linebreakerMult * pinningLineMult * getRangerArrowBonusAgainstEnemy(this, enemy);
   },
 
   fireDeathBolt(dx, dy) {
     if (!this.isNecromancerClass()) return false;
-    if ((this.skills.deathBolt.points || 0) <= 0 || this.player.deathBoltCooldown > 0) return false;
+    if ((isNecromancerTalentGame(this) ? !hasNecromancerDeathBolt(this) : (this.skills.deathBolt.points || 0) <= 0) || this.player.deathBoltCooldown > 0) return false;
     const hpCost = Math.max(1, this.player.maxHealth * (this.config.deathBolt?.hpCostPct || 0.05));
     if (this.player.health <= hpCost) return false;
     const origin = this.getBowMuzzleOrigin(dx, dy);
@@ -361,26 +394,36 @@ export const runtimePlayerAttackMethods = {
     const detonateY = origin.y + origin.dirY * travelDistance;
     this.player.health = Math.max(1, this.player.health - hpCost);
     this.markPlayerHealthBarVisible();
-    this.player.deathBoltCooldown = this.config.deathBolt?.cooldown || 10;
-    this.bullets.push({
-      x: origin.x,
-      y: origin.y,
-      vx: origin.dirX * speed,
-      vy: origin.dirY * speed,
-      angle: Math.atan2(origin.dirY, origin.dirX),
-      life,
-      size: 10,
-      projectileType: "deathBolt",
-      ownerId: this.player.id || null,
-      detonateX,
-      detonateY,
-      deathBoltDamage: this.getDeathBoltBaseDamage(),
-      deathBoltHealAmount: this.getDeathBoltHealAmount(),
-      deathBoltPetDamageMultiplier: this.getDeathBoltPetDamageMultiplier(),
-      deathBoltRadius: this.getDeathBoltRadius(),
-      pulseInterval: this.config.deathBolt?.pulseInterval || 1,
-      visualLife: this.config.deathBolt?.visualLife || 5
-    });
+    this.player.deathBoltCooldown = Math.max(0.5, (this.config.deathBolt?.cooldown || 10) - (isNecromancerTalentGame(this) ? getNecromancerDeathBoltCooldownReduction(this) : 0));
+    const baseAngles = hasNecromancerBlightstorm(this) ? [-0.24, 0, 0.24] : [0];
+    const forwardAngle = Math.atan2(origin.dirY, origin.dirX);
+    for (const angleOffset of baseAngles) {
+      const angle = forwardAngle + angleOffset;
+      const targetX = origin.x + Math.cos(angle) * travelDistance;
+      const targetY = origin.y + Math.sin(angle) * travelDistance;
+      this.bullets.push({
+        x: origin.x,
+        y: origin.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        angle,
+        life,
+        size: 10,
+        projectileType: "deathBolt",
+        ownerId: this.player.id || null,
+        detonateX: targetX,
+        detonateY: targetY,
+        deathBoltDamage: this.getDeathBoltBaseDamage(),
+        deathBoltHealAmount: this.getDeathBoltHealAmount(),
+        deathBoltPetDamageMultiplier: this.getDeathBoltPetDamageMultiplier(),
+        deathBoltRadius: this.getDeathBoltRadius(),
+        pulseInterval: this.config.deathBolt?.pulseInterval || 1,
+        visualLife: (this.config.deathBolt?.visualLife || 5) * (isNecromancerTalentGame(this) ? getNecromancerDeathBoltZoneDurationMultiplier(this) : 1)
+      });
+    }
+    if (isNecromancerTalentGame(this) && this.necromancerRuntime && Number.isFinite(this.necromancerRuntime.harvesterBonusPct)) {
+      this.necromancerRuntime.harvesterBonusPct = 0;
+    }
     return true;
   },
 
@@ -411,6 +454,7 @@ export const runtimePlayerAttackMethods = {
     const healAmount = Number.isFinite(sourceState.deathBoltHealAmount) ? sourceState.deathBoltHealAmount : this.getDeathBoltHealAmount();
     const petDamageMultiplier = Number.isFinite(sourceState.deathBoltPetDamageMultiplier) ? sourceState.deathBoltPetDamageMultiplier : this.getDeathBoltPetDamageMultiplier();
     const ownerId = typeof sourceState.ownerId === "string" && sourceState.ownerId ? sourceState.ownerId : (this.player.id || null);
+    const deathBoltDamageType = isNecromancerTalentGame(this) && hasNecromancerCurse(this) ? "poison" : "death";
     for (const enemy of this.enemies || []) {
       if (!enemy || (enemy.hp || 0) <= 0) continue;
       if (vecLength(enemy.x - x, enemy.y - y) > radius + (enemy.size || 20) * 0.35) continue;
@@ -421,7 +465,33 @@ export const runtimePlayerAttackMethods = {
           enemy.damageBuffTimer = Math.max(Number.isFinite(enemy.damageBuffTimer) ? enemy.damageBuffTimer : 0, (this.config.deathBolt?.pulseInterval || 1) + 0.15);
         }
       } else {
-        this.applyEnemyDamage(enemy, damage, "death", ownerId);
+        this.applyEnemyDamage(enemy, damage, deathBoltDamageType, ownerId);
+        if (isNecromancerTalentGame(this) && hasNecromancerCurse(this)) {
+          enemy.curseTimer = Math.max(enemy.curseTimer || 0, getNecromancerCurseDuration(this));
+        }
+        if ((enemy.hp || 0) <= 0 && isNecromancerTalentGame(this)) {
+          const spawnChance = getNecromancerDeathBoltGhostSpawnChance(this);
+          if (spawnChance > 0 && this.canControlMoreUndead() && Math.random() < spawnChance) {
+            const ghost = spawnGhost(this, enemy.x, enemy.y);
+            if (ghost && this.markUndeadAsControlled(ghost)) {
+              this.enemies.push(ghost);
+              ghost.hp = ghost.maxHp;
+              if (typeof this.spawnFloatingText === "function") {
+                this.spawnFloatingText(enemy.x, enemy.y - 30, "Raised", "#b6d9ff", 0.85, 13);
+              }
+            }
+          }
+          const tempHpGain = getNecromancerDeathBoltMasteryTempHpOnKill(this);
+          if (tempHpGain > 0) {
+            const runtime = this.necromancerRuntime || (this.necromancerRuntime = {});
+            const cap = getNecromancerTempHpCap(this);
+            runtime.tempHp = Math.min(cap, Math.max(0, Number.isFinite(runtime.tempHp) ? runtime.tempHp : 0) + tempHpGain);
+            if (typeof this.markPlayerHealthBarVisible === "function") this.markPlayerHealthBarVisible();
+            if (tempHpGain > 0 && typeof this.spawnFloatingText === "function") {
+              this.spawnFloatingText(this.player.x, this.player.y - 34, `+${tempHpGain} THP`, "#9edcff", 0.7, 13);
+            }
+          }
+        }
       }
     }
   },
@@ -433,13 +503,34 @@ export const runtimePlayerAttackMethods = {
     const ownerId = typeof sourceEnemy?.controllerPlayerId === "string" && sourceEnemy.controllerPlayerId
       ? sourceEnemy.controllerPlayerId
       : (this.player.id || null);
-    if (!sourceEnemy || !this.isControlledUndead(sourceEnemy) || points < 3) return;
-    const radius = this.getExplodingDeathRadius();
-    const damage = this.getDeathExplosionDamage(points);
+    if (!sourceEnemy || !this.isControlledUndead(sourceEnemy)) return;
+    if (isNecromancerTalentGame(this) && !hasNecromancerExplodingDeath(this) && !hasNecromancerPlaguecraftDeathBurst(this)) return;
+    if (!isNecromancerTalentGame(this) && points < 3) return;
+    const radius = isNecromancerTalentGame(this)
+      ? getNecromancerExplodingDeathRadiusTiles() * this.config.map.tile
+      : this.getExplodingDeathRadius();
+    const damage = isNecromancerTalentGame(this) ? getNecromancerExplodingDeathDamage() : this.getDeathExplosionDamage(points);
     for (const enemy of this.enemies || []) {
       if (!enemy || enemy === sourceEnemy || (enemy.hp || 0) <= 0 || this.isEnemyFriendlyToPlayer(enemy)) continue;
-      if (vecLength(enemy.x - sourceEnemy.x, enemy.y - sourceEnemy.y) <= radius + (enemy.size || 20) * 0.35) this.applyEnemyDamage(enemy, damage, "death", ownerId);
+      if (vecLength(enemy.x - sourceEnemy.x, enemy.y - sourceEnemy.y) <= radius + (enemy.size || 20) * 0.35) {
+        this.applyEnemyDamage(enemy, damage, "death", ownerId);
+        if (isNecromancerTalentGame(this) && hasNecromancerPlaguecraftDeathBurst(this)) {
+          enemy.rotTimer = Math.max(enemy.rotTimer || 0, getNecromancerRotDuration());
+          enemy.rotDps = Math.max(enemy.rotDps || 0, getNecromancerRotDps(this));
+        }
+      }
     }
-    this.fireZones.push({ x: sourceEnemy.x, y: sourceEnemy.y, radius, life: this.config.deathBolt?.visualLife || 0.35, zoneType: "deathBurst" });
+    this.fireZones.push({ x: sourceEnemy.x, y: sourceEnemy.y, radius, life: 0.12, zoneType: "deathBurst" });
+    if (isNecromancerTalentGame(this) && hasNecromancerExplodingDeath(this)) {
+      const runtime = this.necromancerRuntime || (this.necromancerRuntime = {});
+      const wasInactive = (runtime.vigorTimer || 0) <= 0;
+      runtime.vigorTimer = Math.max(runtime.vigorTimer || 0, 5);
+      runtime.vigorBeamTimer = Math.max(runtime.vigorBeamTimer || 0, 2);
+      runtime.vigorTotalDuration = 5;
+      runtime.vigorHealPool = Math.max(runtime.vigorHealPool || 0, this.player.maxHealth * 0.15);
+      if (wasInactive && typeof this.spawnFloatingText === "function") {
+        this.spawnFloatingText(this.player.x, this.player.y - 36, "Vigor of Life", "#d7b8ff", 0.95, 15);
+      }
+    }
   }
 };

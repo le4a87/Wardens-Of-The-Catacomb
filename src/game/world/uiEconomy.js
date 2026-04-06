@@ -12,6 +12,7 @@ import {
   getWarriorIronGuardDefenseBonusPct,
   isWarriorTalentGame
 } from "../warriorTalentTree.js";
+import { isNecromancerTalentGame } from "../necromancerTalentTree.js";
 
 function isActiveMultiplayer(game) {
   return !!game?.networkEnabled && game.networkRoomPhase === "active";
@@ -90,7 +91,7 @@ export function getUpgradeCost(game, upgradeKey) {
 }
 
 export function canBuyUpgrade(game, upgradeKey) {
-  if ((isRangerTalentGame(game) || isWarriorTalentGame(game)) && ["moveSpeed", "attackSpeed", "damage", "defense"].includes(upgradeKey)) return false;
+  if ((isRangerTalentGame(game) || isWarriorTalentGame(game) || isNecromancerTalentGame(game)) && ["moveSpeed", "attackSpeed", "damage", "defense"].includes(upgradeKey)) return false;
   const upgrade = game.upgrades[upgradeKey];
   if (!upgrade || upgrade.level >= upgrade.maxLevel) return false;
   return game.gold >= getUpgradeCost(game, upgradeKey);

@@ -1,5 +1,7 @@
 import { vecLength } from "../utils.js";
 import { finalizeProjectilesAndTransientState, resolveSpecialProjectileCollision } from "./stepCombatProjectileSpecials.js";
+import { getNecromancerPlaguecraftRiseChance, getNecromancerRotDps, getNecromancerRotDuration, hasNecromancerHarvester, hasNecromancerPlaguecraftRot, isNecromancerTalentGame } from "./necromancerTalentTree.js";
+import { spawnGhost, spawnSkeleton } from "./enemySpawnFactories.js";
 
 export function resolveCombatAndDrops({
   game,
@@ -105,6 +107,17 @@ export function resolveCombatAndDrops({
 
   for (const b of game.bullets) {
     if (b.life <= 0) continue;
+    if (!b.faction || b.faction !== "enemy") {
+      for (const zone of game.fireZones || []) {
+        if (!zone || zone.life <= 0 || zone.zoneType !== "pinningFire") continue;
+        const dx = (b.x || 0) - (zone.x || 0);
+        const dy = (b.y || 0) - (zone.y || 0);
+        if (Math.hypot(dx, dy) <= (zone.radius || 0) + (b.size || 6) * 0.5) {
+          b.passedPinningFire = true;
+          break;
+        }
+      }
+    }
     if (resolveSpecialProjectileCollision({
       game,
       projectile: b,
@@ -343,8 +356,15 @@ export function resolveCombatAndDrops({
     if (!enemy || (enemy.hp || 0) <= 0) continue;
     enemy.crusaderDefenseShredTimer = Math.max(0, (Number.isFinite(enemy.crusaderDefenseShredTimer) ? enemy.crusaderDefenseShredTimer : 0) - dt);
     if ((enemy.crusaderDefenseShredTimer || 0) <= 0) enemy.crusaderDefenseShredPct = 0;
-    if ((enemy.burningTimer || 0) <= 0 || !Number.isFinite(enemy.burningDps) || enemy.burningDps <= 0) continue;
-    game.applyEnemyDamage(enemy, enemy.burningDps * dt, "fire", enemy.lastDamageOwnerId || null);
+    enemy.curseTimer = Math.max(0, (Number.isFinite(enemy.curseTimer) ? enemy.curseTimer : 0) - dt);
+    enemy.rotTimer = Math.max(0, (Number.isFinite(enemy.rotTimer) ? enemy.rotTimer : 0) - dt);
+    if ((enemy.rotTimer || 0) <= 0) enemy.rotDps = 0;
+    if ((enemy.burningTimer || 0) > 0 && Number.isFinite(enemy.burningDps) && enemy.burningDps > 0) {
+      game.applyEnemyDamage(enemy, enemy.burningDps * dt, "fire", enemy.lastDamageOwnerId || null);
+    }
+    if ((enemy.rotTimer || 0) > 0 && Number.isFinite(enemy.rotDps) && enemy.rotDps > 0) {
+      game.applyEnemyDamage(enemy, enemy.rotDps * dt, "poison", enemy.lastDamageOwnerId || null);
+    }
   }
 
   for (const enemy of activeEnemies) {
@@ -397,8 +417,17 @@ export function resolveCombatAndDrops({
       const friendlyOwnerId =
         typeof friendly?.controllerPlayerId === "string" && friendly.controllerPlayerId ? friendly.controllerPlayerId : null;
       if ((friendly.contactAttackCooldown || 0) <= 0) {
+        const hostileHpBefore = Number.isFinite(hostile.hp) ? hostile.hp : 0;
         game.applyEnemyDamage(hostile, game.rollEnemyContactDamage(friendly) * game.getEnemyDamageScale(), "physical", friendlyOwnerId);
-        friendly.contactAttackCooldown = 0.55;
+        if (isNecromancerTalentGame(game) && hasNecromancerPlaguecraftRot(game)) {
+          hostile.rotTimer = Math.max(hostile.rotTimer || 0, getNecromancerRotDuration());
+          hostile.rotDps = Math.max(hostile.rotDps || 0, getNecromancerRotDps(game));
+        }
+        const dealt = Math.max(0, hostileHpBefore - Math.max(0, hostile.hp || 0));
+        if ((friendly.lifeStealPct || 0) > 0 && dealt > 0) {
+          friendly.hp = Math.min(friendly.maxHp || friendly.hp, (friendly.hp || 0) + dealt * friendly.lifeStealPct);
+        }
+        friendly.contactAttackCooldown = 0.55 / Math.max(0.4, 1 + (friendly.controlledAttackSpeedBonusPct || 0));
       }
       if ((hostile.contactAttackCooldown || 0) <= 0) {
         game.applyEnemyDamage(friendly, game.rollEnemyContactDamage(hostile) * game.getEnemyDamageScale(), "physical");
@@ -444,7 +473,49 @@ export function resolveCombatAndDrops({
       const wasFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy);
       if (wasFriendly && typeof game.triggerExplodingDeath === "function") game.triggerExplodingDeath(enemy);
       if (wasFriendly) return false;
+      if (
+        isNecromancerTalentGame(game) &&
+        !game.isUndeadEnemy(enemy) &&
+        ((enemy.curseTimer || 0) > 0 || (enemy.rotTimer || 0) > 0) &&
+        game.canControlMoreUndead() &&
+        Math.random() < getNecromancerPlaguecraftRiseChance(game)
+      ) {
+        const skeleton = spawnSkeleton(game, enemy.x, enemy.y);
+        if (skeleton && game.markUndeadAsControlled(skeleton)) {
+          game.enemies.push(skeleton);
+          skeleton.hp = skeleton.maxHp;
+        }
+      }
       const rewardOwner = getRewardOwner(enemy);
+      const diedNearOwnerForHarvester =
+        !!rewardOwner &&
+        typeof rewardOwner.x === "number" &&
+        vecLength((enemy.x || 0) - rewardOwner.x, (enemy.y || 0) - rewardOwner.y) <= (game.config.map.tile || 32);
+      if (rewardOwner) {
+        const ownerHasHarvester = rewardOwner === game.player
+          ? hasNecromancerHarvester(game)
+          : ((rewardOwner?.necromancerTalents?.harvester?.points || 0) > 0);
+        if (ownerHasHarvester) {
+          const runtime =
+            rewardOwner === game.player
+              ? (game.necromancerRuntime || (game.necromancerRuntime = {}))
+              : (rewardOwner.necromancerRuntime || (rewardOwner.necromancerRuntime = {}));
+          runtime.harvesterBonusPct = Math.min(0.5, (Number.isFinite(runtime.harvesterBonusPct) ? runtime.harvesterBonusPct : 0) + 0.05);
+          if (rewardOwner === game.player && typeof game.spawnFloatingText === "function") {
+            game.spawnFloatingText(game.player.x, game.player.y - 34, "Harvest +5%", "#cf9fff", 0.7, 13);
+          }
+          if (diedNearOwnerForHarvester && game.canControlMoreUndead(rewardOwner) && Math.random() < 0.4) {
+            const ghost = spawnGhost(game, enemy.x, enemy.y);
+            if (ghost && game.markUndeadAsControlled(ghost, rewardOwner)) {
+              game.enemies.push(ghost);
+              ghost.hp = ghost.maxHp;
+              if (rewardOwner === game.player && typeof game.spawnFloatingText === "function") {
+                game.spawnFloatingText(enemy.x, enemy.y - 30, "Harvested", "#d8b3ff", 0.8, 13);
+              }
+            }
+          }
+        }
+      }
       if (typeof game.recordKillByPlayerEntity === "function") game.recordKillByPlayerEntity(rewardOwner, enemy);
       if (enemy.isFloorBoss && typeof game.recordRunBossKill === "function") game.recordRunBossKill();
       if (enemy.lastDamageType === "fire" && typeof game.recordClassSpecificStat === "function") {
