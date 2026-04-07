@@ -1,5 +1,7 @@
 import { vecLength } from "../utils.js";
 import { finalizeProjectilesAndTransientState, resolveSpecialProjectileCollision } from "./stepCombatProjectileSpecials.js";
+import { getNecromancerPlaguecraftRiseChance, getNecromancerRotDps, getNecromancerRotDuration, hasNecromancerHarvester, hasNecromancerPlaguecraftRot, isNecromancerTalentGame } from "./necromancerTalentTree.js";
+import { spawnGhost, spawnSkeleton } from "./enemySpawnFactories.js";
 
 export function resolveCombatAndDrops({
   game,
@@ -75,6 +77,17 @@ export function resolveCombatAndDrops({
     a.x += a.vx * dt;
     a.y += a.vy * dt;
     a.life -= dt;
+    if (Number.isFinite(a.detonateX) && Number.isFinite(a.detonateY)) {
+      const remaining = vecLength((a.detonateX || 0) - a.x, (a.detonateY || 0) - a.y);
+      const stepDistance = vecLength(a.x - prevX, a.y - prevY);
+      if (remaining <= Math.max(a.size || 8, stepDistance)) {
+        a.x = a.detonateX;
+        a.y = a.detonateY;
+        game.triggerFireExplosion(a.x, a.y, a);
+        a.life = 0;
+        continue;
+      }
+    }
     for (const br of activeBreakables) {
       if ((br.hp || 0) <= 0) continue;
       const half = (br.size || 20) * 0.5 + (a.size || 8) * 0.5;
@@ -94,6 +107,17 @@ export function resolveCombatAndDrops({
 
   for (const b of game.bullets) {
     if (b.life <= 0) continue;
+    if (!b.faction || b.faction !== "enemy") {
+      for (const zone of game.fireZones || []) {
+        if (!zone || zone.life <= 0 || zone.zoneType !== "pinningFire") continue;
+        const dx = (b.x || 0) - (zone.x || 0);
+        const dy = (b.y || 0) - (zone.y || 0);
+        if (Math.hypot(dx, dy) <= (zone.radius || 0) + (b.size || 6) * 0.5) {
+          b.passedPinningFire = true;
+          break;
+        }
+      }
+    }
     if (resolveSpecialProjectileCollision({
       game,
       projectile: b,
@@ -119,14 +143,23 @@ export function resolveCombatAndDrops({
         }
       }
       if (b.life <= 0) continue;
+      let reflected = false;
       for (const player of getLivingPlayers()) {
         if (vecLength(b.x - player.x, b.y - player.y) >= ((player.size || game.player.size) + b.size) * 0.5) continue;
+        if (typeof game.getWarriorMissileProtectorForPlayerEntity === "function" && typeof game.tryReflectMissileForPlayerEntity === "function") {
+          const protector = game.getWarriorMissileProtectorForPlayerEntity(player);
+          if (protector && game.tryReflectMissileForPlayerEntity(protector, b, protector)) {
+            reflected = true;
+            break;
+          }
+        }
         const rawDamage = Number.isFinite(b.damage) ? b.damage : game.config.enemy.necromancerProjectileDamage || 16;
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
         damagePlayer(player, scaledEnemyDamage, b.damageType || "necrotic");
         b.life = 0;
         break;
       }
+      if (reflected) continue;
       continue;
     }
     for (const br of activeBreakables) {
@@ -148,11 +181,29 @@ export function resolveCombatAndDrops({
           b.hitTargets.add(enemy);
           continue;
         }
-        const dmgMult = Number.isFinite(b.damageMult) ? b.damageMult : 1;
-        const projectileDamage = Number.isFinite(b.damage) ? b.damage : game.rollPrimaryDamage();
-        game.applyEnemyDamage(enemy, projectileDamage * Math.max(0.01, dmgMult), "arrow", b.ownerId || null);
+        const projectileDamage = typeof game.getRangerArrowDamageAgainst === "function"
+          ? game.getRangerArrowDamageAgainst(enemy, b)
+          : (Number.isFinite(b.damage) ? b.damage : game.rollPrimaryDamage()) * Math.max(0.01, Number.isFinite(b.damageMult) ? b.damageMult : 1);
+        const damageType = b.projectileType === "holyWave" ? "holy" : "arrow";
+        game.applyEnemyDamage(enemy, projectileDamage, damageType, b.ownerId || null);
+        if (
+          b.projectileType === "holyWave" &&
+          typeof game.isUndeadEnemy === "function" &&
+          game.isUndeadEnemy(enemy) &&
+          Number.isFinite(b.undeadDefenseShredPct) &&
+          b.undeadDefenseShredPct > 0
+        ) {
+          enemy.crusaderDefenseShredPct = Math.max(enemy.crusaderDefenseShredPct || 0, b.undeadDefenseShredPct);
+          enemy.crusaderDefenseShredTimer = Math.max(enemy.crusaderDefenseShredTimer || 0, 4);
+        }
+        if (b.projectileType !== "holyWave" && typeof game.applyRangerOnHitEffects === "function") game.applyRangerOnHitEffects(enemy, b.x, b.y);
         b.hitTargets.add(enemy);
-        if (Math.random() >= game.getPiercingChance()) b.life = 0;
+        b.linebreakerHits = (Number.isFinite(b.linebreakerHits) ? b.linebreakerHits : 0) + 1;
+        if (b.projectileType === "holyWave") {
+          // Holy waves travel through enemies once per target.
+        } else if (Math.random() >= game.getPiercingChance()) {
+          b.life = 0;
+        }
         break;
       }
     }
@@ -254,7 +305,31 @@ export function resolveCombatAndDrops({
       }
       continue;
     }
-    if (zone.zoneType && zone.zoneType !== "fire") continue;
+    if (zone.zoneType === "crusaderAura") {
+      const tickInterval = Math.max(0.15, zone.tickInterval || 0.3);
+      zone.tickTimer = Math.max(-2, (Number.isFinite(zone.tickTimer) ? zone.tickTimer : tickInterval) - dt);
+      while (zone.life > 0 && zone.tickTimer <= 0) {
+        const baseDps = Number.isFinite(zone.dps) ? zone.dps : 10;
+        const pulseDamageBase = baseDps * tickInterval;
+        const undeadMult = Number.isFinite(zone.undeadDamageMultiplier) ? zone.undeadDamageMultiplier : 1.5;
+        const shredPct = Number.isFinite(zone.defenseShredPct) ? zone.defenseShredPct : 0;
+        for (const enemy of activeEnemies) {
+          if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
+          if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+          if (vecLength(zone.x - enemy.x, zone.y - enemy.y) >= zone.radius + enemy.size * 0.35) continue;
+          const isUndead = typeof game.isUndeadEnemy === "function" && game.isUndeadEnemy(enemy);
+          const pulseDamage = pulseDamageBase * (isUndead ? undeadMult : 1);
+          game.applyEnemyDamage(enemy, pulseDamage, "holy", zone.ownerId || null);
+          if (isUndead && shredPct > 0) {
+            enemy.crusaderDefenseShredPct = Math.max(enemy.crusaderDefenseShredPct || 0, shredPct);
+            enemy.crusaderDefenseShredTimer = Math.max(enemy.crusaderDefenseShredTimer || 0, tickInterval + 0.2);
+          }
+        }
+        zone.tickTimer += tickInterval;
+      }
+      continue;
+    }
+    if (zone.zoneType && zone.zoneType !== "fire" && zone.zoneType !== "pinningFire") continue;
     for (const br of activeBreakables) {
       if (vecLength(zone.x - br.x, zone.y - br.y) < zone.radius + br.size * 0.32) br.hp = 0;
     }
@@ -270,8 +345,25 @@ export function resolveCombatAndDrops({
       }
       if (vecLength(zone.x - enemy.x, zone.y - enemy.y) < zone.radius + enemy.size * 0.35) {
         const lingerDps = Number.isFinite(zone.dps) ? zone.dps : game.getFireArrowLingerDps();
+        enemy.burningTimer = Math.max(enemy.burningTimer || 0, 0.25);
+        enemy.burningDps = Math.max(enemy.burningDps || 0, lingerDps);
         game.applyEnemyDamage(enemy, lingerDps * dt, "fire", zone.ownerId || null);
       }
+    }
+  }
+
+  for (const enemy of activeEnemies) {
+    if (!enemy || (enemy.hp || 0) <= 0) continue;
+    enemy.crusaderDefenseShredTimer = Math.max(0, (Number.isFinite(enemy.crusaderDefenseShredTimer) ? enemy.crusaderDefenseShredTimer : 0) - dt);
+    if ((enemy.crusaderDefenseShredTimer || 0) <= 0) enemy.crusaderDefenseShredPct = 0;
+    enemy.curseTimer = Math.max(0, (Number.isFinite(enemy.curseTimer) ? enemy.curseTimer : 0) - dt);
+    enemy.rotTimer = Math.max(0, (Number.isFinite(enemy.rotTimer) ? enemy.rotTimer : 0) - dt);
+    if ((enemy.rotTimer || 0) <= 0) enemy.rotDps = 0;
+    if ((enemy.burningTimer || 0) > 0 && Number.isFinite(enemy.burningDps) && enemy.burningDps > 0) {
+      game.applyEnemyDamage(enemy, enemy.burningDps * dt, "fire", enemy.lastDamageOwnerId || null);
+    }
+    if ((enemy.rotTimer || 0) > 0 && Number.isFinite(enemy.rotDps) && enemy.rotDps > 0) {
+      game.applyEnemyDamage(enemy, enemy.rotDps * dt, "poison", enemy.lastDamageOwnerId || null);
     }
   }
 
@@ -325,8 +417,17 @@ export function resolveCombatAndDrops({
       const friendlyOwnerId =
         typeof friendly?.controllerPlayerId === "string" && friendly.controllerPlayerId ? friendly.controllerPlayerId : null;
       if ((friendly.contactAttackCooldown || 0) <= 0) {
+        const hostileHpBefore = Number.isFinite(hostile.hp) ? hostile.hp : 0;
         game.applyEnemyDamage(hostile, game.rollEnemyContactDamage(friendly) * game.getEnemyDamageScale(), "physical", friendlyOwnerId);
-        friendly.contactAttackCooldown = 0.55;
+        if (isNecromancerTalentGame(game) && hasNecromancerPlaguecraftRot(game)) {
+          hostile.rotTimer = Math.max(hostile.rotTimer || 0, getNecromancerRotDuration());
+          hostile.rotDps = Math.max(hostile.rotDps || 0, getNecromancerRotDps(game));
+        }
+        const dealt = Math.max(0, hostileHpBefore - Math.max(0, hostile.hp || 0));
+        if ((friendly.lifeStealPct || 0) > 0 && dealt > 0) {
+          friendly.hp = Math.min(friendly.maxHp || friendly.hp, (friendly.hp || 0) + dealt * friendly.lifeStealPct);
+        }
+        friendly.contactAttackCooldown = 0.55 / Math.max(0.4, 1 + (friendly.controlledAttackSpeedBonusPct || 0));
       }
       if ((hostile.contactAttackCooldown || 0) <= 0) {
         game.applyEnemyDamage(friendly, game.rollEnemyContactDamage(hostile) * game.getEnemyDamageScale(), "physical");
@@ -372,7 +473,49 @@ export function resolveCombatAndDrops({
       const wasFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy);
       if (wasFriendly && typeof game.triggerExplodingDeath === "function") game.triggerExplodingDeath(enemy);
       if (wasFriendly) return false;
+      if (
+        isNecromancerTalentGame(game) &&
+        !game.isUndeadEnemy(enemy) &&
+        ((enemy.curseTimer || 0) > 0 || (enemy.rotTimer || 0) > 0) &&
+        game.canControlMoreUndead() &&
+        Math.random() < getNecromancerPlaguecraftRiseChance(game)
+      ) {
+        const skeleton = spawnSkeleton(game, enemy.x, enemy.y);
+        if (skeleton && game.markUndeadAsControlled(skeleton)) {
+          game.enemies.push(skeleton);
+          skeleton.hp = skeleton.maxHp;
+        }
+      }
       const rewardOwner = getRewardOwner(enemy);
+      const diedNearOwnerForHarvester =
+        !!rewardOwner &&
+        typeof rewardOwner.x === "number" &&
+        vecLength((enemy.x || 0) - rewardOwner.x, (enemy.y || 0) - rewardOwner.y) <= (game.config.map.tile || 32);
+      if (rewardOwner) {
+        const ownerHasHarvester = rewardOwner === game.player
+          ? hasNecromancerHarvester(game)
+          : ((rewardOwner?.necromancerTalents?.harvester?.points || 0) > 0);
+        if (ownerHasHarvester) {
+          const runtime =
+            rewardOwner === game.player
+              ? (game.necromancerRuntime || (game.necromancerRuntime = {}))
+              : (rewardOwner.necromancerRuntime || (rewardOwner.necromancerRuntime = {}));
+          runtime.harvesterBonusPct = Math.min(0.5, (Number.isFinite(runtime.harvesterBonusPct) ? runtime.harvesterBonusPct : 0) + 0.05);
+          if (rewardOwner === game.player && typeof game.spawnFloatingText === "function") {
+            game.spawnFloatingText(game.player.x, game.player.y - 34, "Harvest +5%", "#cf9fff", 0.7, 13);
+          }
+          if (diedNearOwnerForHarvester && game.canControlMoreUndead(rewardOwner) && Math.random() < 0.4) {
+            const ghost = spawnGhost(game, enemy.x, enemy.y);
+            if (ghost && game.markUndeadAsControlled(ghost, rewardOwner)) {
+              game.enemies.push(ghost);
+              ghost.hp = ghost.maxHp;
+              if (rewardOwner === game.player && typeof game.spawnFloatingText === "function") {
+                game.spawnFloatingText(enemy.x, enemy.y - 30, "Harvested", "#d8b3ff", 0.8, 13);
+              }
+            }
+          }
+        }
+      }
       if (typeof game.recordKillByPlayerEntity === "function") game.recordKillByPlayerEntity(rewardOwner, enemy);
       if (enemy.isFloorBoss && typeof game.recordRunBossKill === "function") game.recordRunBossKill();
       if (enemy.lastDamageType === "fire" && typeof game.recordClassSpecificStat === "function") {

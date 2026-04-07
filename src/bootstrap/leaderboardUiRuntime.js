@@ -59,6 +59,8 @@ export function syncLeaderboardModal({
   subtitle,
   status,
   closeButton,
+  statsButton,
+  deathActions,
   continueButton,
   activeBoard,
   soloButton,
@@ -82,7 +84,7 @@ export function syncLeaderboardModal({
   if (subtitle) {
     const boardLabel = activeBoard === LEADERBOARD_BOARD_GROUP ? "group" : "solo";
     subtitle.textContent = mode === "death"
-      ? `Returning to menu in ${Math.max(0, Math.ceil(remainingSeconds))}s unless you continue now.`
+      ? `Returning to menu in ${Math.max(0, Math.ceil(remainingSeconds))}s unless you open stats or continue now.`
       : `Global shows the persistent top 25 ${boardLabel} runs. This Session resets on refresh.`;
   }
   if (status) {
@@ -91,6 +93,8 @@ export function syncLeaderboardModal({
     else status.textContent = "";
   }
   if (closeButton) closeButton.hidden = mode === "death";
+  if (deathActions) deathActions.hidden = mode !== "death";
+  if (statsButton) statsButton.hidden = mode !== "death";
   if (continueButton) continueButton.hidden = mode !== "death";
   syncLeaderboardBoards(soloButton, groupButton, activeBoard);
   syncLeaderboardTabs(globalButton, sessionButton, activeTab);

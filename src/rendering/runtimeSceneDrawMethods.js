@@ -420,10 +420,65 @@ export const runtimeSceneDrawMethods = {
     ctx.stroke();
   },
   drawEnemyHealthBar(enemy, screenX, screenY) {
+    const ctx = this.ctx;
+    if ((enemy.burningTimer || 0) > 0) {
+      const fx = Math.floor(screenX);
+      const fy = Math.floor(screenY + enemy.size * 0.42);
+      ctx.fillStyle = "rgba(255, 160, 74, 0.9)";
+      ctx.beginPath();
+      ctx.arc(fx, fy, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 226, 120, 0.95)";
+      ctx.beginPath();
+      ctx.arc(fx, fy - 1, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 109, 52, 0.92)";
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 8);
+      ctx.lineTo(fx + 4, fy - 1);
+      ctx.lineTo(fx, fy + 2);
+      ctx.lineTo(fx - 4, fy - 1);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if ((enemy.curseTimer || 0) > 0) {
+      const fx = Math.floor(screenX - 10);
+      const fy = Math.floor(screenY + enemy.size * 0.42);
+      ctx.fillStyle = "rgba(176, 116, 255, 0.92)";
+      ctx.beginPath();
+      ctx.arc(fx, fy, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(228, 196, 255, 0.95)";
+      ctx.beginPath();
+      ctx.arc(fx, fy - 1, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(120, 62, 201, 0.95)";
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 8);
+      ctx.lineTo(fx + 4, fy - 1);
+      ctx.lineTo(fx, fy + 2);
+      ctx.lineTo(fx - 4, fy - 1);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if ((enemy.rotTimer || 0) > 0) {
+      const fx = Math.floor(screenX + 10);
+      const fy = Math.floor(screenY + enemy.size * 0.42);
+      ctx.fillStyle = "rgba(103, 214, 96, 0.92)";
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 6);
+      ctx.bezierCurveTo(fx + 4, fy - 4, fx + 6, fy + 1, fx, fy + 7);
+      ctx.bezierCurveTo(fx - 6, fy + 1, fx - 4, fy - 4, fx, fy - 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(208, 255, 198, 0.88)";
+      ctx.beginPath();
+      ctx.arc(fx + 1, fy - 1, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if ((enemy.hpBarTimer || 0) <= 0) return;
     if (typeof enemy.maxHp !== "number" || enemy.maxHp <= 0) return;
 
-    const ctx = this.ctx;
     const ratio = Math.max(0, Math.min(1, enemy.hp / enemy.maxHp));
     const width = Math.max(20, enemy.size + 6);
     const height = 4;

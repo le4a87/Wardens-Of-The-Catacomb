@@ -241,6 +241,16 @@ export function handleNetworkUiActions(game, netClient, isController) {
         break;
       }
     }
+    const skillNodeRects = Array.isArray(game.uiRects.skillTreeNodes) ? game.uiRects.skillTreeNodes : [];
+    let handledSkillNode = false;
+    for (const node of skillNodeRects) {
+      if (!playerAlive || !hit(click.x, click.y, node.rect)) continue;
+      recordAction(click, `skillNode:${node.key}`, "spendSkill", node.key);
+      netClient.sendAction({ kind: "spendSkill", key: node.key });
+      handledSkillNode = true;
+      break;
+    }
+    if (handledSkillNode) continue;
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
       recordAction(click, "skillFireArrowNode", "spendSkill", "fireArrow");
       netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });

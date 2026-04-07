@@ -1,3 +1,25 @@
+import { getRangerDodgeChance, getRangerSkillPointGainForLevel, hasFoxstep } from "./rangerTalentTree.js";
+import {
+  getWarriorBattleFrenzyDuration,
+  getWarriorConsecratedDamageReductionPct,
+  getWarriorConsecratedHealingMultiplier,
+  getWarriorGuardedAdvanceCounterChance,
+  getWarriorGuardedAdvanceMeleeDefenseBonusPct,
+  getWarriorGuardedAdvanceMissileReflectChance,
+  getWarriorBloodheatRageMoveSpeedBonus,
+  getWarriorIronGuardMaxHealthBonusPct,
+  getWarriorPassiveRegenBonusPct,
+  getWarriorRageMasteryMoveSpeedBonus,
+  getWarriorRedTempestMoveSpeedBonus,
+  getWarriorSkillPointGainForLevel,
+  getWarriorUnbrokenDamageReduction,
+  hasWarriorReflectShare,
+  hasWarriorUnbrokenCheatDeath,
+  isWarriorRaging,
+  isWarriorTalentGame
+} from "./warriorTalentTree.js";
+import { getNecromancerRotTouchedRetaliationDamage, getNecromancerSkillPointGainForLevel, getNecromancerVigorMoveSpeedBonusPct } from "./necromancerTalentTree.js";
+
 export const runtimeBaseSupportMethods = {
   getActivePlayerEntities() {
     if (Array.isArray(this.networkActivePlayers) && this.networkActivePlayers.length > 0) {
@@ -22,6 +44,16 @@ export const runtimeBaseSupportMethods = {
 
   isLivingPlayerEntity(entity) {
     return !!entity && (Number.isFinite(entity?.health) ? entity.health > 0 : entity?.alive !== false);
+  },
+
+  getCrusaderConsecratedZoneForEntity(entity) {
+    if (!entity || !Array.isArray(this.fireZones)) return null;
+    const entityRadius = (entity.size || this.player?.size || 22) * 0.4;
+    for (const zone of this.fireZones) {
+      if (!zone || zone.zoneType !== "crusaderAura" || (zone.life || 0) <= 0) continue;
+      if (Math.hypot((zone.x || 0) - (entity.x || 0), (zone.y || 0) - (entity.y || 0)) <= (zone.radius || 0) + entityRadius) return zone;
+    }
+    return null;
   },
 
   getNearestPlayerEntity(x, y, maxRange = Infinity) {
@@ -145,16 +177,33 @@ export const runtimeBaseSupportMethods = {
       ? Math.max(0, classSpec.levelMoveSpeedGain) * Math.max(0, level - 1)
       : 0;
     const moveSpeedLevel = this.getPlayerUpgradeLevelFor(entity, "moveSpeed");
-    const momentumTimer = this.isPrimaryPlayerEntity(entity)
-      ? (Number.isFinite(this.warriorMomentumTimer) ? this.warriorMomentumTimer : 0)
-      : (Number.isFinite(entity?.warriorMomentumTimer) ? entity.warriorMomentumTimer : 0);
-    const momentumPoints = this.getPlayerSkillPointsFor(entity, "warriorMomentum");
-    let momentumMultiplier = 1;
-    if (!(classSpec?.usesRanged) && momentumTimer > 0 && momentumPoints > 0) {
-      const bonus = 0.2 + 0.33 * Math.log1p(1.3 * Math.max(0, momentumPoints));
-      momentumMultiplier += bonus;
+    let moveBonus = moveSpeedLevel * 0.05;
+    if (entity?.classType === "fighter") {
+      const momentumTimer = this.isPrimaryPlayerEntity(entity)
+        ? (Number.isFinite(this.warriorMomentumTimer) ? this.warriorMomentumTimer : 0)
+        : (Number.isFinite(entity?.warriorMomentumTimer) ? entity.warriorMomentumTimer : 0);
+      const nearbyThreat = (this.enemies || []).some((enemy) =>
+        enemy &&
+        (enemy.hp || 0) > 0 &&
+        !this.isEnemyFriendlyToPlayer(enemy) &&
+        Math.hypot((enemy.x || 0) - (entity.x || 0), (enemy.y || 0) - (entity.y || 0)) <= (this.config?.map?.tile || 32) * 5
+      );
+      if (nearbyThreat || momentumTimer > 0 || isWarriorRaging(entity)) {
+        moveBonus += (entity?.warriorTalents?.bloodheat?.points || 0) >= 3 ? 0.05 : 0;
+      }
+      if (momentumTimer > 0) moveBonus += 0.1 * Math.max(0, entity?.warriorTalents?.battleFrenzy?.points || 0);
+      if (isWarriorRaging(entity)) {
+        moveBonus += entity === this.player ? getWarriorBloodheatRageMoveSpeedBonus(this) : ((entity?.warriorTalents?.bloodheat?.points || 0) >= 2 ? 0.05 : 0);
+        moveBonus += entity === this.player ? getWarriorRageMasteryMoveSpeedBonus(this) : ((entity?.warriorTalents?.rageMastery?.points || 0) > 0 ? 0.15 : 0);
+        moveBonus += entity === this.player ? getWarriorRedTempestMoveSpeedBonus(this) : ((entity?.warriorTalents?.redTempest?.points || 0) > 0 ? 0.2 : 0);
+      }
     }
-    return (classSpec.baseMoveSpeed + levelBonus) * (1 + moveSpeedLevel * 0.05) * momentumMultiplier;
+    if (entity?.classType === "necromancer") {
+      moveBonus += entity === this.player
+        ? getNecromancerVigorMoveSpeedBonusPct(this)
+        : ((entity?.necromancerRuntime?.vigorTimer || 0) > 0 ? 0.25 : 0);
+    }
+    return (classSpec.baseMoveSpeed + levelBonus) * (1 + moveBonus);
   },
 
   getPlayerProgressField(entity, key, fallback = 0) {
@@ -183,6 +232,50 @@ export const runtimeBaseSupportMethods = {
       player.hpBarTimer = Math.max(0, (Number.isFinite(player.hpBarTimer) ? player.hpBarTimer : 0) - dt);
       player.animTime = (Number.isFinite(player.animTime) ? player.animTime : 0) + dt;
       player.alive = Number.isFinite(player.health) ? player.health > 0 : player.alive !== false;
+      player.rangerRuntime = player.rangerRuntime && typeof player.rangerRuntime === "object" ? player.rangerRuntime : {};
+      player.rangerRuntime.foxstepCooldown = Math.max(0, (Number.isFinite(player.rangerRuntime.foxstepCooldown) ? player.rangerRuntime.foxstepCooldown : 0) - dt);
+      player.rangerRuntime.foxstepActiveTimer = Math.max(0, (Number.isFinite(player.rangerRuntime.foxstepActiveTimer) ? player.rangerRuntime.foxstepActiveTimer : 0) - dt);
+      player.rangerRuntime.foxstepHealTickTimer = Math.max(0, (Number.isFinite(player.rangerRuntime.foxstepHealTickTimer) ? player.rangerRuntime.foxstepHealTickTimer : 0) - dt);
+      if ((player.rangerRuntime.foxstepActiveTimer || 0) > 0 && (player.rangerRuntime.foxstepHealPool || 0) > 0 && player.alive) {
+        while ((player.rangerRuntime.foxstepHealTickTimer || 0) <= 0 && (player.rangerRuntime.foxstepHealPool || 0) > 0) {
+          player.rangerRuntime.foxstepHealTickTimer += 0.25;
+          const healAmount = Math.min(player.rangerRuntime.foxstepHealPool, Math.max(1, (player.maxHealth || 1) * 0.0084));
+          player.rangerRuntime.foxstepHealPool = Math.max(0, player.rangerRuntime.foxstepHealPool - healAmount);
+          if (this.isPrimaryPlayerEntity(player)) this.applyPlayerHealing(healAmount, { suppressText: true });
+          else player.health = Math.min(player.maxHealth || player.health || 0, (player.health || 0) + healAmount);
+        }
+      } else if ((player.rangerRuntime.foxstepActiveTimer || 0) <= 0) {
+        player.rangerRuntime.foxstepHealPool = 0;
+      }
+      player.warriorRuntime = player.warriorRuntime && typeof player.warriorRuntime === "object" ? player.warriorRuntime : {};
+      player.warriorRuntime.secondWindTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.secondWindTimer) ? player.warriorRuntime.secondWindTimer : 0) - dt);
+      player.warriorRuntime.battleFrenzyCooldownTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.battleFrenzyCooldownTimer) ? player.warriorRuntime.battleFrenzyCooldownTimer : 0) - dt);
+      player.warriorRuntime.tempHpTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.tempHpTimer) ? player.warriorRuntime.tempHpTimer : 0) - dt);
+      player.warriorRuntime.rageArcTimer = Math.max(0, (Number.isFinite(player.warriorRuntime.rageArcTimer) ? player.warriorRuntime.rageArcTimer : 0) - dt);
+      player.warriorRuntime.cheatDeathCooldown = Math.max(0, (Number.isFinite(player.warriorRuntime.cheatDeathCooldown) ? player.warriorRuntime.cheatDeathCooldown : 0) - dt);
+      if ((player.warriorRuntime.tempHpTimer || 0) <= 0) player.warriorRuntime.tempHp = 0;
+      if ((player.warriorRuntime.secondWindTimer || 0) > 0 && (player.warriorRuntime.secondWindPool || 0) > 0 && player.alive) {
+        const timer = Math.max(dt, player.warriorRuntime.secondWindTimer);
+        const healAmount = Math.min(player.warriorRuntime.secondWindPool, (player.warriorRuntime.secondWindPool / timer) * dt);
+        player.warriorRuntime.secondWindPool = Math.max(0, player.warriorRuntime.secondWindPool - healAmount);
+        if (this.isPrimaryPlayerEntity(player)) this.applyPlayerHealing(healAmount, { suppressText: true });
+        else player.health = Math.min(player.maxHealth || player.health || 0, (player.health || 0) + healAmount);
+      } else if ((player.warriorRuntime.secondWindTimer || 0) <= 0) {
+        player.warriorRuntime.secondWindPool = 0;
+      }
+      player.necromancerRuntime = player.necromancerRuntime && typeof player.necromancerRuntime === "object" ? player.necromancerRuntime : {};
+      player.necromancerRuntime.vigorTimer = Math.max(0, (Number.isFinite(player.necromancerRuntime.vigorTimer) ? player.necromancerRuntime.vigorTimer : 0) - dt);
+      player.necromancerRuntime.vigorBeamTimer = Math.max(0, (Number.isFinite(player.necromancerRuntime.vigorBeamTimer) ? player.necromancerRuntime.vigorBeamTimer : 0) - dt);
+      if ((player.necromancerRuntime.vigorTimer || 0) > 0 && (player.necromancerRuntime.vigorHealPool || 0) > 0 && player.alive) {
+        const timer = Math.max(dt, player.necromancerRuntime.vigorTimer);
+        const healAmount = Math.min(player.necromancerRuntime.vigorHealPool, (player.necromancerRuntime.vigorHealPool / timer) * dt);
+        player.necromancerRuntime.vigorHealPool = Math.max(0, player.necromancerRuntime.vigorHealPool - healAmount);
+        if (this.isPrimaryPlayerEntity(player)) this.applyPlayerHealing(healAmount, { suppressText: true });
+        else player.health = Math.min(player.maxHealth || player.health || 0, (player.health || 0) + healAmount);
+      } else if ((player.necromancerRuntime.vigorTimer || 0) <= 0) {
+        player.necromancerRuntime.vigorHealPool = 0;
+      }
+      player.necromancerRuntime.tempHp = Math.max(0, Number.isFinite(player.necromancerRuntime.tempHp) ? player.necromancerRuntime.tempHp : 0);
       if (!this.isPrimaryPlayerEntity(player)) {
         player.warriorMomentumTimer = Math.max(0, (Number.isFinite(player.warriorMomentumTimer) ? player.warriorMomentumTimer : 0) - dt);
         player.warriorRageActiveTimer = Math.max(0, (Number.isFinite(player.warriorRageActiveTimer) ? player.warriorRageActiveTimer : 0) - dt);
@@ -208,10 +301,36 @@ export const runtimeBaseSupportMethods = {
 
   getDamageTakenForPlayerEntity(entity, amount, damageType = "physical") {
     if (!Number.isFinite(amount) || amount <= 0) return 0;
+    const rangerDodgeChance = entity === this.player
+      ? getRangerDodgeChance(this)
+      : ((entity?.rangerTalents?.fleetstep?.points || 0) > 0 ? 0.15 : 0);
+    if (entity?.classType === "archer" && Math.random() < rangerDodgeChance) return 0;
+    if (entity?.classType === "archer" && (entity?.rangerRuntime?.foxstepActiveTimer || 0) > 0) return amount * 0.5;
+    if (entity?.classType === "fighter") {
+      const consecratedZone = this.getCrusaderConsecratedZoneForEntity(entity);
+      if (consecratedZone) amount *= 1 - (entity === this.player ? getWarriorConsecratedDamageReductionPct(this) : ((entity?.warriorTalents?.guardedAdvance?.points || 0) > 0 ? 0.05 : 0));
+      const hpRatio = Number.isFinite(entity?.maxHealth) && entity.maxHealth > 0 ? (entity.health || 0) / entity.maxHealth : 1;
+      const lowHealthReduction = entity === this.player
+        ? getWarriorUnbrokenDamageReduction(this, hpRatio)
+        : getWarriorUnbrokenDamageReduction(entity, hpRatio);
+      if (lowHealthReduction > 0) amount *= 1 - lowHealthReduction;
+      if (damageType === "melee" || damageType === "physical") {
+        const meleeReduction = entity === this.player
+          ? getWarriorGuardedAdvanceMeleeDefenseBonusPct(this)
+          : getWarriorGuardedAdvanceMeleeDefenseBonusPct(entity);
+        if (meleeReduction > 0) amount *= 1 - meleeReduction;
+      }
+    }
     if (this.isPrimaryPlayerEntity(entity) && typeof this.getPlayerDamageTaken === "function") {
       return this.getPlayerDamageTaken(amount, damageType);
     }
     return amount;
+  },
+
+  getSkillPointGainForLevel(level, classType = this.classType) {
+    if (classType === "fighter") return getWarriorSkillPointGainForLevel(level, classType);
+    if (classType === "necromancer") return getNecromancerSkillPointGainForLevel(level, classType);
+    return getRangerSkillPointGainForLevel(level, classType);
   },
 
   recordDamageDealtByPlayerEntity(entity, amount) {
@@ -265,10 +384,13 @@ export const runtimeBaseSupportMethods = {
     while (entity.experience >= entity.expToNextLevel) {
       entity.experience -= entity.expToNextLevel;
       entity.level += 1;
-      entity.skillPoints += 1;
+      entity.skillPoints += this.getSkillPointGainForLevel(entity.level, entity.classType);
       const hpGain = Number.isFinite(classSpec.levelHpGain) ? classSpec.levelHpGain : 10;
-      entity.maxHealth = (Number.isFinite(entity.maxHealth) ? entity.maxHealth : 0) + hpGain;
-      entity.health = Math.min(entity.maxHealth, (Number.isFinite(entity.health) ? entity.health : 0) + hpGain);
+      let adjustedHpGain = hpGain;
+      if (entity.classType === "archer") adjustedHpGain = hpGain * (1 + ((entity?.rangerTalents?.fleetstep?.points || 0) > 0 ? 0.06 : 0));
+      else if (entity.classType === "fighter") adjustedHpGain = hpGain * (1 + getWarriorIronGuardMaxHealthBonusPct(entity));
+      entity.maxHealth = (Number.isFinite(entity.maxHealth) ? entity.maxHealth : 0) + adjustedHpGain;
+      entity.health = Math.min(entity.maxHealth, (Number.isFinite(entity.health) ? entity.health : 0) + adjustedHpGain);
       const baseMin = Number.isFinite(classSpec.primaryDamageMin)
         ? classSpec.primaryDamageMin
         : Number.isFinite(classSpec.primaryDamage)
@@ -295,11 +417,65 @@ export const runtimeBaseSupportMethods = {
     }
     const classSpec = this.getPlayerClassSpec(entity);
     if (classSpec?.usesRanged) return;
-    const points = this.getPlayerSkillPointsFor(entity, "warriorMomentum");
+    const points = entity?.classType === "fighter"
+      ? Math.max(0, entity?.warriorTalents?.battleFrenzy?.points || 0)
+      : this.getPlayerSkillPointsFor(entity, "warriorMomentum");
     if (points <= 0) return;
     const wasInactive = (entity.warriorMomentumTimer || 0) <= 0;
-    entity.warriorMomentumTimer = Math.max(entity.warriorMomentumTimer || 0, 0.85 + 0.9 * Math.log1p(1.2 * Math.max(0, points)));
+    if (entity?.classType === "fighter") {
+      entity.warriorRuntime = entity.warriorRuntime && typeof entity.warriorRuntime === "object" ? entity.warriorRuntime : {};
+      if ((entity.warriorRuntime.battleFrenzyCooldownTimer || 0) > 0) return;
+      entity.warriorMomentumTimer = getWarriorBattleFrenzyDuration();
+      entity.warriorRuntime.battleFrenzyCooldownTimer = 10;
+    } else {
+      entity.warriorMomentumTimer = Math.max(entity.warriorMomentumTimer || 0, 0.85 + 0.9 * Math.log1p(1.2 * Math.max(0, points)));
+    }
     if (wasInactive) entity.speed = this.getPlayerMoveSpeedFor(entity);
+  },
+
+  tryReflectMissileForPlayerEntity(entity, projectile, ownerEntity = null) {
+    if (!entity || !projectile || entity.classType !== "fighter") return false;
+    const reflectChance = entity === this.player
+      ? getWarriorGuardedAdvanceMissileReflectChance(this, this.player)
+      : getWarriorGuardedAdvanceMissileReflectChance(entity, entity);
+    if (reflectChance <= 0 || Math.random() >= reflectChance) return false;
+    const reflectOwner = ownerEntity || entity;
+    const sourceX = Number.isFinite(projectile.x) ? projectile.x : (entity.x || 0);
+    const sourceY = Number.isFinite(projectile.y) ? projectile.y : (entity.y || 0);
+    const targetX = Number.isFinite(projectile.ownerX) ? projectile.ownerX : sourceX - (Number.isFinite(projectile.vx) ? projectile.vx : 0);
+    const targetY = Number.isFinite(projectile.ownerY) ? projectile.ownerY : sourceY - (Number.isFinite(projectile.vy) ? projectile.vy : 0);
+    const dx = targetX - sourceX;
+    const dy = targetY - sourceY;
+    const len = Math.hypot(dx, dy) || 1;
+    const speed = Math.max(180, Math.hypot(Number.isFinite(projectile.vx) ? projectile.vx : 0, Number.isFinite(projectile.vy) ? projectile.vy : 0));
+    projectile.vx = (dx / len) * speed;
+    projectile.vy = (dy / len) * speed;
+    projectile.faction = "player";
+    projectile.projectileType = "bullet";
+    projectile.ownerId = reflectOwner?.id || this.player?.id || null;
+    projectile.hitTargets = new Set();
+    projectile.remainingRicochets = 0;
+    const reflectMult = entity === this.player
+      ? (this.warriorTalents?.judgmentWave?.points || this.warriorTalents?.stonewall?.points || 0) > 0 ? 1.5 : 1
+      : (entity?.warriorTalents?.judgmentWave?.points || entity?.warriorTalents?.stonewall?.points || 0) > 0 ? 1.5 : 1;
+    const rawDamage = Number.isFinite(projectile.damage) ? projectile.damage : this.rollEnemyContactDamage({ damageMin: projectile.damageMin, damageMax: projectile.damageMax });
+    projectile.damage = rawDamage * reflectMult;
+    this.spawnFloatingText(entity.x, entity.y - 28, "Reflect", "#b7d8ff", 0.9, 14);
+    return true;
+  },
+
+  getWarriorMissileProtectorForPlayerEntity(entity) {
+    if (!entity || entity.classType !== "fighter") return entity;
+    if (entity === this.player) return entity;
+    const players = this.getLivingPlayerEntities();
+    const tile = this.config?.map?.tile || 32;
+    for (const other of players) {
+      if (!other || other === entity || other.classType !== "fighter") continue;
+      const share = other === this.player ? hasWarriorReflectShare(this, this.player) : hasWarriorReflectShare(other, other);
+      if (!share) continue;
+      if (Math.hypot((other.x || 0) - (entity.x || 0), (other.y || 0) - (entity.y || 0)) <= tile) return other;
+    }
+    return entity;
   },
 
   handlePlayerEntityDeath(entity) {
@@ -333,6 +509,11 @@ export const runtimeBaseSupportMethods = {
 
   applyHealingToPlayerEntity(entity, amount, options = {}) {
     if (!entity || amount <= 0) return;
+    const consecratedZone = this.getCrusaderConsecratedZoneForEntity(entity);
+    if (consecratedZone) {
+      const zoneBoost = Number.isFinite(consecratedZone.healingMultiplier) ? consecratedZone.healingMultiplier : getWarriorConsecratedHealingMultiplier(this);
+      amount *= Math.max(1, zoneBoost);
+    }
     const before = Number.isFinite(entity.health) ? entity.health : 0;
     entity.health = Math.min(Number.isFinite(entity.maxHealth) ? entity.maxHealth : before, before + amount);
     entity.alive = entity.health > 0;
@@ -341,17 +522,102 @@ export const runtimeBaseSupportMethods = {
     if (this.isPrimaryPlayerEntity(entity) && typeof this.recordRunHealingReceived === "function") this.recordRunHealingReceived(healed);
     this.markPlayerEntityHealthBarVisible(entity);
     if (!options.suppressText) {
-      this.spawnFloatingText(entity.x, entity.y - 26, `+${Math.max(1, Math.round(healed))}`, "#79e59a", 0.8, 14);
+      this.spawnFloatingText(
+        entity.x,
+        entity.y - 26,
+        `+${Math.max(1, Math.round(healed))}`,
+        typeof this.getHealingTextColor === "function" ? this.getHealingTextColor() : "#79e59a",
+        0.8,
+        14
+      );
     }
   },
 
   applyDamageToPlayerEntity(entity, amount, damageType = "physical", source = null) {
     if (!entity || amount <= 0) return;
+    entity.warriorRuntime = entity.warriorRuntime && typeof entity.warriorRuntime === "object" ? entity.warriorRuntime : {};
+    entity.necromancerRuntime = entity.necromancerRuntime && typeof entity.necromancerRuntime === "object" ? entity.necromancerRuntime : {};
+    if ((entity.warriorRuntime.tempHp || 0) > 0) {
+      const absorbed = Math.min(entity.warriorRuntime.tempHp, amount);
+      entity.warriorRuntime.tempHp = Math.max(0, entity.warriorRuntime.tempHp - absorbed);
+      amount = Math.max(0, amount - absorbed);
+      if (amount <= 0) {
+        this.spawnFloatingText(entity.x, entity.y - 18, "Blocked", "#d9d1ff", 0.65, 13);
+        return;
+      }
+    }
+    if ((entity.necromancerRuntime.tempHp || 0) > 0) {
+      const absorbed = Math.min(entity.necromancerRuntime.tempHp, amount);
+      entity.necromancerRuntime.tempHp = Math.max(0, entity.necromancerRuntime.tempHp - absorbed);
+      amount = Math.max(0, amount - absorbed);
+      if (amount <= 0) {
+        this.spawnFloatingText(entity.x, entity.y - 18, "Blocked", "#d9d1ff", 0.65, 13);
+        return;
+      }
+    }
     if (this.isPrimaryPlayerEntity(entity) && typeof this.recordRunDamageTaken === "function") this.recordRunDamageTaken(amount);
-    this.spawnFloatingText(entity.x, entity.y - 18, `-${Math.round(amount)}`, "#ef6d6d");
+    this.spawnFloatingText(
+      entity.x,
+      entity.y - 18,
+      `-${Math.round(amount)}`,
+      typeof this.getDamageTextColor === "function" ? this.getDamageTextColor(damageType) : "#ef6d6d"
+    );
     entity.health = Math.max(0, (Number.isFinite(entity.health) ? entity.health : 0) - amount);
     entity.alive = entity.health > 0;
     this.markPlayerEntityHealthBarVisible(entity);
+    const entityHasFoxstep = entity === this.player ? hasFoxstep(this) : (entity?.rangerTalents?.foxstep?.points || 0) > 0;
+    if (entity.classType === "archer" && entityHasFoxstep) {
+      entity.rangerRuntime = entity.rangerRuntime && typeof entity.rangerRuntime === "object" ? entity.rangerRuntime : {};
+      const runtime = entity.rangerRuntime;
+      const hpRatio = (Number.isFinite(entity.maxHealth) && entity.maxHealth > 0) ? entity.health / entity.maxHealth : 1;
+      if ((runtime.foxstepCooldown || 0) <= 0 && (runtime.foxstepActiveTimer || 0) <= 0 && hpRatio <= 0.5) {
+        runtime.foxstepCooldown = 90;
+        runtime.foxstepActiveTimer = 15;
+        runtime.foxstepHealPool = Math.max(1, entity.maxHealth * 0.5);
+        runtime.foxstepHealTickTimer = 0.25;
+        this.spawnFloatingText(entity.x, entity.y - 36, "Foxstep", "#d8ffe5", 1.0, 16);
+      }
+    }
+    if (entity.classType === "fighter" && (damageType === "melee" || damageType === "physical")) {
+      const counterChance = entity === this.player
+        ? getWarriorGuardedAdvanceCounterChance(this)
+        : getWarriorGuardedAdvanceCounterChance(entity);
+      if (counterChance > 0 && Math.random() < counterChance) {
+        const target = (this.enemies || []).find((enemy) =>
+          enemy &&
+          (enemy.hp || 0) > 0 &&
+          !this.isEnemyFriendlyToPlayer(enemy) &&
+          Math.hypot((enemy.x || 0) - (entity.x || 0), (enemy.y || 0) - (entity.y || 0)) <= ((enemy.size || 20) + (entity.size || 22)) * 0.8
+        );
+        if (target) this.applyEnemyDamage(target, Math.max(1, amount), "melee", entity.id || null);
+      }
+    }
+    if (entity.classType === "necromancer") {
+      const retaliationDamage = entity === this.player ? getNecromancerRotTouchedRetaliationDamage(this) : ((entity?.necromancerTalents?.rotTouched?.points || 0) > 0 ? 5 : 0);
+      if (retaliationDamage > 0) {
+        const target = (this.enemies || []).find((enemy) =>
+          enemy &&
+          (enemy.hp || 0) > 0 &&
+          !this.isEnemyFriendlyToPlayer(enemy) &&
+          Math.hypot((enemy.x || 0) - (entity.x || 0), (enemy.y || 0) - (entity.y || 0)) <= ((enemy.size || 20) + (entity.size || 22)) * 0.9
+        );
+        if (target) this.applyEnemyDamage(target, retaliationDamage, "poison", entity.id || null);
+      }
+    }
+    if (entity.classType === "fighter" && entity.health <= 0) {
+      const canCheatDeath = entity === this.player
+        ? hasWarriorUnbrokenCheatDeath(this)
+        : false;
+      if (canCheatDeath && (entity.warriorRuntime.cheatDeathCooldown || 0) <= 0) {
+        entity.warriorRuntime.cheatDeathCooldown = 60;
+        entity.health = 1;
+        entity.alive = true;
+        entity.warriorRuntime.tempHp = Math.max(entity.warriorRuntime.tempHp || 0, 999999);
+        entity.warriorRuntime.tempHpTimer = 5;
+        this.spawnFloatingText(entity.x, entity.y - 36, "Unbroken", "#f4efe3", 1.0, 16);
+        return;
+      }
+    }
     if (entity.health <= 0) {
       if (source?.bossVariant === "sonya") this.gameOverTitle = "Haley Wins";
       this.handlePlayerEntityDeath(entity);

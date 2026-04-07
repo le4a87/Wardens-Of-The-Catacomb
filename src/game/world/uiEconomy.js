@@ -1,3 +1,19 @@
+import {
+  canSpendRangerUtility,
+  getRangerDanceAttackSpeedBonus,
+  getRangerDanceDefenseBonus,
+  getRangerDamageBonus,
+  getRangerMoveSpeedBonus,
+  isRangerTalentGame
+} from "../rangerTalentTree.js";
+import {
+  canSpendWarriorUtility,
+  getWarriorBloodheatAttackSpeedBonus,
+  getWarriorIronGuardDefenseBonusPct,
+  isWarriorTalentGame
+} from "../warriorTalentTree.js";
+import { isNecromancerTalentGame } from "../necromancerTalentTree.js";
+
 function isActiveMultiplayer(game) {
   return !!game?.networkEnabled && game.networkRoomPhase === "active";
 }
@@ -12,7 +28,10 @@ export function getEnemySpawnInterval(game) {
 }
 
 export function getMoveSpeedMultiplier(game) {
-  return 1 + game.upgrades.moveSpeed.level * 0.05;
+  const upgradeBonus = 1 + game.upgrades.moveSpeed.level * 0.05;
+  if (isRangerTalentGame(game)) return upgradeBonus * (1 + getRangerMoveSpeedBonus(game));
+  if (isWarriorTalentGame(game)) return upgradeBonus;
+  return upgradeBonus;
 }
 
 export function getGoldFindMultiplier(game) {
@@ -42,18 +61,26 @@ export function getGoldDropAmountMultiplier(game) {
 }
 
 export function getAttackSpeedMultiplier(game) {
-  return 1 + game.upgrades.attackSpeed.level * 0.06;
+  const base = 1 + game.upgrades.attackSpeed.level * 0.06;
+  if (isRangerTalentGame(game)) return base * (1 + getRangerDanceAttackSpeedBonus(game));
+  if (isWarriorTalentGame(game)) return base * (1 + getWarriorBloodheatAttackSpeedBonus(game));
+  return base;
 }
 
 export function getDamageMultiplier(game) {
   const lvl = Number.isFinite(game.upgrades.damage.level) ? game.upgrades.damage.level : 0;
-  return 1 + lvl * 0.08;
+  const base = 1 + lvl * 0.08;
+  if (isRangerTalentGame(game)) return base * (1 + getRangerDamageBonus(game));
+  return base;
 }
 
 export function getDefenseFlatReduction(game) {
   const base = Number.isFinite(game.classSpec.baseDefenseFlat) ? game.classSpec.baseDefenseFlat : 0;
   const levelBonus = Number.isFinite(game.classSpec.levelDefenseFlatGain) ? Math.max(0, game.classSpec.levelDefenseFlatGain) * Math.max(0, game.level - 1) : 0;
-  return base + levelBonus + game.upgrades.defense.level * 1.5;
+  const reduction = base + levelBonus + game.upgrades.defense.level * 1.5;
+  if (isRangerTalentGame(game)) return reduction * (1 + getRangerDanceDefenseBonus(game));
+  if (isWarriorTalentGame(game)) return reduction * (1 + getWarriorIronGuardDefenseBonusPct(game));
+  return reduction;
 }
 
 export function getUpgradeCost(game, upgradeKey) {
@@ -64,6 +91,7 @@ export function getUpgradeCost(game, upgradeKey) {
 }
 
 export function canBuyUpgrade(game, upgradeKey) {
+  if ((isRangerTalentGame(game) || isWarriorTalentGame(game) || isNecromancerTalentGame(game)) && ["moveSpeed", "attackSpeed", "damage", "defense"].includes(upgradeKey)) return false;
   const upgrade = game.upgrades[upgradeKey];
   if (!upgrade || upgrade.level >= upgrade.maxLevel) return false;
   return game.gold >= getUpgradeCost(game, upgradeKey);
@@ -166,7 +194,8 @@ export function handleUiClicks(game) {
   }
   if (game.input.consumeKeyQueued("escape")) {
     if (game.gameOver) {
-      if (game.onReturnToMenu) game.onReturnToMenu();
+      if (game.statsPanelOpen && typeof game.onDeathStatsBackToLeaderboard === "function") game.onDeathStatsBackToLeaderboard();
+      else if (game.onReturnToMenu) game.onReturnToMenu();
     } else if (game.shopOpen) toggleShop(game, false);
     else if (game.skillTreeOpen) toggleSkillTree(game, false);
     else if (game.statsPanelOpen) toggleStatsPanel(game, false);
@@ -199,11 +228,21 @@ export function handleUiClicks(game) {
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsButton)) {
-      toggleStatsPanel(game);
+      if (game.gameOver && game.statsPanelOpen && typeof game.onDeathStatsBackToLeaderboard === "function") game.onDeathStatsBackToLeaderboard();
+      else toggleStatsPanel(game);
+      continue;
+    }
+    if (pointInRect(game, click.x, click.y, game.uiRects.gameOverLeaderboardButton)) {
+      if (typeof game.onDeathStatsBackToLeaderboard === "function") game.onDeathStatsBackToLeaderboard();
+      continue;
+    }
+    if (pointInRect(game, click.x, click.y, game.uiRects.gameOverMenuButton)) {
+      if (game.onReturnToMenu) game.onReturnToMenu();
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsClose)) {
-      toggleStatsPanel(game, false);
+      if (game.gameOver && typeof game.onDeathStatsBackToLeaderboard === "function") game.onDeathStatsBackToLeaderboard();
+      else toggleStatsPanel(game, false);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsRunTab)) {
@@ -224,6 +263,15 @@ export function handleUiClicks(game) {
       continue;
     }
     if (!playerAlive) continue;
+    const skillNodeRects = Array.isArray(game.uiRects.skillTreeNodes) ? game.uiRects.skillTreeNodes : [];
+    let handledSkillNode = false;
+    for (const node of skillNodeRects) {
+      if (!pointInRect(game, click.x, click.y, node.rect)) continue;
+      game.spendSkillPoint(node.key);
+      handledSkillNode = true;
+      break;
+    }
+    if (handledSkillNode) continue;
     if (pointInRect(game, click.x, click.y, game.uiRects.skillFireArrowNode)) {
       game.spendSkillPoint("fireArrow");
       continue;

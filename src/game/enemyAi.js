@@ -9,8 +9,9 @@ import {
   moveEnemyTowardPoint
 } from "./enemyAiShared.js";
 export { updateLeprechaunBoss } from "./enemyLeprechaunAi.js";
+export { updateMinotaur } from "./enemyMinotaurAi.js";
 
-export { updateMinotaur, updateNecromancer, updateRatArcher, updateSkeleton, updateSkeletonWarrior, updateSonyaBoss } from "./enemyAdvancedAi.js";
+export { updateNecromancer, updateRatArcher, updateSkeleton, updateSkeletonWarrior, updateSonyaBoss } from "./enemyAdvancedAi.js";
 
 export function updateGhost(game, enemy, dt, speedScale) {
   const ownerId = getEnemyAttackOwnerId(game, enemy);

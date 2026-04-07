@@ -1,5 +1,8 @@
 import { DEFAULT_BIOME_KEY, getBiomeDefinition } from "../biomes.js";
-import { createNecromancerBeamState, createPlayerState, createRunStats, createSkillState, createUpgradeState } from "./runtimeBaseStateFactories.js";
+import { createNecromancerBeamState, createNecromancerRuntimeState, createPlayerState, createRangerRuntimeState, createRunStats, createSkillState, createUpgradeState, createWarriorRuntimeState } from "./runtimeBaseStateFactories.js";
+import { createRangerTalentState } from "./rangerTalentTree.js";
+import { createWarriorTalentState } from "./warriorTalentTree.js";
+import { createNecromancerTalentState } from "./necromancerTalentTree.js";
 
 export function initializeRuntimeBaseState(game, { classType, classSpec, config }) {
   game.debugBossOverride = "auto";
@@ -20,7 +23,7 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.hasKey = false;
   game.gameOver = false;
   game.gameOverTitle = "GAME OVER";
-  game.deathTransitionDuration = 7;
+  game.deathTransitionDuration = 12;
   game.deathTransition = {
     active: false,
     elapsed: 0,
@@ -60,6 +63,12 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.floatingTexts = [];
   game.recentPlayerShots = [];
   game.skills = createSkillState();
+  game.rangerTalents = createRangerTalentState();
+  game.warriorTalents = createWarriorTalentState();
+  game.necromancerTalents = createNecromancerTalentState();
+  game.rangerRuntime = createRangerRuntimeState();
+  game.warriorRuntime = createWarriorRuntimeState();
+  game.necromancerRuntime = createNecromancerRuntimeState();
   game.runStats = createRunStats();
   game.warriorMomentumTimer = 0;
   game.warriorRageActiveTimer = 0;
@@ -71,6 +80,12 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.shopOrder = ["moveSpeed", "attackSpeed", "damage", "defense"];
 
   game.player = createPlayerState(classType, classSpec, config.player.maxHealth);
+  game.player.rangerTalents = game.rangerTalents;
+  game.player.warriorTalents = game.warriorTalents;
+  game.player.necromancerTalents = game.necromancerTalents;
+  game.player.warriorRuntime = game.warriorRuntime;
+  game.player.rangerRuntime = game.rangerRuntime;
+  game.player.necromancerRuntime = game.necromancerRuntime;
   game.door = { x: 0, y: 0, open: false };
   game.pickup = { x: 0, y: 0, taken: false };
   game.portal = { x: 0, y: 0, active: false };

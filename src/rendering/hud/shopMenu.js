@@ -101,6 +101,12 @@ export function drawShopMenu(renderer, game, layout) {
 
   ctx.font = "12px Trebuchet MS";
   ctx.fillStyle = "#8ea1c5";
-  ctx.fillText("Mouse wheel to scroll items.", menuX + 14, menuY + menuH - 28);
+  ctx.fillText(
+    (game.isArcherClass && game.isArcherClass()) || (game.isWarriorClass && game.isWarriorClass())
+      ? "Utility upgrades now live in the skill tree."
+      : "Mouse wheel to scroll items.",
+    menuX + 14,
+    menuY + menuH - 28
+  );
   ctx.fillText(`Skill Points: ${game.skillPoints}`, menuX + 14, menuY + menuH - 12);
 }

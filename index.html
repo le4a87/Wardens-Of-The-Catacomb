@@ -8,7 +8,12 @@
 </head>
 <body>
   <main class="layout">
-    <section class="menu-shell">
+    <section id="top-ad-banner" class="top-ad-banner" hidden aria-label="Advertisement">
+      <div class="top-ad-banner__frame">
+        <img id="top-ad-image" class="top-ad-banner__image" alt="Advertisement" />
+      </div>
+    </section>
+    <section class="menu-shell" hidden>
       <section id="mode-select" class="menu-screen" aria-label="Mode selection">
         <div class="mode-select-layout">
           <div class="mode-select-copy">
@@ -45,6 +50,13 @@
               <input id="menu-volume" class="menu-volume-control__slider" type="range" min="0" max="100" step="1" value="50" />
               <output id="menu-volume-value" class="menu-volume-control__value" for="menu-volume">50%</output>
             </div>
+          </label>
+        </section>
+        <section class="options-panel" aria-label="Display settings">
+          <h3>Display</h3>
+          <label for="disable-ads" class="menu-toggle-control">
+            <span class="menu-toggle-control__label">Disable Ads</span>
+            <input id="disable-ads" class="menu-toggle-control__checkbox" type="checkbox" />
           </label>
         </section>
         <section id="dev-boss-options" class="options-panel" aria-label="Developer boss options" hidden>
@@ -234,16 +246,24 @@
           <h2 id="leaderboard-title">Leaderboard</h2>
           <p id="leaderboard-subtitle"></p>
         </div>
-        <button type="button" id="leaderboard-close" class="leaderboard-close" aria-label="Close leaderboard">×</button>
+        <div class="leaderboard-header-actions">
+          <button type="button" id="leaderboard-continue" class="start-game mini" hidden>Continue</button>
+          <button type="button" id="leaderboard-close" class="leaderboard-close" aria-label="Close leaderboard">×</button>
+        </div>
       </div>
       <p id="leaderboard-status" class="leaderboard-status"></p>
       <div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard board type">
         <button type="button" id="leaderboard-board-solo" class="leaderboard-tab is-active">Solo</button>
         <button type="button" id="leaderboard-board-group" class="leaderboard-tab">Group</button>
       </div>
-      <div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard scope">
-        <button type="button" id="leaderboard-tab-global" class="leaderboard-tab is-active">Global</button>
-        <button type="button" id="leaderboard-tab-session" class="leaderboard-tab">This Session</button>
+      <div class="leaderboard-scope-row">
+        <div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard scope">
+          <button type="button" id="leaderboard-tab-global" class="leaderboard-tab is-active">Global</button>
+          <button type="button" id="leaderboard-tab-session" class="leaderboard-tab">This Session</button>
+        </div>
+        <div class="leaderboard-death-actions" hidden>
+          <button type="button" id="leaderboard-stats" class="start-game mini">Stats</button>
+        </div>
       </div>
       <div class="leaderboard-table-wrap">
         <table class="leaderboard-table">
@@ -272,9 +292,6 @@
           </thead>
           <tbody id="leaderboard-session-body"></tbody>
         </table>
-      </div>
-      <div class="leaderboard-actions">
-        <button type="button" id="leaderboard-continue" class="start-game mini" hidden>Continue</button>
       </div>
     </div>
   </section>

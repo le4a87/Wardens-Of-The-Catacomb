@@ -57,6 +57,10 @@ function updateFriendlySkeletonBodyguard(game, enemy, dt, speedScale, attackRang
   const distToAnchor = vecLength(anchor.x - enemy.x, anchor.y - enemy.y);
   const hardLeash = Math.max(tile * 2.8, follow * 1.7);
   const guardThreat = findControlledSkeletonGuardTarget(game, enemy, owner);
+  const legionMasterActive = owner === game.player
+    ? (game?.necromancerTalents?.legionMaster?.points || 0) > 0
+    : (owner?.necromancerTalents?.legionMaster?.points || 0) > 0;
+  const rangedAttackRange = tile * 5;
 
   if (distToOwner > hardLeash) {
     if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "return");
@@ -72,8 +76,38 @@ function updateFriendlySkeletonBodyguard(game, enemy, dt, speedScale, attackRang
     enemy.dirY = dy / dist;
     if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "guard");
     if (attackRange > 0 && dist <= attackRange && (enemy.attackCooldown || 0) <= 0) {
-      enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+      enemy.attackCooldown = (game.config.enemy.skeletonWarriorAttackCooldown || 1.0) / Math.max(0.4, 1 + (enemy.controlledAttackSpeedBonusPct || 0));
       game.applyEnemyDamage(guardThreat, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical", ownerId);
+      return true;
+    }
+    enemy.rangedAttackCooldown = Math.max(0, (enemy.rangedAttackCooldown || 0) - dt);
+    if (
+      legionMasterActive &&
+      enemy.type === "skeleton_warrior" &&
+      dist <= rangedAttackRange &&
+      dist > attackRange * 1.1 &&
+      hasLineOfSight(game, enemy.x, enemy.y, guardThreat.x, guardThreat.y) &&
+      (enemy.rangedAttackCooldown || 0) <= 0
+    ) {
+      const angle = Math.atan2(dy, dx);
+      const speed = game.config.enemy.ratArcherProjectileSpeed || 360;
+      const damageMin = Math.max(1, Math.round((enemy.damageMin || game.config.enemy.skeletonWarriorDamageMin || 10) * 0.8));
+      const damageMax = Math.max(damageMin, Math.round((enemy.damageMax || game.config.enemy.skeletonWarriorDamageMax || 16) * 0.8));
+      game.bullets.push({
+        x: enemy.x + Math.cos(angle) * 10,
+        y: enemy.y + Math.sin(angle) * 10,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        angle,
+        life: 1.15,
+        size: 6,
+        damageMin,
+        damageMax,
+        damageType: "arrow",
+        ownerId,
+        faction: "player"
+      });
+      enemy.rangedAttackCooldown = 1.25;
       return true;
     }
     moveEnemyTowardPoint(game, enemy, guardThreat, dt, Math.max(0.95, speedScale), Math.max(6, tile * 0.18));
@@ -260,7 +294,7 @@ export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
   enemy.dirX = dx / dist;
   enemy.dirY = dy / dist;
   if (dist <= range && enemy.attackCooldown <= 0) {
-    enemy.attackCooldown = game.config.enemy.skeletonWarriorAttackCooldown || 1.0;
+    enemy.attackCooldown = (game.config.enemy.skeletonWarriorAttackCooldown || 1.0) / Math.max(0.4, 1 + (enemy.controlledAttackSpeedBonusPct || 0));
     if (game.isPlayerEntity && game.isPlayerEntity(target) && (target.hitCooldown || 0) <= 0) {
       target.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);

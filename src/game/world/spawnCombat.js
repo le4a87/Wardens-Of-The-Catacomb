@@ -129,11 +129,24 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical", o
     return;
   }
   let adjusted = amount;
+  if (
+    enemy &&
+    typeof game.isUndeadEnemy === "function" &&
+    game.isUndeadEnemy(enemy) &&
+    (enemy.crusaderDefenseShredTimer || 0) > 0
+  ) {
+    const shredPct = Number.isFinite(enemy.crusaderDefenseShredPct) ? enemy.crusaderDefenseShredPct : 0;
+    if (shredPct > 0) adjusted *= 1 + shredPct;
+  }
   if (enemy?.type === "mimic") {
     if (damageType === "arrow") adjusted *= game.config.enemy.mimicArrowResistance;
     else if (damageType === "fire") adjusted *= game.config.enemy.mimicFireVulnerability;
     enemy.dormant = false;
     enemy.revealed = true;
+  }
+  if ((enemy?.curseTimer || 0) > 0) {
+    adjusted *= 1.25;
+    if (damageType === "poison") adjusted *= 1.25;
   }
   const defense = game.getEnemyDefenseScale() * (Number.isFinite(enemy?.controlledDefenseMultiplier) ? Math.max(0.1, enemy.controlledDefenseMultiplier) : 1);
   if (!Number.isFinite(defense) || defense <= 0) return;
@@ -154,7 +167,12 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical", o
   }
   enemy.hpBarTimer = game.config.enemy.hpBarDuration;
   if (effective >= 1 || (enemy.damageTextTimer || 0) <= 0) {
-    game.spawnFloatingText(enemy.x, enemy.y - enemy.size * 0.65, `-${Math.max(1, Math.round(effective))}`, "#e85c5c");
+    game.spawnFloatingText(
+      enemy.x,
+      enemy.y - enemy.size * 0.65,
+      `-${Math.max(1, Math.round(effective))}`,
+      typeof game.getDamageTextColor === "function" ? game.getDamageTextColor(damageType) : "#e85c5c"
+    );
     enemy.damageTextTimer = 0.14;
   }
   if (enemy?.type === "skeleton_warrior" && enemy.hp <= 0) {

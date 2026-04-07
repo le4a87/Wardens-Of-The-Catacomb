@@ -108,6 +108,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.shopScrollMax = 0;
     game.uiRects.skillTreeButton = null;
     game.uiRects.skillTreeClose = null;
+    game.uiRects.skillTreeNodes = [];
     game.uiRects.skillTreeScrollArea = null;
     game.uiRects.skillTreeScrollMax = 0;
     game.uiRects.skillFireArrowNode = null;
@@ -124,6 +125,8 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.statsRunTab = null;
     game.uiRects.statsCharacterTab = null;
     game.uiRects.gameOverStatsButton = null;
+    game.uiRects.gameOverLeaderboardButton = null;
+    game.uiRects.gameOverMenuButton = null;
     game.uiRects.hudAbilityWidget = null;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -188,15 +191,13 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     this.drawBossSpeechCallout(game, cameraX, cameraY, layout);
     this.drawHud(game, layout);
     const minimapBottom = this.drawMinimap(game, layout);
-    if (!game.gameOver || !game.statsPanelOpen) {
-      const statsBottom = this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
-      this.drawGroupPanel(game, layout, statsBottom + this.sidebarPadding);
-    }
+    const statsBottom = this.drawPlayerStatsPanel(game, layout, minimapBottom + this.sidebarPadding);
+    if (!game.statsPanelOpen) this.drawGroupPanel(game, layout, statsBottom + this.sidebarPadding);
     if (game.shopOpen) this.drawShopMenu(game, layout);
     if (game.skillTreeOpen) this.drawSkillTreeMenu(game, layout);
     if (game.paused && !game.shopOpen && !game.skillTreeOpen && !game.statsPanelOpen && !game.gameOver) this.drawPausedOverlay(layout);
 
-    if (game.gameOver) {
+    if (game.gameOver && !game.statsPanelOpen) {
       const progress = typeof game.getDeathTransitionProgress === "function" ? game.getDeathTransitionProgress() : 1;
       const fadeAlpha = Math.min(1, progress / 0.45);
       const titleAlpha = progress <= 0.16 ? 0 : Math.min(1, (progress - 0.16) / 0.2);

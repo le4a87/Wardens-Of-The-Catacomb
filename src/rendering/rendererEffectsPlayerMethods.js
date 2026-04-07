@@ -1,4 +1,13 @@
+import { hasWarriorCrusaderInvestment, isWarriorRaging } from "../game/warriorTalentTree.js";
+
 export const rendererEffectsPlayerMethods = {
+  getPlayerTempHp(entity) {
+    if (!entity || typeof entity !== "object") return 0;
+    const warriorTemp = Number.isFinite(entity?.warriorRuntime?.tempHp) ? entity.warriorRuntime.tempHp : 0;
+    const necromancerTemp = Number.isFinite(entity?.necromancerRuntime?.tempHp) ? entity.necromancerRuntime.tempHp : 0;
+    return Math.max(0, warriorTemp + necromancerTemp);
+  },
+
   getReplicatedPlayerClassSpec(player) {
     const classType = player?.classType;
     return this.config.classes[classType] || this.config.classes.archer;
@@ -23,7 +32,20 @@ export const rendererEffectsPlayerMethods = {
     const frameY = (Number.isFinite(player.facing) ? player.facing : 0) * frameSize;
     const drawX = screenX - renderSize / 2;
     const drawY = screenY - renderSize * 0.56;
-    this.drawPlayerSpriteFrame(frameX, frameY, frameSize, drawX, drawY, renderSize, null, 0);
+    const foxstepActive = (player?.rangerRuntime?.foxstepActiveTimer || 0) > 0;
+    const crusaderInvested = hasWarriorCrusaderInvestment(player);
+    const warriorRaging = isWarriorRaging(player);
+    this.drawPlayerSpriteFrame(
+      frameX,
+      frameY,
+      frameSize,
+      drawX,
+      drawY,
+      renderSize,
+      warriorRaging ? (crusaderInvested ? "#f5cf6f" : "#ff2a2a") : null,
+      warriorRaging ? (crusaderInvested ? 0.78 : 0.5) : 0,
+      foxstepActive ? "saturate(50%) brightness(0.95)" : (warriorRaging && crusaderInvested ? "brightness(1.08) contrast(1.05)" : "none")
+    );
     return { movingVisual, walkPhase: movingVisual ? player._renderAnimPhase * 0.1 : 0 };
   },
 
@@ -34,7 +56,10 @@ export const rendererEffectsPlayerMethods = {
       return;
     }
     if (!usesRanged) {
+      if ((player?.warriorRageActiveTimer || 0) > 0 && crusaderInvested) this.ctx.save();
+      if ((player?.warriorRageActiveTimer || 0) > 0 && crusaderInvested) this.ctx.filter = "brightness(1.08) saturate(1.15)";
       this.drawPlayerFighterRig(player, screenX, screenY, walkPhase, 0);
+      if ((player?.warriorRageActiveTimer || 0) > 0 && crusaderInvested) this.ctx.restore();
       return;
     }
     this.drawPlayerAimingRig(player, screenX, screenY, walkPhase, 0);
@@ -98,24 +123,39 @@ export const rendererEffectsPlayerMethods = {
     const frameY = p.facing * frameSize;
     const drawX = playerScreenX - renderSize / 2;
     const drawY = playerScreenY - renderSize * 0.56;
+    const foxstepActive = (game.rangerRuntime?.foxstepActiveTimer || 0) > 0;
     let tintColor = null;
     let tintAlpha = 0;
     if (game.isNecromancerClass && game.isNecromancerClass()) {
       tintColor = "#a6a8ad";
       tintAlpha = 0.5;
     } else if (!game.classSpec?.usesRanged) {
-      if ((game.warriorRageActiveTimer || 0) > 0) {
-        tintColor = "#ff2a2a";
-        tintAlpha = 0.5;
+      const crusaderInvested = hasWarriorCrusaderInvestment(game);
+      if (isWarriorRaging(game)) {
+        tintColor = crusaderInvested ? "#f5cf6f" : "#ff2a2a";
+        tintAlpha = crusaderInvested ? 0.78 : 0.5;
       } else if ((game.warriorRageCooldownTimer || 0) > 0 && game.isWarriorRageUnlocked && game.isWarriorRageUnlocked()) {
-        tintColor = "#ff9b9b";
+        tintColor = crusaderInvested ? "#f2dfad" : "#ff9b9b";
         tintAlpha = 0.32;
       }
     }
-    this.drawPlayerSpriteFrame(frameX, frameY, frameSize, drawX, drawY, renderSize, tintColor, tintAlpha);
+    this.drawPlayerSpriteFrame(
+      frameX,
+      frameY,
+      frameSize,
+      drawX,
+      drawY,
+      renderSize,
+      tintColor,
+      tintAlpha,
+      foxstepActive ? "saturate(50%) brightness(0.95)" : (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game) ? "brightness(1.08) contrast(1.05)" : "none")
+    );
     const baseCd = game.getPlayerFireCooldown ? game.getPlayerFireCooldown() : this.config.player.baseFireCooldown;
     const firePulse = baseCd > 0 ? Math.max(0, Math.min(1, p.fireCooldown / baseCd)) : 0;
     const walkPhase = movingVisual ? p._renderAnimPhase * 0.1 : 0;
+    if (foxstepActive || (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game))) this.ctx.save();
+    if (foxstepActive) this.ctx.filter = "saturate(50%) brightness(0.95)";
+    else if (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game)) this.ctx.filter = "brightness(1.08) saturate(1.15)";
     if (game.isNecromancerClass && game.isNecromancerClass()) {
       this.drawPlayerNecromancerRig(p, playerScreenX, playerScreenY, walkPhase, firePulse);
     } else if (game.classSpec && !game.classSpec.usesRanged) {
@@ -123,12 +163,16 @@ export const rendererEffectsPlayerMethods = {
     } else {
       this.drawPlayerAimingRig(p, playerScreenX, playerScreenY, walkPhase, firePulse);
     }
+    if (foxstepActive || (!game.classSpec?.usesRanged && hasWarriorCrusaderInvestment(game) && isWarriorRaging(game))) this.ctx.restore();
   },
 
-  drawPlayerSpriteFrame(frameX, frameY, frameSize, drawX, drawY, renderSize, tintColor = null, tintAlpha = 0) {
+  drawPlayerSpriteFrame(frameX, frameY, frameSize, drawX, drawY, renderSize, tintColor = null, tintAlpha = 0, filter = "none") {
     const ctx = this.ctx;
     if (!tintColor || tintAlpha <= 0) {
+      ctx.save();
+      ctx.filter = filter || "none";
       ctx.drawImage(this.playerSpriteSheet, frameX, frameY, frameSize, frameSize, drawX, drawY, renderSize, renderSize);
+      ctx.restore();
       return;
     }
     const cache = this._playerTintCanvas || document.createElement("canvas");
@@ -146,7 +190,10 @@ export const rendererEffectsPlayerMethods = {
     cctx.globalAlpha = 1;
     cctx.globalCompositeOperation = "source-over";
     this._playerTintCanvas = cache;
+    ctx.save();
+    ctx.filter = filter || "none";
     ctx.drawImage(cache, 0, 0, frameSize, frameSize, drawX, drawY, renderSize, renderSize);
+    ctx.restore();
   },
 
   drawPlayerFighterRig(player, screenX, screenY, walkPhase = 0, attackPulse = 0) {
@@ -260,17 +307,38 @@ export const rendererEffectsPlayerMethods = {
     if (!game.shouldShowPlayerHealthBar || !game.shouldShowPlayerHealthBar()) return;
     const ctx = this.ctx;
     const ratio = p.maxHealth > 0 ? Math.max(0, Math.min(1, p.health / p.maxHealth)) : 0;
+    const tempHp = this.getPlayerTempHp(p);
+    const tempRatio = p.maxHealth > 0 ? Math.max(0, Math.min(0.2, tempHp / p.maxHealth)) : 0;
     const width = 52;
+    const totalWidth = Math.round(width * 1.2);
     const height = 6;
-    const x = Math.floor(p.x - cameraX - width / 2);
+    const x = Math.floor(p.x - cameraX - totalWidth / 2);
     const y = Math.floor(p.y - cameraY - 36);
 
     ctx.fillStyle = "rgba(15, 18, 24, 0.9)";
-    ctx.fillRect(x - 1, y - 1, width + 2, height + 2);
+    ctx.fillRect(x - 1, y - 1, totalWidth + 2, height + 2);
     ctx.fillStyle = "#2f3a4e";
-    ctx.fillRect(x, y, width, height);
+    ctx.fillRect(x, y, totalWidth, height);
+    ctx.fillStyle = "rgba(85, 122, 163, 0.3)";
+    ctx.fillRect(x + width, y, totalWidth - width, height);
     ctx.fillStyle = ratio > 0.5 ? "#76db8d" : ratio > 0.25 ? "#e1bf63" : "#df6767";
     ctx.fillRect(x, y, width * ratio, height);
+    if (tempRatio > 0) {
+      const tempStart = x + width * ratio;
+      const tempWidth = Math.min(width * tempRatio, totalWidth - width * ratio);
+      ctx.fillStyle = "#b8ecff";
+      ctx.fillRect(tempStart, y, tempWidth, height);
+      ctx.fillStyle = "rgba(184, 236, 255, 0.22)";
+      ctx.fillRect(tempStart, y - 1, tempWidth, 2);
+    }
+    ctx.strokeStyle = "rgba(175, 193, 222, 0.45)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, totalWidth - 1, height - 1);
+    ctx.strokeStyle = "rgba(114, 137, 171, 0.55)";
+    ctx.beginPath();
+    ctx.moveTo(x + width + 0.5, y + 0.5);
+    ctx.lineTo(x + width + 0.5, y + height - 0.5);
+    ctx.stroke();
   },
 
   drawFloatingTexts(game, cameraX, cameraY) {

@@ -1,4 +1,7 @@
 export { drawShopMenu } from "./shopMenu.js";
+import { drawRangerSkillTreeMenu } from "./rangerSkillTreeMenu.js";
+import { drawWarriorSkillTreeMenu } from "./warriorSkillTreeMenu.js";
+import { drawNecromancerSkillTreeMenu } from "./necromancerSkillTreeMenu.js";
 
 export function drawSkillTreeMenu(renderer, game, layout) {
   const ctx = renderer.ctx;
@@ -6,6 +9,66 @@ export function drawSkillTreeMenu(renderer, game, layout) {
   const menuH = Math.min(renderer.canvas.height - 30, 560);
   const menuX = Math.floor((layout.playW - menuW) / 2);
   const menuY = Math.floor((renderer.canvas.height - menuH) / 2);
+  if (game.isArcherClass && game.isArcherClass()) {
+    ctx.fillStyle = "rgba(4, 7, 11, 0.78)";
+    ctx.fillRect(0, 0, layout.playW, renderer.canvas.height);
+
+    ctx.fillStyle = "rgba(16, 11, 21, 0.95)";
+    ctx.fillRect(menuX, menuY, menuW, menuH);
+    ctx.strokeStyle = "rgba(179, 136, 215, 0.75)";
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(menuX, menuY, menuW, menuH);
+
+    const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+    game.uiRects.skillTreeClose = closeRect;
+    ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
+    ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
+    ctx.fillStyle = "#f4ece6";
+    ctx.font = "bold 14px Trebuchet MS";
+    ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+    drawRangerSkillTreeMenu(renderer, game, layout, { menuX, menuY, menuW, menuH });
+    return;
+  }
+  if (game.isWarriorClass && game.isWarriorClass()) {
+    ctx.fillStyle = "rgba(4, 7, 11, 0.78)";
+    ctx.fillRect(0, 0, layout.playW, renderer.canvas.height);
+
+    ctx.fillStyle = "rgba(24, 17, 13, 0.95)";
+    ctx.fillRect(menuX, menuY, menuW, menuH);
+    ctx.strokeStyle = "rgba(196, 138, 95, 0.75)";
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(menuX, menuY, menuW, menuH);
+
+    const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+    game.uiRects.skillTreeClose = closeRect;
+    ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
+    ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
+    ctx.fillStyle = "#f4ece6";
+    ctx.font = "bold 14px Trebuchet MS";
+    ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+    drawWarriorSkillTreeMenu(renderer, game, layout, { menuX, menuY, menuW, menuH });
+    return;
+  }
+  if (game.isNecromancerClass && game.isNecromancerClass()) {
+    ctx.fillStyle = "rgba(4, 7, 11, 0.78)";
+    ctx.fillRect(0, 0, layout.playW, renderer.canvas.height);
+
+    ctx.fillStyle = "rgba(17, 12, 24, 0.95)";
+    ctx.fillRect(menuX, menuY, menuW, menuH);
+    ctx.strokeStyle = "rgba(154, 120, 214, 0.75)";
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(menuX, menuY, menuW, menuH);
+
+    const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+    game.uiRects.skillTreeClose = closeRect;
+    ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
+    ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
+    ctx.fillStyle = "#f4ece6";
+    ctx.font = "bold 14px Trebuchet MS";
+    ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+    drawNecromancerSkillTreeMenu(renderer, game, layout, { menuX, menuY, menuW, menuH });
+    return;
+  }
   const fireSkill = game.skills.fireArrow;
   const pierceSkill = game.skills.piercingStrike;
   const multiarrowSkill = game.skills.multiarrow;
