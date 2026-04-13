@@ -129,11 +129,12 @@ export const runtimeCombatStatsMethods = {
     const mult = this.getDamageMultiplier();
     const safeMult = Number.isFinite(mult) ? Math.max(0, mult) : 1;
     const flatBonus = Number.isFinite(this.levelWeaponDamageBonus) ? Math.max(0, this.levelWeaponDamageBonus) : 0;
+    const consumableBonus = typeof this.getConsumableBonusDamage === "function" ? this.getConsumableBonusDamage() : 0;
     const scaledMinBase = (minBase + rageBaseBonus) * safeMult;
     const scaledMaxBase = (maxBase + rageBaseBonus) * safeMult;
     return {
-      min: scaledMinBase + flatBonus,
-      max: scaledMaxBase + flatBonus
+      min: scaledMinBase + flatBonus + consumableBonus,
+      max: scaledMaxBase + flatBonus + consumableBonus
     };
   },
 

@@ -103,8 +103,7 @@ function drawAbilityCooldownWidget(renderer, game, x, y, size) {
   ctx.textAlign = "center";
   ctx.fillText(state.title, cx, y + size + 11);
   ctx.font = "bold 12px Trebuchet MS";
-  const text =
-    state.cooldownRemaining > 0 ? `${Math.ceil(state.cooldownRemaining)}` : "R";
+  const text = state.cooldownRemaining > 0 ? `${Math.ceil(state.cooldownRemaining)}` : "R";
   ctx.fillText(text, cx, cy + 4);
   ctx.textAlign = "left";
   ctx.restore();
@@ -259,7 +258,8 @@ function buildCharacterColumns(game) {
   const dmgRange = game.getPrimaryDamageRange();
   const tempHp =
     Math.max(0, Number.isFinite(game.player?.warriorRuntime?.tempHp) ? game.player.warriorRuntime.tempHp : 0) +
-    Math.max(0, Number.isFinite(game.player?.necromancerRuntime?.tempHp) ? game.player.necromancerRuntime.tempHp : 0);
+    Math.max(0, Number.isFinite(game.player?.necromancerRuntime?.tempHp) ? game.player.necromancerRuntime.tempHp : 0) +
+    Math.max(0, Number.isFinite(game.player?.consumableRuntime?.tempHp) ? game.player.consumableRuntime.tempHp : 0);
   const core = createSection("Core", [
     ["Health", `${Math.round(game.player.health)}/${Math.round(game.player.maxHealth)}${tempHp > 0 ? ` (+${Math.round(tempHp)} THP)` : ""}`],
     ["XP", `${game.experience}/${game.expToNextLevel}`],
@@ -458,7 +458,6 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
 
   const panelBottom = panelY + panelH;
   if (!game.statsPanelOpen) return panelBottom;
-
   const overlayX = 16;
   const overlayY = layout.topHudH + 12;
   const overlayW = layout.playW + layout.sidebarW - 32;

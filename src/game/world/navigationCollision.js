@@ -307,7 +307,8 @@ function moveEntityWithCornerAssist(game, entity, dirX, dirY, moveStep) {
 export function moveEnemyTowardTargetPoint(game, enemy, targetX, targetY, speedScale, dt, minDistance = 0, usePathfinding = false) {
   if (!enemy || !Number.isFinite(targetX) || !Number.isFinite(targetY) || !Number.isFinite(enemy.x) || !Number.isFinite(enemy.y)) return;
   const enemySpeed = Number.isFinite(enemy.speed) ? enemy.speed : 70;
-  const sScale = Number.isFinite(speedScale) ? speedScale : 1;
+  const slowMult = 1 - Math.max(0, Math.min(0.9, Number.isFinite(enemy.slowPct) ? enemy.slowPct : 0));
+  const sScale = (Number.isFinite(speedScale) ? speedScale : 1) * slowMult;
   const delta = Number.isFinite(dt) ? dt : 0;
   const speedStep = enemySpeed * sScale * delta;
   if (!Number.isFinite(speedStep) || speedStep <= 0) return;
@@ -336,7 +337,8 @@ export function moveEnemyTowardPlayer(game, enemy, speedScale, dt) {
     : ((game.config?.player?.enemyCollisionSize ?? game.player?.size ?? 0) * 0.5);
   const minDistance = playerRadius + enemy.size * 0.5;
   const enemySpeed = Number.isFinite(enemy.speed) ? enemy.speed : 70;
-  const sScale = Number.isFinite(speedScale) ? speedScale : 1;
+  const slowMult = 1 - Math.max(0, Math.min(0.9, Number.isFinite(enemy.slowPct) ? enemy.slowPct : 0));
+  const sScale = (Number.isFinite(speedScale) ? speedScale : 1) * slowMult;
   const delta = Number.isFinite(dt) ? dt : 0;
   const speedStep = enemySpeed * sScale * delta;
   if (!Number.isFinite(speedStep) || speedStep <= 0) return;

@@ -9,6 +9,7 @@ import {
 import { cloneRangerTalentState, createRangerTalentState } from "../../src/game/rangerTalentTree.js";
 import { cloneWarriorTalentState, createWarriorTalentState } from "../../src/game/warriorTalentTree.js";
 import { cloneNecromancerTalentState, createNecromancerTalentState } from "../../src/game/necromancerTalentTree.js";
+import { cloneConsumableInventoryState } from "../../src/game/consumables.js";
 
 const PLAYER_COLOR_PALETTE = ["#5bb3ff", "#ff8f6b", "#7ae582", "#f3cf6b", "#c78bff", "#ff6fae"];
 
@@ -233,9 +234,11 @@ export class AuthoritativeRoom {
       warriorTalents: createWarriorTalentState(),
       necromancerTalents: createNecromancerTalentState(),
       upgrades: cloneUpgradeState(),
+      consumables: cloneConsumableInventoryState(),
       rangerRuntime: cloneRangerRuntimeState(),
       warriorRuntime: cloneWarriorRuntimeState(),
       necromancerRuntime: { vigorTimer: 0, vigorBeamTimer: 0, vigorHealPool: 0, vigorTotalDuration: 0, harvesterBonusPct: 0, tempHp: 0 },
+      consumableRuntime: { tempHp: 0 },
       warriorMomentumTimer: 0,
       warriorRageActiveTimer: 0,
       warriorRageCooldownTimer: 0,
@@ -362,8 +365,12 @@ export class AuthoritativeRoom {
     this.sim.warriorTalents = cloneWarriorTalentState(state.warriorTalents);
     this.sim.necromancerTalents = cloneNecromancerTalentState(state.necromancerTalents);
     this.sim.upgrades = cloneUpgradeState(state.upgrades);
+    this.sim.consumables = cloneConsumableInventoryState(state.consumables);
     this.sim.rangerRuntime = cloneRangerRuntimeState(state.rangerRuntime);
     this.sim.warriorRuntime = cloneWarriorRuntimeState(state.warriorRuntime);
+    this.sim.player.consumableRuntime = {
+      tempHp: Number.isFinite(state?.consumableRuntime?.tempHp) ? state.consumableRuntime.tempHp : 0
+    };
     this.sim.warriorMomentumTimer = Number.isFinite(state.warriorMomentumTimer) ? state.warriorMomentumTimer : 0;
     this.sim.warriorRageActiveTimer = Number.isFinite(state.warriorRageActiveTimer) ? state.warriorRageActiveTimer : 0;
     this.sim.warriorRageCooldownTimer = Number.isFinite(state.warriorRageCooldownTimer) ? state.warriorRageCooldownTimer : 0;
@@ -393,6 +400,7 @@ export class AuthoritativeRoom {
     state.warriorTalents = cloneWarriorTalentState(this.sim.warriorTalents);
     state.necromancerTalents = cloneNecromancerTalentState(this.sim.necromancerTalents);
     state.upgrades = cloneUpgradeState(this.sim.upgrades);
+    state.consumables = cloneConsumableInventoryState(this.sim.consumables);
     state.rangerRuntime = cloneRangerRuntimeState(this.sim.rangerRuntime);
     state.warriorRuntime = cloneWarriorRuntimeState(this.sim.warriorRuntime);
     state.score = this.sim.score;
@@ -419,6 +427,9 @@ export class AuthoritativeRoom {
     state.facing = this.sim.player.facing;
     state.moving = !!this.sim.player.moving;
     state.alive = this.sim.player.health > 0;
+    state.consumableRuntime = {
+      tempHp: Number.isFinite(this.sim.player?.consumableRuntime?.tempHp) ? this.sim.player.consumableRuntime.tempHp : 0
+    };
     state.color = this.getClientRunColor(client);
     this.activePlayers.set(client.id, state);
     return state;
@@ -444,6 +455,7 @@ export class AuthoritativeRoom {
     context.warriorTalents = cloneWarriorTalentState(state.warriorTalents);
     context.necromancerTalents = cloneNecromancerTalentState(state.necromancerTalents);
     context.upgrades = cloneUpgradeState(state.upgrades);
+    context.consumables = cloneConsumableInventoryState(state.consumables);
     context.rangerRuntime = cloneRangerRuntimeState(state.rangerRuntime);
     context.warriorRuntime = cloneWarriorRuntimeState(state.warriorRuntime);
     context.necromancerRuntime = {
@@ -453,6 +465,9 @@ export class AuthoritativeRoom {
       vigorTotalDuration: Number.isFinite(state?.necromancerRuntime?.vigorTotalDuration) ? state.necromancerRuntime.vigorTotalDuration : 0,
       harvesterBonusPct: Number.isFinite(state?.necromancerRuntime?.harvesterBonusPct) ? state.necromancerRuntime.harvesterBonusPct : 0,
       tempHp: Number.isFinite(state?.necromancerRuntime?.tempHp) ? state.necromancerRuntime.tempHp : 0
+    };
+    context.player.consumableRuntime = {
+      tempHp: Number.isFinite(state?.consumableRuntime?.tempHp) ? state.consumableRuntime.tempHp : 0
     };
     context.warriorMomentumTimer = Number.isFinite(state.warriorMomentumTimer) ? state.warriorMomentumTimer : 0;
     context.warriorRageActiveTimer = Number.isFinite(state.warriorRageActiveTimer) ? state.warriorRageActiveTimer : 0;
@@ -482,6 +497,7 @@ export class AuthoritativeRoom {
     state.warriorTalents = cloneWarriorTalentState(context.warriorTalents);
     state.necromancerTalents = cloneNecromancerTalentState(context.necromancerTalents);
     state.upgrades = cloneUpgradeState(context.upgrades);
+    state.consumables = cloneConsumableInventoryState(context.consumables);
     state.rangerRuntime = cloneRangerRuntimeState(context.rangerRuntime);
     state.warriorRuntime = cloneWarriorRuntimeState(context.warriorRuntime);
     state.necromancerRuntime = {
@@ -491,6 +507,9 @@ export class AuthoritativeRoom {
       vigorTotalDuration: Number.isFinite(context?.necromancerRuntime?.vigorTotalDuration) ? context.necromancerRuntime.vigorTotalDuration : 0,
       harvesterBonusPct: Number.isFinite(context?.necromancerRuntime?.harvesterBonusPct) ? context.necromancerRuntime.harvesterBonusPct : 0,
       tempHp: Number.isFinite(context?.necromancerRuntime?.tempHp) ? context.necromancerRuntime.tempHp : 0
+    };
+    state.consumableRuntime = {
+      tempHp: Number.isFinite(context?.player?.consumableRuntime?.tempHp) ? context.player.consumableRuntime.tempHp : 0
     };
     state.warriorMomentumTimer = Number.isFinite(context.warriorMomentumTimer) ? context.warriorMomentumTimer : 0;
     state.warriorRageActiveTimer = Number.isFinite(context.warriorRageActiveTimer) ? context.warriorRageActiveTimer : 0;

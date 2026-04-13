@@ -429,6 +429,8 @@ export function applyMetaStateToGame(game, state) {
     if (game.player) game.player.necromancerRuntime = game.necromancerRuntime;
   }
   if (!isActiveMultiplayer && state.upgrades && typeof state.upgrades === "object") game.upgrades = syncNamedObject(game.upgrades, state.upgrades);
+  if (!isActiveMultiplayer && state.consumables && typeof state.consumables === "object") game.consumables = syncNamedObject(game.consumables, state.consumables);
+  if (!isActiveMultiplayer && Array.isArray(state.shopStock)) game.shopStock = state.shopStock.map((entry) => ({ ...entry }));
 }
 
 export function applySnapshotToGame({
@@ -640,6 +642,12 @@ export function applySnapshotToGame({
       if (game.player) game.player.necromancerRuntime = game.necromancerRuntime;
     }
     if (snapshotPlayer.upgrades && typeof snapshotPlayer.upgrades === "object") game.upgrades = syncNamedObject(game.upgrades, snapshotPlayer.upgrades);
+    if (snapshotPlayer.consumableRuntime && typeof snapshotPlayer.consumableRuntime === "object") {
+      game.player.consumableRuntime = syncNamedObject(game.player.consumableRuntime, snapshotPlayer.consumableRuntime);
+    }
+    if (snapshotPlayer.consumables && typeof snapshotPlayer.consumables === "object") {
+      game.consumables = syncNamedObject(game.consumables, snapshotPlayer.consumables);
+    }
     if (typeof snapshotPlayer.classType === "string" && game.config?.classes?.[snapshotPlayer.classType]) {
       game.classType = snapshotPlayer.classType;
       game.classSpec = game.config.classes[snapshotPlayer.classType];

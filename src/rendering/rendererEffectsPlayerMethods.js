@@ -5,7 +5,8 @@ export const rendererEffectsPlayerMethods = {
     if (!entity || typeof entity !== "object") return 0;
     const warriorTemp = Number.isFinite(entity?.warriorRuntime?.tempHp) ? entity.warriorRuntime.tempHp : 0;
     const necromancerTemp = Number.isFinite(entity?.necromancerRuntime?.tempHp) ? entity.necromancerRuntime.tempHp : 0;
-    return Math.max(0, warriorTemp + necromancerTemp);
+    const consumableTemp = Number.isFinite(entity?.consumableRuntime?.tempHp) ? entity.consumableRuntime.tempHp : 0;
+    return Math.max(0, warriorTemp + necromancerTemp + consumableTemp);
   },
 
   getReplicatedPlayerClassSpec(player) {
@@ -51,6 +52,7 @@ export const rendererEffectsPlayerMethods = {
 
   drawReplicatedPlayerRig(player, classSpec, screenX, screenY, walkPhase = 0) {
     const usesRanged = !!classSpec?.usesRanged;
+    const crusaderInvested = hasWarriorCrusaderInvestment(player);
     if (player.classType === "necromancer") {
       this.drawPlayerNecromancerRig(player, screenX, screenY, walkPhase, 0);
       return;

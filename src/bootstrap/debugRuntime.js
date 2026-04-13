@@ -163,6 +163,29 @@ export function installDebugRuntime({ getCurrentGame, getMusicDebugState, getNet
                 rect: entry.rect
               }))
             : [],
+          shopStock: Array.isArray(game.shopStock)
+            ? game.shopStock.slice(0, 5).map((entry) => ({
+                key: entry?.key || "",
+                stock: Number.isFinite(entry?.stock) ? entry.stock : 0
+              }))
+            : [],
+          consumables: {
+            activeSlots: Array.isArray(game.consumables?.activeSlots)
+              ? game.consumables.activeSlots.map((slot) => ({
+                  key: slot?.key || "",
+                  count: Number.isFinite(slot?.count) ? slot.count : 0,
+                  cooldownRemaining: Number.isFinite(slot?.cooldownRemaining) ? slot.cooldownRemaining : 0
+                }))
+              : [],
+            passiveSlots: Array.isArray(game.consumables?.passiveSlots)
+              ? game.consumables.passiveSlots.map((slot) => ({
+                  key: slot?.key || "",
+                  count: Number.isFinite(slot?.count) ? slot.count : 0,
+                  cooldownRemaining: Number.isFinite(slot?.cooldownRemaining) ? slot.cooldownRemaining : 0
+                }))
+              : [],
+            sharedCooldown: Number.isFinite(game.consumables?.sharedCooldown) ? game.consumables.sharedCooldown : 0
+          },
           skillNodes: {
             fireArrow: game.uiRects?.skillFireArrowNode || null,
             piercingStrike: game.uiRects?.skillPiercingNode || null,

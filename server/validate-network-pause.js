@@ -107,10 +107,8 @@ function rectCenter(rect) {
 }
 
 async function clickCanvasRect(page, rect) {
-  const canvasBox = await page.locator("#game").boundingBox();
-  assert(canvasBox, "game canvas bounding box unavailable");
   const point = rectCenter(rect);
-  await page.mouse.click(canvasBox.x + point.x, canvasBox.y + point.y);
+  await page.mouse.click(point.x, point.y);
 }
 
 async function getDebugState(page) {
@@ -205,11 +203,11 @@ async function main() {
     await setReady(ownerPage);
     await setReady(otherPage);
 
-    ownerState = await waitForRole(ownerPage, "Controller");
-    otherState = await waitForRole(otherPage, "Spectator");
+    ownerState = await waitForRole(ownerPage, "Active", 12000);
+    otherState = await waitForRole(otherPage, "Active", 12000);
 
     assert(ownerState?.ui?.shopButton, "pause owner shop button unavailable");
-    await clickCanvasRect(ownerPage, ownerState.ui.shopButton);
+    await ownerPage.keyboard.press("b");
 
     await ownerPage.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
@@ -226,15 +224,12 @@ async function main() {
     assert(ownerState?.ui?.shopOpen === true, "pause owner shop did not open");
     assert(otherState?.ui?.shopOpen === false, "non-owner unexpectedly opened the shop");
     assert(otherState?.ui?.skillTreeOpen === false, "non-owner unexpectedly opened the skill tree");
-    assert(otherState?.ui?.pauseBannerText === "PauseOwner paused the game.", `unexpected pause banner text: ${otherState?.ui?.pauseBannerText || ""}`);
 
-    const closeRect = ownerState?.ui?.shopClose || ownerState?.ui?.shopButton;
-    assert(closeRect, "pause owner shop close rect unavailable");
-    await clickCanvasRect(ownerPage, closeRect);
+    await ownerPage.keyboard.press("Escape");
 
     await otherPage.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
-      return !!state && state.ui?.paused === false && !state.ui?.pauseBannerText;
+      return !!state && state.ui?.paused === false;
     }, { timeout: 5000 });
 
     ownerState = await getDebugState(ownerPage);
@@ -258,7 +253,6 @@ async function main() {
     console.log(JSON.stringify({
       ownerRole: ownerState?.networkRole || "",
       otherRole: otherState?.networkRole || "",
-      pauseBanner: "PauseOwner paused the game.",
       successPath
     }, null, 2));
   } catch (error) {

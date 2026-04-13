@@ -20,6 +20,8 @@ function shallowPlayerState(simPlayer) {
     rangerRuntime: simPlayer.rangerRuntime,
     warriorRuntime: simPlayer.warriorRuntime,
     necromancerRuntime: simPlayer.necromancerRuntime,
+    consumableRuntime: simPlayer.consumableRuntime,
+    consumables: simPlayer.consumables,
     upgrades: simPlayer.upgrades,
     dirX: simPlayer.dirX,
     dirY: simPlayer.dirY,
@@ -68,6 +70,8 @@ function shallowActivePlayerState(player) {
     warriorTalents: player.warriorTalents,
     necromancerTalents: player.necromancerTalents,
     upgrades: player.upgrades,
+    consumableRuntime: player.consumableRuntime,
+    consumables: player.consumables,
     rangerRuntime: player.rangerRuntime,
     warriorRuntime: player.warriorRuntime,
     necromancerRuntime: player.necromancerRuntime,
@@ -303,7 +307,9 @@ export function serializeMetaState(source) {
     warriorTalents: sim.warriorTalents,
     rangerRuntime: sim.rangerRuntime,
     warriorRuntime: sim.warriorRuntime,
-    upgrades: sim.upgrades
+    upgrades: sim.upgrades,
+    consumables: sim.consumables,
+    shopStock: sim.shopStock
   };
 }
 

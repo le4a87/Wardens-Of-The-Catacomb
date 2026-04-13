@@ -232,6 +232,8 @@ export const runtimeBaseSupportMethods = {
       player.hpBarTimer = Math.max(0, (Number.isFinite(player.hpBarTimer) ? player.hpBarTimer : 0) - dt);
       player.animTime = (Number.isFinite(player.animTime) ? player.animTime : 0) + dt;
       player.alive = Number.isFinite(player.health) ? player.health > 0 : player.alive !== false;
+      player.consumableRuntime = player.consumableRuntime && typeof player.consumableRuntime === "object" ? player.consumableRuntime : { tempHp: 0 };
+      player.consumableRuntime.tempHp = Math.max(0, Number.isFinite(player.consumableRuntime.tempHp) ? player.consumableRuntime.tempHp : 0);
       player.rangerRuntime = player.rangerRuntime && typeof player.rangerRuntime === "object" ? player.rangerRuntime : {};
       player.rangerRuntime.foxstepCooldown = Math.max(0, (Number.isFinite(player.rangerRuntime.foxstepCooldown) ? player.rangerRuntime.foxstepCooldown : 0) - dt);
       player.rangerRuntime.foxstepActiveTimer = Math.max(0, (Number.isFinite(player.rangerRuntime.foxstepActiveTimer) ? player.rangerRuntime.foxstepActiveTimer : 0) - dt);
@@ -537,6 +539,16 @@ export const runtimeBaseSupportMethods = {
     if (!entity || amount <= 0) return;
     entity.warriorRuntime = entity.warriorRuntime && typeof entity.warriorRuntime === "object" ? entity.warriorRuntime : {};
     entity.necromancerRuntime = entity.necromancerRuntime && typeof entity.necromancerRuntime === "object" ? entity.necromancerRuntime : {};
+    entity.consumableRuntime = entity.consumableRuntime && typeof entity.consumableRuntime === "object" ? entity.consumableRuntime : { tempHp: 0 };
+    if ((entity.consumableRuntime.tempHp || 0) > 0) {
+      const absorbed = Math.min(entity.consumableRuntime.tempHp, amount);
+      entity.consumableRuntime.tempHp = Math.max(0, entity.consumableRuntime.tempHp - absorbed);
+      amount = Math.max(0, amount - absorbed);
+      if (amount <= 0) {
+        this.spawnFloatingText(entity.x, entity.y - 18, "Blocked", "#d9d1ff", 0.65, 13);
+        return;
+      }
+    }
     if ((entity.warriorRuntime.tempHp || 0) > 0) {
       const absorbed = Math.min(entity.warriorRuntime.tempHp, amount);
       entity.warriorRuntime.tempHp = Math.max(0, entity.warriorRuntime.tempHp - absorbed);
@@ -552,6 +564,16 @@ export const runtimeBaseSupportMethods = {
       amount = Math.max(0, amount - absorbed);
       if (amount <= 0) {
         this.spawnFloatingText(entity.x, entity.y - 18, "Blocked", "#d9d1ff", 0.65, 13);
+        return;
+      }
+    }
+    const healthBeforeDamage = Number.isFinite(entity.health) ? entity.health : 0;
+    if (this.isPrimaryPlayerEntity(entity) && amount >= healthBeforeDamage && typeof this.applyPassiveConsumableEvent === "function") {
+      const passivePayload = { amount, damageType, source, preventDeath: false };
+      this.applyPassiveConsumableEvent("lethalDamage", passivePayload);
+      if (passivePayload.preventDeath) {
+        entity.alive = true;
+        this.markPlayerEntityHealthBarVisible(entity);
         return;
       }
     }
@@ -591,6 +613,15 @@ export const runtimeBaseSupportMethods = {
         );
         if (target) this.applyEnemyDamage(target, Math.max(1, amount), "melee", entity.id || null);
       }
+    }
+    if (this.isPrimaryPlayerEntity(entity) && (this.consumables?.effects?.spikeGrowth?.timer || 0) > 0) {
+      const target = (this.enemies || []).find((enemy) =>
+        enemy &&
+        (enemy.hp || 0) > 0 &&
+        !this.isEnemyFriendlyToPlayer(enemy) &&
+        Math.hypot((enemy.x || 0) - (entity.x || 0), (enemy.y || 0) - (entity.y || 0)) <= ((enemy.size || 20) + (entity.size || 22)) * 0.9
+      );
+      if (target) this.applyEnemyDamage(target, 3, "physical", entity.id || null);
     }
     if (entity.classType === "necromancer") {
       const retaliationDamage = entity === this.player ? getNecromancerRotTouchedRetaliationDamage(this) : ((entity?.necromancerTalents?.rotTouched?.points || 0) > 0 ? 5 : 0);

@@ -13,6 +13,37 @@ import {
   isWarriorTalentGame
 } from "../warriorTalentTree.js";
 import { isNecromancerTalentGame } from "../necromancerTalentTree.js";
+import {
+  ACTIVE_CONSUMABLE_SLOT_CAP,
+  getConsumableDefinition,
+  getConsumablePriceForFloor
+} from "../consumables.js";
+import {
+  applyConsumableOnHitEffects,
+  applyPassiveConsumableEvent,
+  buyShopItem,
+  getConsumableBonusDamage,
+  getConsumableOwnedCount,
+  getShopFailureReason,
+  pushConsumableMessage,
+  refillShopForFloor,
+  tickConsumables,
+  useConsumableSlot,
+  ensureShopStock
+} from "./consumablesEconomy.js";
+
+export {
+  applyConsumableOnHitEffects,
+  applyPassiveConsumableEvent,
+  buyShopItem,
+  getConsumableBonusDamage,
+  getConsumableOwnedCount,
+  getShopFailureReason,
+  pushConsumableMessage,
+  refillShopForFloor,
+  tickConsumables,
+  useConsumableSlot
+} from "./consumablesEconomy.js";
 
 function isActiveMultiplayer(game) {
   return !!game?.networkEnabled && game.networkRoomPhase === "active";
@@ -29,9 +60,10 @@ export function getEnemySpawnInterval(game) {
 
 export function getMoveSpeedMultiplier(game) {
   const upgradeBonus = 1 + game.upgrades.moveSpeed.level * 0.05;
-  if (isRangerTalentGame(game)) return upgradeBonus * (1 + getRangerMoveSpeedBonus(game));
-  if (isWarriorTalentGame(game)) return upgradeBonus;
-  return upgradeBonus;
+  let result = upgradeBonus;
+  if (isRangerTalentGame(game)) result *= 1 + getRangerMoveSpeedBonus(game);
+  if ((game.consumables?.effects?.speedPotion?.timer || 0) > 0) result *= 1.2;
+  return result;
 }
 
 export function getGoldFindMultiplier(game) {
@@ -98,12 +130,36 @@ export function canBuyUpgrade(game, upgradeKey) {
 }
 
 export function buyUpgrade(game, upgradeKey) {
+  if (getConsumableDefinition(upgradeKey)) return buyShopItem(game, upgradeKey);
   if (!canBuyUpgrade(game, upgradeKey)) return false;
   const cost = getUpgradeCost(game, upgradeKey);
   game.gold -= cost;
   if (typeof game.recordRunGoldSpent === "function") game.recordRunGoldSpent(cost);
   game.upgrades[upgradeKey].level += 1;
   return true;
+}
+
+export function getShopItems(game) {
+  const stock = ensureShopStock(game);
+  const rarityOrder = { Common: 0, Rare: 1, Legendary: 2 };
+  return stock
+    .map((entry) => {
+      const def = getConsumableDefinition(entry?.key);
+      if (!def) return null;
+      return {
+        ...def,
+        stock: Number.isFinite(entry?.stock) ? Math.max(0, Math.floor(entry.stock)) : 0,
+        priceForFloor: getConsumablePriceForFloor(def, Math.max(1, Math.floor(game?.floor || 1)))
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const rarityDelta = (rarityOrder[a.rarity] ?? 99) - (rarityOrder[b.rarity] ?? 99);
+      if (rarityDelta !== 0) return rarityDelta;
+      const priceDelta = (a.priceForFloor || 0) - (b.priceForFloor || 0);
+      if (priceDelta !== 0) return priceDelta;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
 }
 
 export function toggleShop(game, open) {
@@ -182,6 +238,13 @@ export function pointInRect(_game, x, y, rect) {
 export function handleUiClicks(game) {
   if (!game.input) return;
   const playerAlive = !(Number.isFinite(game?.player?.health) && game.player.health <= 0);
+  if (playerAlive && !game.gameOver && !game.shopOpen && !game.skillTreeOpen) {
+    for (let i = 0; i < ACTIVE_CONSUMABLE_SLOT_CAP; i++) {
+      if (game.input.consumeKeyQueued(`${i + 1}`) && typeof game.useConsumableSlot === "function") {
+        game.useConsumableSlot(i);
+      }
+    }
+  }
   const wheelDelta = game.input.consumeWheelDelta ? game.input.consumeWheelDelta() : 0;
   if (playerAlive && wheelDelta !== 0 && (game.skillTreeOpen || game.shopOpen)) {
     const target = game.skillTreeOpen
@@ -311,7 +374,7 @@ export function handleUiClicks(game) {
     const itemRects = game.uiRects.shopItems || [];
     for (const item of itemRects) {
       if (pointInRect(game, click.x, click.y, item.rect)) {
-        buyUpgrade(game, item.key);
+        buyShopItem(game, item.key);
         break;
       }
     }

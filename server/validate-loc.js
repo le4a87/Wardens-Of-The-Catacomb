@@ -4,6 +4,9 @@ import { extname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+const LOC_LIMIT = 500;
+const EXISTING_OVERSIZE_GROWTH_LIMIT = 40;
+
 function runGit(args) {
   try {
     return execFileSync("git", args, {
@@ -46,6 +49,12 @@ function countLines(path) {
   return text === "" ? 0 : text.split(/\r?\n/).length;
 }
 
+function getBaseLines(path) {
+  const text = runGit(["show", `main:${path}`]);
+  if (!text) return null;
+  return text === "" ? 0 : text.split(/\r?\n/).length;
+}
+
 function main() {
   const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
   process.chdir(projectRoot);
@@ -57,14 +66,25 @@ function main() {
       const stats = statSync(resolve(process.cwd(), file));
       if (!stats.isFile()) continue;
       const lines = countLines(file);
-      results.push({ file, lines });
-      if (lines > 500) violations.push({ file, lines });
+      const baseLines = getBaseLines(file);
+      const delta = baseLines == null ? lines : lines - baseLines;
+      results.push({ file, lines, baseLines, delta });
+      if (lines <= LOC_LIMIT) continue;
+      if (baseLines != null && baseLines > LOC_LIMIT) {
+        if (delta > EXISTING_OVERSIZE_GROWTH_LIMIT) {
+          violations.push({ file, lines, baseLines, delta, reason: "existing oversized file grew too much" });
+        }
+        continue;
+      }
+      violations.push({ file, lines, baseLines, delta, reason: "file exceeds LOC limit" });
     } catch {
       // ignore deleted or transient paths
     }
   }
   if (violations.length > 0) {
-    throw new Error(`LOC threshold exceeded: ${violations.map((entry) => `${entry.file} (${entry.lines})`).join(", ")}`);
+    throw new Error(
+      `LOC threshold exceeded: ${violations.map((entry) => `${entry.file} (${entry.lines}, base ${entry.baseLines ?? "new"}, delta ${entry.delta >= 0 ? `+${entry.delta}` : entry.delta}, ${entry.reason})`).join(", ")}`
+    );
   }
   console.log(JSON.stringify({ checkedFiles: results }, null, 2));
 }

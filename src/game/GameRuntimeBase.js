@@ -178,6 +178,7 @@ export class GameRuntimeBase {
 
   advanceToNextFloor() {
     if (typeof this.recordRunFloorCleared === "function") this.recordRunFloorCleared();
+    if (typeof this.applyPassiveConsumableEvent === "function") this.applyPassiveConsumableEvent("floorAdvance");
     const controlledUndead = (this.enemies || [])
       .filter((enemy) => enemy?.isControlledUndead && (enemy.hp || 0) > 0 && !(enemy.type === "skeleton_warrior" && enemy.collapsed))
       .map((enemy) => ({ ...enemy }));
@@ -196,6 +197,7 @@ export class GameRuntimeBase {
     this.skillPoints = persisted.skillPoints;
     this.player.maxHealth = persisted.maxHealth;
     this.player.health = Math.min(this.player.maxHealth, persisted.health);
+    if (typeof this.refillShopForFloor === "function") this.refillShopForFloor();
     if (controlledUndead.length > 0) {
       const tile = this.config.map.tile;
       controlledUndead.forEach((enemy, index) => {
@@ -244,6 +246,13 @@ export class GameRuntimeBase {
     this.player.deathBoltCooldown = 0;
     this.player.hitCooldown = 0;
     this.player.hpBarTimer = 0;
+    if (this.consumables && typeof this.consumables === "object") {
+      this.consumables.activeSlots = [];
+      this.consumables.passiveSlots = [];
+      this.consumables.sharedCooldown = 0;
+      this.consumables.message = "";
+      this.consumables.messageTimer = 0;
+    }
     while (this.level < targetLevel) {
       this.gainExperience(this.expToNextLevel);
     }
@@ -252,6 +261,7 @@ export class GameRuntimeBase {
 
     const nextMapSize = this.getMapSizeForFloor(safeFloor);
     this.generateFloor(nextMapSize.width, nextMapSize.height);
+    if (typeof this.refillShopForFloor === "function") this.refillShopForFloor();
     this.syncFloorBossState();
     if (typeof this.onFloorChanged === "function") this.onFloorChanged(this.floor, this);
   }

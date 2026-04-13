@@ -154,6 +154,12 @@ export function handleNetworkUiActions(game, netClient, isController) {
     if (canUseLocalPanels) toggleLocalStats();
     else if (isController) netClient.sendAction({ kind: "toggleStats" });
   }
+  if (playerAlive && !game.gameOver && !game.shopOpen && !game.skillTreeOpen && !game.statsPanelOpen) {
+    for (let i = 0; i < 5; i++) {
+      if (!game.input.consumeKeyQueued(`${i + 1}`)) continue;
+      if (isController) netClient.sendAction({ kind: "useConsumableSlot", slot: i });
+    }
+  }
   const clicks = game.input.consumeUiLeftClicks();
   if (clicks.length === 0) return;
 

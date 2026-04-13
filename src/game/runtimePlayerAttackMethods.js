@@ -192,6 +192,7 @@ export const runtimePlayerAttackMethods = {
           damage *= critMultiplier;
         }
         this.applyEnemyDamage(enemy, damage, "melee", this.player.id || null);
+        if (typeof this.applyConsumableOnHitEffects === "function") this.applyConsumableOnHitEffects(enemy, this.player.id || null);
         enemiesHit += 1;
         firstEnemyHit = true;
         const threshold = this.getWarriorExecuteThreshold();

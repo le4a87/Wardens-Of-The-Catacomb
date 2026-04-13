@@ -1,5 +1,6 @@
 import { runtimeSceneEnemyDrawMethods } from "./runtimeSceneEnemyDrawMethods.js";
 import { runtimeSceneObjectDrawMethods } from "./runtimeSceneObjectDrawMethods.js";
+import { drawConsumablesBar } from "./hud/consumablesBar.js";
 
 function hexToRgba(color, alpha) {
   if (typeof color !== "string") return `rgba(199, 202, 209, ${alpha})`;
@@ -95,6 +96,8 @@ export const runtimeSceneDrawMethods = {
     ctx.fillStyle = "#d7e4ff";
     ctx.font = "12px Trebuchet MS";
     ctx.fillText(`XP ${game.experience}/${game.expToNextLevel} (${Math.round(ratio * 100)}%)`, barX, y + 22);
+
+    drawConsumablesBar(this, game, layout, y);
   },
 
   drawMap(game, cameraX, cameraY) {

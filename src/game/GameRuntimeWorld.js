@@ -44,6 +44,17 @@ import {
   getUpgradeCost,
   canBuyUpgrade,
   buyUpgrade,
+  buyShopItem,
+  getConsumableOwnedCount,
+  getShopFailureReason,
+  getShopItems,
+  pushConsumableMessage,
+  refillShopForFloor,
+  tickConsumables,
+  useConsumableSlot,
+  applyConsumableOnHitEffects,
+  getConsumableBonusDamage,
+  applyPassiveConsumableEvent,
   toggleShop,
   toggleSkillTree,
   toggleStatsPanel,
@@ -211,6 +222,50 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   buyUpgrade(upgradeKey) {
     return buyUpgrade(this, upgradeKey);
+  }
+
+  buyShopItem(key) {
+    return buyShopItem(this, key);
+  }
+
+  getShopItems() {
+    return getShopItems(this);
+  }
+
+  getConsumableOwnedCount(key) {
+    return getConsumableOwnedCount(this, key);
+  }
+
+  getShopFailureReason(key) {
+    return getShopFailureReason(this, key);
+  }
+
+  pushConsumableMessage(text) {
+    return pushConsumableMessage(this, text);
+  }
+
+  refillShopForFloor() {
+    return refillShopForFloor(this);
+  }
+
+  tickConsumables(dt) {
+    return tickConsumables(this, dt);
+  }
+
+  useConsumableSlot(slotIndex) {
+    return useConsumableSlot(this, slotIndex);
+  }
+
+  applyConsumableOnHitEffects(enemy, ownerId = null) {
+    return applyConsumableOnHitEffects(this, enemy, ownerId);
+  }
+
+  getConsumableBonusDamage() {
+    return getConsumableBonusDamage(this);
+  }
+
+  applyPassiveConsumableEvent(eventKey, payload = {}) {
+    return applyPassiveConsumableEvent(this, eventKey, payload);
   }
 
   toggleShop(open) {

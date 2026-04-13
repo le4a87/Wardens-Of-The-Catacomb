@@ -64,6 +64,7 @@ export function stepGame(game, dt, controls = {}) {
 
   game.time += dt;
   if (typeof game.tickActivePlayerEntities === "function") game.tickActivePlayerEntities(dt);
+  if (typeof game.tickConsumables === "function") game.tickConsumables(dt);
   if (typeof game.updateNavigationField === "function") game.updateNavigationField();
   if (typeof game.updateFloorBossTrigger === "function") game.updateFloorBossTrigger();
   if (typeof game.syncFloorBossFeedback === "function") game.syncFloorBossFeedback();

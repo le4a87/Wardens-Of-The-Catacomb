@@ -124,6 +124,9 @@ export function createPlayerState(classType, classSpec, fallbackMaxHealth) {
     knockbackVy: 0,
     knockbackTimer: 0,
     classType,
+    consumableRuntime: {
+      tempHp: 0
+    },
     rangerRuntime: createRangerRuntimeState(),
     warriorRuntime: createWarriorRuntimeState(),
     necromancerRuntime: createNecromancerRuntimeState()

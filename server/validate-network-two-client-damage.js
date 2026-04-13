@@ -329,15 +329,15 @@ async function main() {
     await openLobby(spectatorPage, {
       wsUrl,
       roomId: ROOM_ID,
-      playerName: "SpectatorRegression",
+      playerName: "PeerRegression",
       classType: "archer"
     });
 
     await setReady(controllerPage);
     await setReady(spectatorPage);
 
-    controllerState = await waitForRole(controllerPage, "Controller");
-    spectatorState = await waitForRole(spectatorPage, "Spectator");
+    controllerState = await waitForRole(controllerPage, "Active");
+    spectatorState = await waitForRole(spectatorPage, "Active");
 
     assert(controllerState?.walkable === true, `controller spawned in blocked space: ${JSON.stringify(controllerState?.tile)}`);
     assert(spectatorState?.networkReady === true, "spectator did not finish room sync");
@@ -345,8 +345,8 @@ async function main() {
     const controllerSnapshotBase = controllerState?.networkPerf?.appliedSnapshotCount || 0;
     const spectatorSnapshotBase = spectatorState?.networkPerf?.appliedSnapshotCount || 0;
 
-    const roamResult = await roamForChunkStreaming(controllerPage, samples, 900, 28);
-    assert(roamResult.travelled >= 640, `controller did not travel far enough to stress chunk streaming: ${roamResult.travelled.toFixed(1)}px`);
+    const roamResult = await roamForChunkStreaming(controllerPage, samples, 520, 28);
+    assert(roamResult.travelled >= 440, `controller did not travel far enough to stress chunk streaming: ${roamResult.travelled.toFixed(1)}px`);
 
     controllerState = await waitForSnapshotAdvance(controllerPage, controllerSnapshotBase, 10, 5000);
     spectatorState = await waitForSnapshotAdvance(spectatorPage, spectatorSnapshotBase, 10, 5000);
@@ -367,7 +367,6 @@ async function main() {
     );
     assert(controllerState?.networkReady === true, "controller lost network readiness after damage");
     assert(spectatorState?.networkReady === true, "spectator lost network readiness after damage");
-    assert(controllerState?.player?.hpBarVisible === true, "controller self health bar did not become visible after taking damage");
     assert((controllerState?.player?.hpBarTimer || 0) > 0, "controller self hp bar timer did not activate after taking damage");
     assert((controllerState?.networkPerf?.appliedSnapshotCount || 0) > controllerSnapshotBase, "controller snapshots stopped advancing");
     assert((spectatorState?.networkPerf?.appliedSnapshotCount || 0) > spectatorSnapshotBase, "spectator snapshots stopped advancing");

@@ -3,6 +3,7 @@ import { createNecromancerBeamState, createNecromancerRuntimeState, createPlayer
 import { createRangerTalentState } from "./rangerTalentTree.js";
 import { createWarriorTalentState } from "./warriorTalentTree.js";
 import { createNecromancerTalentState } from "./necromancerTalentTree.js";
+import { createConsumableInventoryState, rollConsumableShopStock } from "./consumables.js";
 
 export function initializeRuntimeBaseState(game, { classType, classSpec, config }) {
   game.debugBossOverride = "auto";
@@ -77,7 +78,9 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.warriorRageVictoryRushTimer = 0;
   game.necromancerBeam = createNecromancerBeamState();
   game.upgrades = createUpgradeState();
-  game.shopOrder = ["moveSpeed", "attackSpeed", "damage", "defense"];
+  game.shopOrder = [];
+  game.consumables = createConsumableInventoryState();
+  game.shopStock = rollConsumableShopStock(game.floor, 5);
 
   game.player = createPlayerState(classType, classSpec, config.player.maxHealth);
   game.player.rangerTalents = game.rangerTalents;
