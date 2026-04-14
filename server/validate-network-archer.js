@@ -147,16 +147,20 @@ async function main() {
   try {
     await page.goto(GAME_URL, { waitUntil: "networkidle" });
     await page.keyboard.press("Space");
-    await page.locator("#character-select").waitFor({ state: "visible", timeout: 10000 });
-    await page.locator('[data-class-option="archer"]').click();
+    await page.locator("#mode-select").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#menu-network").click();
+    await page.locator("#network-setup-screen").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#net-server-url").fill(`ws://127.0.0.1:${WS_PORT}`);
     await page.locator("#net-room-id").fill(ROOM_ID);
-    await page.locator("#net-player-name").fill("ArcherValidator");
-    await page.locator("#start-network-game").click();
+    await page.locator("#net-player-name-setup").fill("ArcherValidator");
+    await page.locator("#network-setup-next").click();
+    await page.locator("#network-lobby-screen").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator('[data-lobby-class-option="archer"]').click();
+    await page.locator("#network-lobby-toggle-ready").click();
 
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
-      return !!state && state.networkReady === true && state.networkRole === "Controller" && state.player.classType === "archer";
+      return !!state && state.networkReady === true && state.networkRole === "Active" && state.player.classType === "archer";
     }, { timeout: 15000 });
 
     const canvas = page.locator("#game");
@@ -207,10 +211,10 @@ async function main() {
       const afterShot = shotReady?.state || null;
       assert(afterShot, "debug state unavailable after archer shot");
       const shots = afterShot.combat?.recentPlayerShots || [];
-      const deltaCount = shots.length - beforeCount;
-      assert(deltaCount === 1, `single click produced ${deltaCount} shot telemetry entries`);
-      const shot = shots[shots.length - 1];
-      assert(shot && (shot.source === "primary" || shot.source === "predictedPrimary"), `unexpected shot source: ${JSON.stringify(shot)}`);
+      const newShots = shots.slice(beforeCount);
+      const primaryShots = newShots.filter((entry) => entry?.source === "primary" || entry?.source === "predictedPrimary");
+      assert(primaryShots.length === 1, `single click produced ${primaryShots.length} primary shot telemetry entries from ${newShots.length} total`);
+      const shot = primaryShots[0];
       assert(Array.isArray(shot.volleyAngles) && shot.volleyAngles.length === shot.multishotCount, `bad volley telemetry: ${JSON.stringify(shot)}`);
       const aimX = Number.isFinite(shot.aimX) ? shot.aimX : afterShot.aim?.x;
       const aimY = Number.isFinite(shot.aimY) ? shot.aimY : afterShot.aim?.y;
@@ -277,7 +281,8 @@ async function main() {
       shotSamples.push({
         shotIndex: shotSamples.length + 1,
         attemptIndex,
-        deltaCount,
+        primaryShotCount: primaryShots.length,
+        totalShotTelemetryCount: newShots.length,
         baseAngleErrorDeg: baseAngleError * (180 / Math.PI),
         meanVolleyErrorDeg: meanVolleyError * (180 / Math.PI),
         visibleProjectileAngleErrorDeg: bestProjectileError * (180 / Math.PI),

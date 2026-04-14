@@ -75,6 +75,20 @@ export function handleActionMessage(room, clientId, action) {
     });
     return;
   }
+  if (kind === "useConsumableSlot" && Number.isFinite(action.slot)) {
+    const slot = Math.max(0, Math.min(4, Math.floor(action.slot)));
+    if (isPauseOwner) {
+      if (!playerAlive) return;
+      if (typeof sim.useConsumableSlot === "function") sim.useConsumableSlot(slot);
+      return;
+    }
+    if (room.phase !== "active" || typeof room.performActionForActivePlayer !== "function") return;
+    room.performActionForActivePlayer(clientId, (context) => {
+      if (typeof context.useConsumableSlot !== "function") return false;
+      return context.useConsumableSlot(slot);
+    });
+    return;
+  }
   if (kind === "spendSkill" && typeof action.key === "string") {
     if (isPauseOwner) {
       if (!playerAlive) return;

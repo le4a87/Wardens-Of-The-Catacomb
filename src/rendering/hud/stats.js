@@ -1,3 +1,6 @@
+import { drawStatsGameOverActions } from "./statsGameOverActions.js";
+import { getNecromancerTalentPoints } from "../../game/necromancerTalentTree.js";
+
 function formatEnemyTypeLabel(type) {
   const raw = typeof type === "string" && type.length > 0 ? type : "unknown";
   return raw
@@ -100,8 +103,7 @@ function drawAbilityCooldownWidget(renderer, game, x, y, size) {
   ctx.textAlign = "center";
   ctx.fillText(state.title, cx, y + size + 11);
   ctx.font = "bold 12px Trebuchet MS";
-  const text =
-    state.cooldownRemaining > 0 ? `${Math.ceil(state.cooldownRemaining)}` : "R";
+  const text = state.cooldownRemaining > 0 ? `${Math.ceil(state.cooldownRemaining)}` : "R";
   ctx.fillText(text, cx, cy + 4);
   ctx.textAlign = "left";
   ctx.restore();
@@ -254,8 +256,12 @@ function buildRunColumns(game) {
 
 function buildCharacterColumns(game) {
   const dmgRange = game.getPrimaryDamageRange();
+  const tempHp =
+    Math.max(0, Number.isFinite(game.player?.warriorRuntime?.tempHp) ? game.player.warriorRuntime.tempHp : 0) +
+    Math.max(0, Number.isFinite(game.player?.necromancerRuntime?.tempHp) ? game.player.necromancerRuntime.tempHp : 0) +
+    Math.max(0, Number.isFinite(game.player?.consumableRuntime?.tempHp) ? game.player.consumableRuntime.tempHp : 0);
   const core = createSection("Core", [
-    ["Health", `${Math.round(game.player.health)}/${Math.round(game.player.maxHealth)}`],
+    ["Health", `${Math.round(game.player.health)}/${Math.round(game.player.maxHealth)}${tempHp > 0 ? ` (+${Math.round(tempHp)} THP)` : ""}`],
     ["XP", `${game.experience}/${game.expToNextLevel}`],
     ["Move Speed", `${game.getPlayerMoveSpeed().toFixed(1)}`],
     ["Pickup Radius", `${game.getPickupRadius().toFixed(1)}`],
@@ -280,11 +286,12 @@ function buildCharacterColumns(game) {
   let classKit = null;
   if (game.isArcherClass && game.isArcherClass()) {
     classKit = createSection("Ranger Kit", [
-      ["Fire Arrow", game.isFireArrowUnlocked() ? `Lv ${game.skills.fireArrow.points}` : "Locked"],
+      ["Fire Arrow", game.isFireArrowUnlocked() ? "Unlocked" : "Locked"],
       ["Fire Cooldown", game.player.fireArrowCooldown > 0 ? `${game.player.fireArrowCooldown.toFixed(1)}s` : "Ready"],
       ["Fire AoE Radius", game.isFireArrowUnlocked() ? game.getFireArrowBlastRadius().toFixed(1) : "-"],
       ["Pierce Chance", `${(game.getPiercingChance() * 100).toFixed(1)}%`],
-      ["Multiarrow", `${game.getMultiarrowCount()} (${game.getMultiarrowSpreadDeg().toFixed(1)}deg)`]
+      ["Multiarrow", `${game.getMultiarrowCount()} (${game.getMultiarrowSpreadDeg().toFixed(1)}deg)`],
+      ["Tree SP", `${game.skillPoints} available`]
     ]);
   } else if (game.isWarriorClass && game.isWarriorClass()) {
     classKit = createSection("Warrior Kit", [
@@ -303,12 +310,13 @@ function buildCharacterColumns(game) {
     ]);
   } else if (game.isNecromancerClass && game.isNecromancerClass()) {
     classKit = createSection("Necromancer Kit", [
-      ["Control Mastery", `Lv ${game.skills.undeadMastery.points}`],
+      ["Control Mastery", `Lv ${getNecromancerTalentPoints(game, "controlMastery")}`],
+      ["Cold Command", `Lv ${getNecromancerTalentPoints(game, "coldCommand")}`],
       ["Controlled Undead", `${game.getControlledUndeadCount()}/${game.getNecromancerControlCap()}`],
       ["Charm Time", `${game.getNecromancerCharmDuration().toFixed(2)}s`],
-      ["Death Bolt", `Lv ${game.skills.deathBolt.points}`],
+      ["Death Bolt", `Lv ${getNecromancerTalentPoints(game, "deathBoltActive")}`],
       ["Death Bolt Dmg", `${game.getDeathBoltBaseDamage().toFixed(1)}`],
-      ["Augment Death", `Lv ${game.skills.explodingDeath.points}`]
+      ["Plaguecraft", `Lv ${getNecromancerTalentPoints(game, "plaguecraft")}`]
     ]);
   }
 
@@ -450,7 +458,6 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
 
   const panelBottom = panelY + panelH;
   if (!game.statsPanelOpen) return panelBottom;
-
   const overlayX = 16;
   const overlayY = layout.topHudH + 12;
   const overlayW = layout.playW + layout.sidebarW - 32;
@@ -486,85 +493,7 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
   for (let i = 0; i < columns.length; i++) {
     drawColumn(renderer, contentX + i * (columnW + gap), contentY, columnW, contentBottom, columns[i]);
   }
+
+  if (game.gameOver) drawStatsGameOverActions(ctx, game, overlayX, overlayY, overlayW, overlayH);
   return panelBottom;
-}
-
-export function drawGroupPanel(renderer, game, layout, panelY) {
-  const ctx = renderer.ctx;
-  const remotePlayers = Array.isArray(game.remotePlayers) ? game.remotePlayers : [];
-  game.uiRects.groupPanelRows = [];
-  if (remotePlayers.length === 0) return panelY;
-  const panelX = layout.sidebarX + renderer.sidebarPadding;
-  const panelW = layout.sidebarW - renderer.sidebarPadding * 2;
-  const headerH = 30;
-  const rowH = 40;
-  const rows = remotePlayers.slice(0, 5);
-  const panelH = headerH + rows.length * rowH + 8;
-  const pauseOwnerId = typeof game.networkPauseOwnerId === "string" ? game.networkPauseOwnerId : null;
-
-  ctx.fillStyle = "rgba(8, 12, 18, 0.9)";
-  ctx.fillRect(panelX, panelY, panelW, panelH);
-  ctx.strokeStyle = "rgba(126, 139, 171, 0.65)";
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(panelX, panelY, panelW, panelH);
-
-  ctx.fillStyle = "#f2efe3";
-  ctx.font = "bold 14px Trebuchet MS";
-  ctx.fillText("Group", panelX + 10, panelY + 19);
-  ctx.fillStyle = "#9fb0d6";
-  ctx.font = "12px Trebuchet MS";
-  ctx.fillText(`${rows.length} teammate${rows.length === 1 ? "" : "s"}`, panelX + panelW - 92, panelY + 19);
-
-  let y = panelY + headerH;
-  for (const player of rows) {
-    const alive = player?.alive !== false;
-    const ratio = Number.isFinite(player?.maxHealth) && player.maxHealth > 0 ? Math.max(0, Math.min(1, player.health / player.maxHealth)) : 0;
-    const accent = typeof player?.color === "string" && player.color.trim() ? player.color.trim() : "#58a6ff";
-    const handle = typeof player?.handle === "string" && player.handle.trim() ? player.handle.trim() : "Player";
-    const level = Number.isFinite(player?.level) ? player.level : 1;
-    const isPauseOwner = pauseOwnerId && player?.id === pauseOwnerId;
-    const rowRect = { x: panelX + 6, y, w: panelW - 12, h: rowH - 4 };
-    const isSpectateTarget = typeof game.spectateTargetId === "string" && player?.id === game.spectateTargetId;
-    game.uiRects.groupPanelRows.push({ id: player?.id || "", rect: rowRect, alive });
-
-    ctx.fillStyle = isSpectateTarget ? "rgba(31, 45, 68, 0.96)" : "rgba(16, 22, 31, 0.9)";
-    ctx.fillRect(rowRect.x, rowRect.y, rowRect.w, rowRect.h);
-    if (isSpectateTarget) {
-      ctx.strokeStyle = "rgba(196, 222, 255, 0.78)";
-      ctx.strokeRect(rowRect.x + 0.5, rowRect.y + 0.5, rowRect.w - 1, rowRect.h - 1);
-    }
-    ctx.fillStyle = accent;
-    ctx.fillRect(rowRect.x, rowRect.y, 4, rowRect.h);
-
-    ctx.fillStyle = accent;
-    ctx.font = "bold 13px Trebuchet MS";
-    ctx.fillText(handle, panelX + 16, y + 14);
-    if (isPauseOwner) {
-      ctx.fillStyle = "#f6d37a";
-      ctx.fillText("*", panelX + panelW - 18, y + 14);
-    }
-
-    ctx.fillStyle = "#b7c7e6";
-    ctx.font = "12px Trebuchet MS";
-    ctx.fillText(`Lvl ${level}`, panelX + 16, y + 28);
-
-    const barX = panelX + 66;
-    const barY = y + 19;
-    const barW = panelW - 88;
-    const barH = 8;
-    ctx.fillStyle = "rgba(41, 52, 72, 0.95)";
-    ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = alive ? (ratio > 0.5 ? "#76db8d" : ratio > 0.25 ? "#e1bf63" : "#df6767") : "#5c6371";
-    ctx.fillRect(barX, barY, Math.floor(barW * ratio), barH);
-    ctx.strokeStyle = "rgba(126, 139, 171, 0.4)";
-    ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
-    if (!alive) {
-      ctx.fillStyle = "#d7a5a5";
-      ctx.font = "bold 11px Trebuchet MS";
-      ctx.fillText("Dead", barX + barW - 26, y + 28);
-    }
-    y += rowH;
-  }
-
-  return panelY + panelH;
 }

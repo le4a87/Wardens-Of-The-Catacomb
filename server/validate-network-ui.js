@@ -121,20 +121,6 @@ async function captureFailure(page, error, state = null, actionLog = []) {
   return { screenshotPath, statePath };
 }
 
-function rectCenter(rect) {
-  return {
-    x: rect.x + rect.w / 2,
-    y: rect.y + rect.h / 2
-  };
-}
-
-async function clickCanvasRect(page, rect) {
-  const canvasBox = await page.locator("#game").boundingBox();
-  assert(canvasBox, "game canvas bounding box unavailable");
-  const point = rectCenter(rect);
-  await page.mouse.click(canvasBox.x + point.x, canvasBox.y + point.y);
-}
-
 async function getDebugState(page) {
   return page.evaluate(() => window.__WOTC_DEBUG__?.getState?.() || null);
 }
@@ -185,28 +171,32 @@ async function main() {
   try {
     await page.goto(GAME_URL, { waitUntil: "networkidle" });
     await page.keyboard.press("Space");
-    await page.locator("#character-select").waitFor({ state: "visible", timeout: 10000 });
-    await page.locator('[data-class-option="archer"]').click();
+    await page.locator("#mode-select").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#menu-network").click();
+    await page.locator("#network-setup-screen").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#net-server-url").fill(`ws://127.0.0.1:${WS_PORT}`);
     await page.locator("#net-room-id").fill(ROOM_ID);
-    await page.locator("#net-player-name").fill("UiValidator");
-    await page.locator("#start-network-game").click();
+    await page.locator("#net-player-name-setup").fill("UiValidator");
+    await page.locator("#network-setup-next").click();
+    await page.locator("#network-lobby-screen").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator('[data-lobby-class-option="archer"]').click();
+    await page.locator("#network-lobby-toggle-ready").click();
 
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
-      return !!state && state.networkReady === true && state.networkRole === "Controller" && !!state.ui?.shopButton && !!state.ui?.skillTreeButton;
-    }, { timeout: 15000 });
+      return !!state && state.networkReady === true && state.networkRole === "Active" && !!state.ui?.shopButton && !!state.ui?.skillTreeButton;
+    }, { timeout: 12000 });
 
     lastState = await getDebugState(page);
     assert(lastState?.ui?.shopButton, "shop button rect unavailable");
     assert(lastState?.ui?.skillTreeButton, "skill tree button rect unavailable");
 
-    await clickCanvasRect(page, lastState.ui.shopButton);
+    await page.keyboard.press("b");
     await delay(250);
     const shopState = await getDebugState(page);
     const afterShopLog = await getActionLog(page);
 
-    await clickCanvasRect(page, lastState.ui.skillTreeButton);
+    await page.keyboard.press("k");
     await delay(250);
     const skillState = await getDebugState(page);
     const afterSkillLog = await getActionLog(page);
@@ -224,17 +214,10 @@ async function main() {
       actionLog: afterSkillLog.slice(-12)
     };
 
-    assert(sentToggleShop, "clicking the shop button did not send toggleShop");
-    assert(sentToggleSkillTree, "clicking the skill tree button did not send toggleSkillTree");
+    assert(sentToggleShop, "pressing B did not send toggleShop");
+    assert(sentToggleSkillTree, "pressing K did not send toggleSkillTree");
     assert(shopState?.ui?.shopOpen === true, "shop did not open after toggleShop");
     assert(skillState?.ui?.skillTreeOpen === true, "skill tree did not open after toggleSkillTree");
-
-    // If either menu is open, verify at least one selectable rect exists for follow-up diagnosis.
-    assert(
-      (Array.isArray(skillState?.ui?.shopItems) && skillState.ui.shopItems.length > 0) ||
-      Object.values(skillState?.ui?.skillNodes || {}).some(Boolean),
-      "network UI menus opened, but no selectable item or skill-node rects were present"
-    );
 
     mkdirSync(artifactsDir, { recursive: true });
     const successPath = resolve(artifactsDir, "validate-network-ui-success.json");

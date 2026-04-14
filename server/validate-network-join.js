@@ -137,16 +137,20 @@ async function main() {
   try {
     await page.goto(GAME_URL, { waitUntil: "networkidle" });
     await page.keyboard.press("Space");
-    await page.locator("#character-select").waitFor({ state: "visible", timeout: 10000 });
-    await page.locator('[data-class-option="archer"]').click();
+    await page.locator("#mode-select").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#menu-network").click();
+    await page.locator("#network-setup-screen").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#net-server-url").fill(`ws://127.0.0.1:${WS_PORT}`);
     await page.locator("#net-room-id").fill(ROOM_ID);
-    await page.locator("#net-player-name").fill("JoinValidator");
-    await page.locator("#start-network-game").click();
+    await page.locator("#net-player-name-setup").fill("JoinValidator");
+    await page.locator("#network-setup-next").click();
+    await page.locator("#network-lobby-screen").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator('[data-lobby-class-option="archer"]').click();
+    await page.locator("#network-lobby-toggle-ready").click();
 
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
-      return !!state && state.networkReady === true && state.networkRole === "Controller";
+      return !!state && state.networkReady === true && state.networkRole === "Active";
     }, { timeout: 15000 });
 
     lastState = await page.evaluate(() => window.__WOTC_DEBUG__?.getState?.() || null);

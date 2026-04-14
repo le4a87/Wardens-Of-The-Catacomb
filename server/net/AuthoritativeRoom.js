@@ -1,9 +1,15 @@
 import { GameSim } from "../../src/sim/GameSim.js";
 import {
   createNecromancerBeamState,
+  createRangerRuntimeState,
+  createWarriorRuntimeState,
   createSkillState,
   createUpgradeState
 } from "../../src/game/runtimeBaseStateFactories.js";
+import { cloneRangerTalentState, createRangerTalentState } from "../../src/game/rangerTalentTree.js";
+import { cloneWarriorTalentState, createWarriorTalentState } from "../../src/game/warriorTalentTree.js";
+import { cloneNecromancerTalentState, createNecromancerTalentState } from "../../src/game/necromancerTalentTree.js";
+import { cloneConsumableInventoryState } from "../../src/game/consumables.js";
 
 const PLAYER_COLOR_PALETTE = ["#5bb3ff", "#ff8f6b", "#7ae582", "#f3cf6b", "#c78bff", "#ff6fae"];
 
@@ -27,6 +33,20 @@ function cloneUpgradeState(source = null) {
     if (Number.isFinite(raw.level)) upgrade.level = Math.max(0, Math.min(upgrade.maxLevel, Math.floor(raw.level)));
   }
   return next;
+}
+
+function cloneRangerRuntimeState(source = null) {
+  return {
+    ...createRangerRuntimeState(),
+    ...(source && typeof source === "object" ? source : {})
+  };
+}
+
+function cloneWarriorRuntimeState(source = null) {
+  return {
+    ...createWarriorRuntimeState(),
+    ...(source && typeof source === "object" ? source : {})
+  };
 }
 
 function cloneNecromancerBeamState(source = null) {
@@ -210,7 +230,15 @@ export class AuthoritativeRoom {
       fireArrowCooldown: 0,
       deathBoltCooldown: 0,
       skills: cloneSkillState(),
+      rangerTalents: createRangerTalentState(),
+      warriorTalents: createWarriorTalentState(),
+      necromancerTalents: createNecromancerTalentState(),
       upgrades: cloneUpgradeState(),
+      consumables: cloneConsumableInventoryState(),
+      rangerRuntime: cloneRangerRuntimeState(),
+      warriorRuntime: cloneWarriorRuntimeState(),
+      necromancerRuntime: { vigorTimer: 0, vigorBeamTimer: 0, vigorHealPool: 0, vigorTotalDuration: 0, harvesterBonusPct: 0, tempHp: 0 },
+      consumableRuntime: { tempHp: 0 },
       warriorMomentumTimer: 0,
       warriorRageActiveTimer: 0,
       warriorRageCooldownTimer: 0,
@@ -333,7 +361,16 @@ export class AuthoritativeRoom {
     this.sim.skillPoints = Number.isFinite(state.skillPoints) ? state.skillPoints : this.sim.skillPoints;
     this.sim.levelWeaponDamageBonus = Number.isFinite(state.levelWeaponDamageBonus) ? state.levelWeaponDamageBonus : this.sim.levelWeaponDamageBonus;
     this.sim.skills = cloneSkillState(state.skills);
+    this.sim.rangerTalents = cloneRangerTalentState(state.rangerTalents);
+    this.sim.warriorTalents = cloneWarriorTalentState(state.warriorTalents);
+    this.sim.necromancerTalents = cloneNecromancerTalentState(state.necromancerTalents);
     this.sim.upgrades = cloneUpgradeState(state.upgrades);
+    this.sim.consumables = cloneConsumableInventoryState(state.consumables);
+    this.sim.rangerRuntime = cloneRangerRuntimeState(state.rangerRuntime);
+    this.sim.warriorRuntime = cloneWarriorRuntimeState(state.warriorRuntime);
+    this.sim.player.consumableRuntime = {
+      tempHp: Number.isFinite(state?.consumableRuntime?.tempHp) ? state.consumableRuntime.tempHp : 0
+    };
     this.sim.warriorMomentumTimer = Number.isFinite(state.warriorMomentumTimer) ? state.warriorMomentumTimer : 0;
     this.sim.warriorRageActiveTimer = Number.isFinite(state.warriorRageActiveTimer) ? state.warriorRageActiveTimer : 0;
     this.sim.warriorRageCooldownTimer = Number.isFinite(state.warriorRageCooldownTimer) ? state.warriorRageCooldownTimer : 0;
@@ -359,7 +396,13 @@ export class AuthoritativeRoom {
     state.fireArrowCooldown = this.sim.player.fireArrowCooldown;
     state.deathBoltCooldown = this.sim.player.deathBoltCooldown;
     state.skills = cloneSkillState(this.sim.skills);
+    state.rangerTalents = cloneRangerTalentState(this.sim.rangerTalents);
+    state.warriorTalents = cloneWarriorTalentState(this.sim.warriorTalents);
+    state.necromancerTalents = cloneNecromancerTalentState(this.sim.necromancerTalents);
     state.upgrades = cloneUpgradeState(this.sim.upgrades);
+    state.consumables = cloneConsumableInventoryState(this.sim.consumables);
+    state.rangerRuntime = cloneRangerRuntimeState(this.sim.rangerRuntime);
+    state.warriorRuntime = cloneWarriorRuntimeState(this.sim.warriorRuntime);
     state.score = this.sim.score;
     state.gold = this.sim.gold;
     state.experience = this.sim.experience;
@@ -384,6 +427,9 @@ export class AuthoritativeRoom {
     state.facing = this.sim.player.facing;
     state.moving = !!this.sim.player.moving;
     state.alive = this.sim.player.health > 0;
+    state.consumableRuntime = {
+      tempHp: Number.isFinite(this.sim.player?.consumableRuntime?.tempHp) ? this.sim.player.consumableRuntime.tempHp : 0
+    };
     state.color = this.getClientRunColor(client);
     this.activePlayers.set(client.id, state);
     return state;
@@ -405,7 +451,24 @@ export class AuthoritativeRoom {
     context.skillPoints = Number.isFinite(state.skillPoints) ? state.skillPoints : 0;
     context.levelWeaponDamageBonus = Number.isFinite(state.levelWeaponDamageBonus) ? state.levelWeaponDamageBonus : 0;
     context.skills = cloneSkillState(state.skills);
+    context.rangerTalents = cloneRangerTalentState(state.rangerTalents);
+    context.warriorTalents = cloneWarriorTalentState(state.warriorTalents);
+    context.necromancerTalents = cloneNecromancerTalentState(state.necromancerTalents);
     context.upgrades = cloneUpgradeState(state.upgrades);
+    context.consumables = cloneConsumableInventoryState(state.consumables);
+    context.rangerRuntime = cloneRangerRuntimeState(state.rangerRuntime);
+    context.warriorRuntime = cloneWarriorRuntimeState(state.warriorRuntime);
+    context.necromancerRuntime = {
+      vigorTimer: Number.isFinite(state?.necromancerRuntime?.vigorTimer) ? state.necromancerRuntime.vigorTimer : 0,
+      vigorBeamTimer: Number.isFinite(state?.necromancerRuntime?.vigorBeamTimer) ? state.necromancerRuntime.vigorBeamTimer : 0,
+      vigorHealPool: Number.isFinite(state?.necromancerRuntime?.vigorHealPool) ? state.necromancerRuntime.vigorHealPool : 0,
+      vigorTotalDuration: Number.isFinite(state?.necromancerRuntime?.vigorTotalDuration) ? state.necromancerRuntime.vigorTotalDuration : 0,
+      harvesterBonusPct: Number.isFinite(state?.necromancerRuntime?.harvesterBonusPct) ? state.necromancerRuntime.harvesterBonusPct : 0,
+      tempHp: Number.isFinite(state?.necromancerRuntime?.tempHp) ? state.necromancerRuntime.tempHp : 0
+    };
+    context.player.consumableRuntime = {
+      tempHp: Number.isFinite(state?.consumableRuntime?.tempHp) ? state.consumableRuntime.tempHp : 0
+    };
     context.warriorMomentumTimer = Number.isFinite(state.warriorMomentumTimer) ? state.warriorMomentumTimer : 0;
     context.warriorRageActiveTimer = Number.isFinite(state.warriorRageActiveTimer) ? state.warriorRageActiveTimer : 0;
     context.warriorRageCooldownTimer = Number.isFinite(state.warriorRageCooldownTimer) ? state.warriorRageCooldownTimer : 0;
@@ -430,7 +493,24 @@ export class AuthoritativeRoom {
       ? context.levelWeaponDamageBonus
       : state.levelWeaponDamageBonus;
     state.skills = cloneSkillState(context.skills);
+    state.rangerTalents = cloneRangerTalentState(context.rangerTalents);
+    state.warriorTalents = cloneWarriorTalentState(context.warriorTalents);
+    state.necromancerTalents = cloneNecromancerTalentState(context.necromancerTalents);
     state.upgrades = cloneUpgradeState(context.upgrades);
+    state.consumables = cloneConsumableInventoryState(context.consumables);
+    state.rangerRuntime = cloneRangerRuntimeState(context.rangerRuntime);
+    state.warriorRuntime = cloneWarriorRuntimeState(context.warriorRuntime);
+    state.necromancerRuntime = {
+      vigorTimer: Number.isFinite(context?.necromancerRuntime?.vigorTimer) ? context.necromancerRuntime.vigorTimer : 0,
+      vigorBeamTimer: Number.isFinite(context?.necromancerRuntime?.vigorBeamTimer) ? context.necromancerRuntime.vigorBeamTimer : 0,
+      vigorHealPool: Number.isFinite(context?.necromancerRuntime?.vigorHealPool) ? context.necromancerRuntime.vigorHealPool : 0,
+      vigorTotalDuration: Number.isFinite(context?.necromancerRuntime?.vigorTotalDuration) ? context.necromancerRuntime.vigorTotalDuration : 0,
+      harvesterBonusPct: Number.isFinite(context?.necromancerRuntime?.harvesterBonusPct) ? context.necromancerRuntime.harvesterBonusPct : 0,
+      tempHp: Number.isFinite(context?.necromancerRuntime?.tempHp) ? context.necromancerRuntime.tempHp : 0
+    };
+    state.consumableRuntime = {
+      tempHp: Number.isFinite(context?.player?.consumableRuntime?.tempHp) ? context.player.consumableRuntime.tempHp : 0
+    };
     state.warriorMomentumTimer = Number.isFinite(context.warriorMomentumTimer) ? context.warriorMomentumTimer : 0;
     state.warriorRageActiveTimer = Number.isFinite(context.warriorRageActiveTimer) ? context.warriorRageActiveTimer : 0;
     state.warriorRageCooldownTimer = Number.isFinite(context.warriorRageCooldownTimer) ? context.warriorRageCooldownTimer : 0;
@@ -485,6 +565,7 @@ export class AuthoritativeRoom {
     if (!held) {
       beam.progress = 0;
       beam.healTickTimer = 0;
+      beam.mode = "idle";
       this.syncActivePlayerStateFromContext(state, context);
       return false;
     }
@@ -510,6 +591,7 @@ export class AuthoritativeRoom {
       beam.targetY = hitBreakable.y;
       beam.progress = 0;
       beam.healTickTimer = 0;
+      beam.mode = "idle";
       hitBreakable.hp = 0;
       this.syncActivePlayerStateFromContext(state, context);
       return true;
@@ -547,6 +629,7 @@ export class AuthoritativeRoom {
       beam.active = false;
       beam.progress = 0;
       beam.healTickTimer = 0;
+      beam.mode = "idle";
       this.syncActivePlayerStateFromContext(state, context);
       return false;
     }
@@ -561,6 +644,7 @@ export class AuthoritativeRoom {
     if (!canTarget) {
       beam.progress = 0;
       beam.healTickTimer = 0;
+      beam.mode = "idle";
       this.syncActivePlayerStateFromContext(state, context);
       return beam.active;
     }
@@ -570,6 +654,7 @@ export class AuthoritativeRoom {
     beam.targetY = bestTarget.y;
     beam.targetId = bestTarget.id || null;
     if (context.isControlledUndead(bestTarget)) {
+      beam.mode = "heal";
       beam.progress = 0;
       beam.healTickTimer = (beam.healTickTimer || 0) + Math.max(0, Number.isFinite(dt) ? dt : 0);
       const healPeriod = this.sim.config?.necromancer?.healTickSeconds || 0.2;
@@ -578,6 +663,7 @@ export class AuthoritativeRoom {
         context.healControlledUndead(bestTarget, context.getNecroticBeamHealAmount());
       }
     } else {
+      beam.mode = "charm";
       beam.healTickTimer = 0;
       bestTarget.charmLocked = true;
       beam.progress += Math.max(0, Number.isFinite(dt) ? dt : 0);

@@ -11,6 +11,12 @@ export function resolveSpecialProjectileCollision({
   skeletonIgnoresArrow
 }) {
   if (!projectile || projectile.life <= 0) return false;
+  const tryReflect = (player) => {
+    if (typeof game.getWarriorMissileProtectorForPlayerEntity !== "function") return false;
+    const protector = game.getWarriorMissileProtectorForPlayerEntity(player);
+    if (!protector || typeof game.tryReflectMissileForPlayerEntity !== "function") return false;
+    return game.tryReflectMissileForPlayerEntity(protector, projectile, protector);
+  };
   if (projectile.projectileType === "ratArrow") {
     for (const enemy of activeEnemies) {
       if (!game.isEnemyFriendlyToPlayer || !game.isEnemyFriendlyToPlayer(enemy)) continue;
@@ -24,6 +30,7 @@ export function resolveSpecialProjectileCollision({
     for (const player of getLivingPlayers()) {
       const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function" ? game.getPlayerEnemyCollisionRadiusFor(player) : playerEnemyRadius;
       if (vecLength(projectile.x - player.x, projectile.y - player.y) > playerRadius + projectile.size * 0.5) continue;
+      if (tryReflect(player)) return true;
       const rawDamage = game.rollEnemyContactDamage({ damageMin: projectile.damageMin, damageMax: projectile.damageMax });
       damagePlayer(player, rawDamage * game.getEnemyDamageScale(), "arrow");
       projectile.life = 0;
@@ -62,6 +69,7 @@ export function resolveSpecialProjectileCollision({
     for (const player of getLivingPlayers()) {
       const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function" ? game.getPlayerEnemyCollisionRadiusFor(player) : playerEnemyRadius;
       if (vecLength(projectile.x - player.x, projectile.y - player.y) > playerRadius + projectile.size * 0.5) continue;
+      if (tryReflect(player)) return true;
       const rawDamage = typeof game.rollWallTrapDamage === "function"
         ? game.rollWallTrapDamage()
         : game.rollEnemyContactDamage({ damageMin: projectile.damageMin, damageMax: projectile.damageMax });
@@ -104,6 +112,7 @@ export function resolveSpecialProjectileCollision({
     if (!hit) {
       for (const player of getLivingPlayers()) {
         if (vecLength(projectile.x - player.x, projectile.y - player.y) >= ((player.size || game.player.size) + projectile.size) * 0.5) continue;
+        if (tryReflect(player)) return true;
         const rawDamage = Number.isFinite(projectile.damage) ? projectile.damage : game.config.enemy.sonyaFireballDamage || 18;
         const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
         damagePlayer(player, scaledEnemyDamage, "fire");
@@ -160,10 +169,34 @@ export function finalizeProjectilesAndTransientState(game) {
       }
       bullet.life = 0;
     }
+    if (
+      bullet.projectileType !== "deathBolt" &&
+      bullet.projectileType !== "sonyaFireball" &&
+      bullet.life > 0 &&
+      (bullet.remainingRicochets || 0) > 0 &&
+      game.isWallAt(bullet.x, bullet.y, false)
+    ) {
+      const probeX = bullet.x - (bullet.vx || 0) * 0.02;
+      const probeY = bullet.y - (bullet.vy || 0) * 0.02;
+      const hitVertical = game.isWallAt(bullet.x, probeY, false);
+      const hitHorizontal = game.isWallAt(probeX, bullet.y, false);
+      if (hitVertical || (!hitVertical && !hitHorizontal)) bullet.vx *= -1;
+      if (hitHorizontal || (!hitVertical && !hitHorizontal)) bullet.vy *= -1;
+      bullet.angle = Math.atan2(bullet.vy || 0, bullet.vx || 0);
+      bullet.remainingRicochets -= 1;
+      bullet.x = probeX;
+      bullet.y = probeY;
+    }
   }
   game.bullets = game.bullets.filter((bullet) => !game.isWallAt(bullet.x, bullet.y, false) && bullet.life > 0);
   for (const arrow of game.fireArrows) {
-    if (arrow.life <= 0 || game.isWallAt(arrow.x, arrow.y, false)) {
+    if (
+      arrow.life > 0 &&
+      (
+        (Number.isFinite(arrow.detonateX) && Number.isFinite(arrow.detonateY) && vecLength((arrow.detonateX || 0) - arrow.x, (arrow.detonateY || 0) - arrow.y) <= (arrow.size || 8)) ||
+        game.isWallAt(arrow.x, arrow.y, false)
+      )
+    ) {
       game.triggerFireExplosion(arrow.x, arrow.y, arrow);
       arrow.life = 0;
     }

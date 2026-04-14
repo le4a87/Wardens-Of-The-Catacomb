@@ -154,6 +154,12 @@ export function handleNetworkUiActions(game, netClient, isController) {
     if (canUseLocalPanels) toggleLocalStats();
     else if (isController) netClient.sendAction({ kind: "toggleStats" });
   }
+  if (playerAlive && !game.gameOver && !game.shopOpen && !game.skillTreeOpen && !game.statsPanelOpen) {
+    for (let i = 0; i < 5; i++) {
+      if (!game.input.consumeKeyQueued(`${i + 1}`)) continue;
+      if (isController) netClient.sendAction({ kind: "useConsumableSlot", slot: i });
+    }
+  }
   const clicks = game.input.consumeUiLeftClicks();
   if (clicks.length === 0) return;
 
@@ -241,6 +247,16 @@ export function handleNetworkUiActions(game, netClient, isController) {
         break;
       }
     }
+    const skillNodeRects = Array.isArray(game.uiRects.skillTreeNodes) ? game.uiRects.skillTreeNodes : [];
+    let handledSkillNode = false;
+    for (const node of skillNodeRects) {
+      if (!playerAlive || !hit(click.x, click.y, node.rect)) continue;
+      recordAction(click, `skillNode:${node.key}`, "spendSkill", node.key);
+      netClient.sendAction({ kind: "spendSkill", key: node.key });
+      handledSkillNode = true;
+      break;
+    }
+    if (handledSkillNode) continue;
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
       recordAction(click, "skillFireArrowNode", "spendSkill", "fireArrow");
       netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });

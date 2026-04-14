@@ -98,9 +98,11 @@ async function runScenario(page, classKey, floor) {
 
   await page.goto(GAME_URL, { waitUntil: "networkidle" });
   await page.keyboard.press("Space");
+  await page.locator("#mode-select").waitFor({ state: "visible", timeout: 10000 });
+  await page.locator("#menu-single").click();
   await page.locator("#character-select").waitFor({ state: "visible", timeout: 10000 });
-  await page.locator("#net-player-name").fill("DevStartValidator");
-  await page.locator(`[data-class-option="${classKey}"]`).click();
+  await page.locator("#character-select #net-player-name").fill("DevStartValidator");
+  await page.locator(`#character-select [data-class-option="${classKey}"]`).click();
   await page.locator("#dev-start-floor").evaluate((element, value) => {
     element.value = value;
     element.dispatchEvent(new Event("input", { bubbles: true }));

@@ -20,7 +20,7 @@ export function createLocalGame({
     }
   });
   game.playerHandle = playerHandle;
-  game.deathTransitionDuration = 10;
+  game.deathTransitionDuration = 12;
   if (typeof game.applyDebugBossOverride === "function") {
     game.applyDebugBossOverride(bossOverride);
   }
@@ -32,9 +32,11 @@ export function createLocalGame({
   return game;
 }
 
-export function startIdleSoundMonitor(getCurrentGame, syncIdleSoundState) {
+export function startIdleSoundMonitor(getCurrentGame, syncIdleSoundState, syncMusicForGame = null) {
   const monitor = () => {
-    syncIdleSoundState(getCurrentGame());
+    const game = getCurrentGame();
+    syncIdleSoundState(game);
+    if (typeof syncMusicForGame === "function") syncMusicForGame(game);
     requestAnimationFrame(monitor);
   };
   requestAnimationFrame(monitor);

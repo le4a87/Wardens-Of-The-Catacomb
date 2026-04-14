@@ -7,6 +7,7 @@ import {
   maybeSpawnDrop as maybeSpawnDropEntity,
   xpFromEnemy as xpFromEnemyEntity
 } from "./enemySystems.js";
+import { getRangerTalentPoints } from "./rangerTalentTree.js";
 
 export const runtimePlayerCombatMethods = {
   xpFromEnemy(enemy) {
@@ -19,12 +20,15 @@ export const runtimePlayerCombatMethods = {
     while (this.experience >= this.expToNextLevel) {
       this.experience -= this.expToNextLevel;
       this.level += 1;
-      this.skillPoints += 1;
+      this.skillPoints += this.getSkillPointGainForLevel(this.level, this.classType);
       const hpGain = Number.isFinite(this.classSpec.levelHpGain) ? this.classSpec.levelHpGain : 10;
-      this.player.maxHealth += hpGain;
-      this.player.health = Math.min(this.player.maxHealth, this.player.health + hpGain);
+      const adjustedHpGain = this.classType === "archer"
+        ? hpGain * (1 + (getRangerTalentPoints(this, "fleetstep") > 0 ? 0.06 : 0))
+        : hpGain;
+      this.player.maxHealth += adjustedHpGain;
+      this.player.health = Math.min(this.player.maxHealth, this.player.health + adjustedHpGain);
       this.markPlayerHealthBarVisible();
-      this.spawnFloatingText(this.player.x, this.player.y - 46, `+${hpGain} Max HP`, "#ff9f9f", 0.95, 14);
+      this.spawnFloatingText(this.player.x, this.player.y - 46, `+${adjustedHpGain.toFixed(1)} Max HP`, "#ff9f9f", 0.95, 14);
       const baseMin = Number.isFinite(this.classSpec.primaryDamageMin)
         ? this.classSpec.primaryDamageMin
         : Number.isFinite(this.classSpec.primaryDamage)
@@ -41,7 +45,14 @@ export const runtimePlayerCombatMethods = {
       this.levelWeaponDamageBonus += dmgGain;
       this.spawnFloatingText(this.player.x, this.player.y - 62, `+${dmgGain.toFixed(1)} Weapon Dmg`, "#f3d18b", 0.95, 13);
       this.expToNextLevel = Math.floor(this.expToNextLevel * this.config.progression.xpLevelScaling);
-      this.spawnFloatingText(this.player.x, this.player.y - 30, `Level ${this.level}! +1 SP`, "#9be18a", 1.2, 16);
+      this.spawnFloatingText(
+        this.player.x,
+        this.player.y - 30,
+        `Level ${this.level}! +${this.getSkillPointGainForLevel(this.level, this.classType)} SP`,
+        "#9be18a",
+        1.2,
+        16
+      );
       if (this.updateFloorBossTrigger()) {
         const target = this.floorBoss?.triggerLevel || this.getFloorBossTriggerLevel();
         this.spawnFloatingText(this.player.x, this.player.y - 80, `Boss Ready: Lv ${target}`, "#c78bff", 1.4, 16);

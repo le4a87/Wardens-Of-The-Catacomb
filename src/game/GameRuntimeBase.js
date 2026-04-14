@@ -5,11 +5,33 @@ import { Renderer } from "../Renderer.js";
 import { runtimeBaseBiomeMethods } from "./runtimeBaseBiomeMethods.js";
 import { runtimeBasePlacementMethods } from "./runtimeBasePlacementMethods.js";
 import { runtimeBaseSupportMethods } from "./runtimeBaseSupportMethods.js";
+import { runtimeBaseDevStartMethods } from "./runtimeBaseDevStartMethods.js";
 import { runtimeBaseDifficultyMethods } from "./runtimeBaseDifficultyMethods.js";
 import { runtimeCombatStatsMethods } from "./runtimeCombatStatsMethods.js";
 import { runtimeFloorBossMethods } from "./runtimeFloorBossMethods.js";
 import { createRunStats } from "./runtimeBaseStateFactories.js";
 import { initializeRuntimeBaseState } from "./runtimeBaseStateInit.js";
+import {
+  getNecromancerBlackCandleDamageBonus,
+  getNecromancerBaseCharmDurationForLevel,
+  getNecromancerBeamHealingMultiplier,
+  getNecromancerBoneWardDamageBonus,
+  getNecromancerBoneWardDamageReduction,
+  getNecromancerBoneWardReflectChance,
+  getNecromancerControlCapBonus,
+  getNecromancerControlledUndeadAttackSpeedBonusPct,
+  getNecromancerControlledUndeadDamageBonusPct,
+  getNecromancerControlledUndeadDefenseBonusPct,
+  getNecromancerControlledUndeadHealthBonusPct,
+  getNecromancerDeathBoltCooldownReduction,
+  getNecromancerDeathBoltDamageMultiplier,
+  getNecromancerDeathBoltExplosionDamageMultiplier,
+  getNecromancerDeathBoltRadiusMultiplier,
+  getNecromancerDeathBoltZoneDurationMultiplier,
+  getNecromancerTalentPoints,
+  getNecromancerGhostLifeSteal,
+  isNecromancerTalentGame
+} from "./necromancerTalentTree.js";
 
 export class GameRuntimeBase {
   constructor(canvas, options = {}) {
@@ -64,6 +86,24 @@ export class GameRuntimeBase {
     this.player.hpBarTimer = this.config.player.hpBarDuration;
   }
 
+  getDamageTextColor(damageType = "physical") {
+    const type = typeof damageType === "string" ? damageType.toLowerCase() : "physical";
+    if (type === "fire") return "#ff9a3c";
+    if (type === "acid") return "#4fe44a";
+    if (type === "poison") return "#b7d94c";
+    if (type === "holy") return "#f0d56f";
+    if (type === "necrotic" || type === "death" || type === "unholy") return "#b38dff";
+    if (type === "arrow") return "#ff7676";
+    if (type === "melee" || type === "physical") return "#ef5f5f";
+    if (type === "sonic") return "#8edbff";
+    if (type === "lightning") return "#f7ee74";
+    return "#ef5f5f";
+  }
+
+  getHealingTextColor() {
+    return "#79e59a";
+  }
+
   applyPlayerHealing(amount, options = {}) {
     if (amount <= 0) return;
     const suppressText = !!options.suppressText;
@@ -73,7 +113,7 @@ export class GameRuntimeBase {
       const healed = this.player.health - before;
       this.markPlayerHealthBarVisible();
       if (!suppressText) {
-        this.spawnFloatingText(this.player.x, this.player.y - 26, `+${Math.max(1, Math.round(healed))}`, "#79e59a", 0.8, 14);
+        this.spawnFloatingText(this.player.x, this.player.y - 26, `+${Math.max(1, Math.round(healed))}`, this.getHealingTextColor(), 0.8, 14);
       }
     }
   }
@@ -85,7 +125,7 @@ export class GameRuntimeBase {
 
   applyPlayerDamage(amount) {
     if (amount <= 0) return;
-    this.spawnFloatingText(this.player.x, this.player.y - 18, `-${Math.round(amount)}`, "#ef6d6d");
+    this.spawnFloatingText(this.player.x, this.player.y - 18, `-${Math.round(amount)}`, this.getDamageTextColor("physical"));
     this.player.health = Math.max(0, this.player.health - amount);
     this.markPlayerHealthBarVisible();
     if (this.player.health <= 0) this.triggerGameOver();
@@ -138,6 +178,7 @@ export class GameRuntimeBase {
 
   advanceToNextFloor() {
     if (typeof this.recordRunFloorCleared === "function") this.recordRunFloorCleared();
+    if (typeof this.applyPassiveConsumableEvent === "function") this.applyPassiveConsumableEvent("floorAdvance");
     const controlledUndead = (this.enemies || [])
       .filter((enemy) => enemy?.isControlledUndead && (enemy.hp || 0) > 0 && !(enemy.type === "skeleton_warrior" && enemy.collapsed))
       .map((enemy) => ({ ...enemy }));
@@ -156,6 +197,7 @@ export class GameRuntimeBase {
     this.skillPoints = persisted.skillPoints;
     this.player.maxHealth = persisted.maxHealth;
     this.player.health = Math.min(this.player.maxHealth, persisted.health);
+    if (typeof this.refillShopForFloor === "function") this.refillShopForFloor();
     if (controlledUndead.length > 0) {
       const tile = this.config.map.tile;
       controlledUndead.forEach((enemy, index) => {
@@ -193,7 +235,7 @@ export class GameRuntimeBase {
     this.experience = 0;
     this.expToNextLevel = this.config.progression.baseXpToLevel;
     this.skillPoints = 0;
-    this.gold = 0;
+    this.gold = this.estimateDebugStartingGoldForFloor(safeFloor);
     this.score = 0;
     this.runStats = createRunStats();
     this.levelWeaponDamageBonus = 0;
@@ -204,6 +246,13 @@ export class GameRuntimeBase {
     this.player.deathBoltCooldown = 0;
     this.player.hitCooldown = 0;
     this.player.hpBarTimer = 0;
+    if (this.consumables && typeof this.consumables === "object") {
+      this.consumables.activeSlots = [];
+      this.consumables.passiveSlots = [];
+      this.consumables.sharedCooldown = 0;
+      this.consumables.message = "";
+      this.consumables.messageTimer = 0;
+    }
     while (this.level < targetLevel) {
       this.gainExperience(this.expToNextLevel);
     }
@@ -212,6 +261,7 @@ export class GameRuntimeBase {
 
     const nextMapSize = this.getMapSizeForFloor(safeFloor);
     this.generateFloor(nextMapSize.width, nextMapSize.height);
+    if (typeof this.refillShopForFloor === "function") this.refillShopForFloor();
     this.syncFloorBossState();
     if (typeof this.onFloorChanged === "function") this.onFloorChanged(this.floor, this);
   }
@@ -275,12 +325,22 @@ export class GameRuntimeBase {
   }
 
   getNecromancerControlCap(points = this.skills.undeadMastery.points) {
+    if (isNecromancerTalentGame(this)) {
+      const base = Number.isFinite(this.config.necromancer?.baseControlCap) ? this.config.necromancer.baseControlCap : 1;
+      return Math.min(8, base + getNecromancerControlCapBonus(this));
+    }
     const p = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
     const base = Number.isFinite(this.config.necromancer?.baseControlCap) ? this.config.necromancer.baseControlCap : 1;
     return Math.min(5, base + p);
   }
 
   getNecromancerControlCapForPlayer(playerEntity = this.player) {
+    if (isNecromancerTalentGame(this)) {
+      if (this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)) return this.getNecromancerControlCap();
+      const base = Number.isFinite(this.config.necromancer?.baseControlCap) ? this.config.necromancer.baseControlCap : 1;
+      const bonus = Number.isFinite(playerEntity?.necromancerTalents?.controlMastery?.points) ? playerEntity.necromancerTalents.controlMastery.points : 0;
+      return Math.min(8, base + bonus);
+    }
     const points = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
       ? this.skills.undeadMastery.points
       : (Number.isFinite(playerEntity?.skills?.undeadMastery?.points) ? playerEntity.skills.undeadMastery.points : 0);
@@ -288,6 +348,9 @@ export class GameRuntimeBase {
   }
 
   getNecromancerCharmDuration(points = this.skills.undeadMastery.points) {
+    if (isNecromancerTalentGame(this)) {
+      return getNecromancerBaseCharmDurationForLevel(this.level);
+    }
     const maxPoints = Number.isFinite(this.skills?.undeadMastery?.maxPoints) ? this.skills.undeadMastery.maxPoints : 4;
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
     const base = Number.isFinite(this.config.necromancer?.charmDuration) ? this.config.necromancer.charmDuration : 2;
@@ -302,6 +365,10 @@ export class GameRuntimeBase {
   }
 
   getNecromancerCharmDurationForPlayer(playerEntity = this.player) {
+    if (isNecromancerTalentGame(this)) {
+      const level = Number.isFinite(playerEntity?.level) ? playerEntity.level : this.level;
+      return getNecromancerBaseCharmDurationForLevel(level);
+    }
     const points = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
       ? this.skills.undeadMastery.points
       : (Number.isFinite(playerEntity?.skills?.undeadMastery?.points) ? playerEntity.skills.undeadMastery.points : 0);
@@ -333,6 +400,9 @@ export class GameRuntimeBase {
   }
 
   getControlledUndeadBoost(points = this.skills.explodingDeath.points) {
+    if (isNecromancerTalentGame(this)) {
+      return 2;
+    }
     const perRank = Number.isFinite(this.config.necromancer?.petBuffPerRank) ? this.config.necromancer.petBuffPerRank : 0.2;
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
     const levelBoost = Number.isFinite(this.classSpec.levelControlPowerPct)
@@ -356,6 +426,10 @@ export class GameRuntimeBase {
   }
 
   getControlledUndeadDefenseMultiplier(points = this.skills.explodingDeath.points) {
+    if (isNecromancerTalentGame(this)) {
+      const baselineBonus = 0.5;
+      return 1 / Math.max(0.1, 1 + baselineBonus + getNecromancerControlledUndeadDefenseBonusPct(this) + getNecromancerBoneWardDamageReduction(this));
+    }
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
     return 1.5 + (0.2 * p);
   }
@@ -379,21 +453,35 @@ export class GameRuntimeBase {
   }
 
   getDeathBoltBaseDamage(points = this.skills.deathBolt.points) {
+    if (isNecromancerTalentGame(this)) {
+      const base = this.getFireArrowImpactDamage(0) * 1.1 * this.getOverallAttackModifier();
+      return base * getNecromancerDeathBoltDamageMultiplier(this);
+    }
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
     return this.getFireArrowImpactDamage(p) * 1.1 * this.getOverallAttackModifier();
   }
 
   getDeathBoltHealAmount(points = this.skills.deathBolt.points) {
+    if (isNecromancerTalentGame(this)) {
+      return this.getDeathBoltBaseDamage(points) * 0.25;
+    }
     return this.getDeathBoltBaseDamage(points) * 0.25;
   }
 
   getNecroticBeamHealAmount(points = this.skills.explodingDeath.points) {
+    if (isNecromancerTalentGame(this)) {
+      const base = (Number.isFinite(this.config.necromancer?.healAmount) ? this.config.necromancer.healAmount : 3) * this.getOverallAttackModifier();
+      return base * getNecromancerBeamHealingMultiplier(this);
+    }
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
     const base = (Number.isFinite(this.config.necromancer?.healAmount) ? this.config.necromancer.healAmount : 3) * this.getOverallAttackModifier();
     return base * (1 + 0.15 * p);
   }
 
   getDeathBoltPetDamageMultiplier(points = this.skills.deathBolt.points) {
+    if (isNecromancerTalentGame(this)) {
+      return 1;
+    }
     const p = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
     if (p < 5) return 1;
     if (p < 7) return 1.5;
@@ -401,6 +489,9 @@ export class GameRuntimeBase {
   }
 
   getDeathExplosionDamage(points = this.skills.explodingDeath.points) {
+    if (isNecromancerTalentGame(this)) {
+      return 5 * getNecromancerDeathBoltExplosionDamageMultiplier(this);
+    }
     const p = Number.isFinite(points) ? Math.max(0, points - 2) : 0;
     if (p <= 0) return 0;
     const base = ((this.config.enemy.skeletonWarriorDamageMin || 10) + (this.config.enemy.skeletonWarriorDamageMax || 16)) * 0.5;
@@ -408,6 +499,11 @@ export class GameRuntimeBase {
   }
 
   getDeathBoltRadius(points = this.skills.deathBolt.points) {
+    if (isNecromancerTalentGame(this)) {
+      const tile = this.config.map.tile;
+      const baseTiles = Number.isFinite(this.config.deathBolt?.impactRadiusTiles) ? this.config.deathBolt.impactRadiusTiles : 2;
+      return baseTiles * tile * getNecromancerDeathBoltRadiusMultiplier(this);
+    }
     const tile = this.config.map.tile;
     const p = Number.isFinite(points) ? Math.max(0, points) : 0;
     const maxPoints = Number.isFinite(this.skills?.deathBolt?.maxPoints) ? this.skills.deathBolt.maxPoints : 8;
@@ -429,6 +525,48 @@ export class GameRuntimeBase {
   applyControlledUndeadBonuses(enemy, playerEntity = null) {
     if (!enemy || !this.isControlledUndead(enemy)) return enemy;
     const owner = playerEntity || this.getControlledUndeadOwnerEntity(enemy);
+    if (isNecromancerTalentGame(this)) {
+      const baselineBoost = 2.4;
+      const baselineDefenseBonus = 0.5;
+      const healthBonus = owner === this.player
+        ? getNecromancerControlledUndeadHealthBonusPct(this)
+        : ((owner?.necromancerTalents?.coldCommand?.points || 0) * 0.15);
+      const defenseBonus = owner === this.player
+        ? getNecromancerControlledUndeadDefenseBonusPct(this)
+        : ((owner?.necromancerTalents?.coldCommand?.points || 0) * 0.1);
+      const damageBonus = owner === this.player
+        ? getNecromancerControlledUndeadDamageBonusPct(this)
+        : ((owner?.necromancerTalents?.coldCommand?.points || 0) * 0.1);
+      const attackSpeedBonus = owner === this.player
+        ? getNecromancerControlledUndeadAttackSpeedBonusPct(this)
+        : ((owner?.necromancerTalents?.coldCommand?.points || 0) * 0.1);
+      const baseMaxHp = Number.isFinite(enemy.baseMaxHp) ? enemy.baseMaxHp : enemy.maxHp;
+      const baseSpeed = Number.isFinite(enemy.baseSpeed) ? enemy.baseSpeed : enemy.speed;
+      const baseMin = Number.isFinite(enemy.baseDamageMin) ? enemy.baseDamageMin : enemy.damageMin;
+      const baseMax = Number.isFinite(enemy.baseDamageMax) ? enemy.baseDamageMax : enemy.damageMax;
+      enemy.baseMaxHp = baseMaxHp;
+      enemy.baseSpeed = baseSpeed;
+      enemy.baseDamageMin = baseMin;
+      enemy.baseDamageMax = baseMax;
+      enemy.maxHp = Math.max(1, baseMaxHp * baselineBoost * (1 + healthBonus));
+      enemy.hp = enemy.maxHp;
+      enemy.speed = Math.max(baseSpeed * 1.08, (typeof this.getPlayerMoveSpeedFor === "function" ? this.getPlayerMoveSpeedFor(owner) : this.getPlayerMoveSpeed()) * 1.02);
+      enemy.damageMin = baseMin * 1.2 * (1 + damageBonus);
+      enemy.damageMax = baseMax * 1.2 * (1 + damageBonus);
+      enemy.controlledDefenseMultiplier = Math.max(
+        0.1,
+        1 + baselineDefenseBonus + defenseBonus + (owner === this.player ? getNecromancerBoneWardDamageReduction(this) : ((owner?.necromancerTalents?.boneWard?.points || 0) >= 1 ? 0.1 : 0))
+      );
+      enemy.controlledAttackSpeedBonusPct = attackSpeedBonus;
+      enemy.controlledDamageBonusPct = owner === this.player
+        ? getNecromancerBoneWardDamageBonus(this, enemy, owner)
+        : ((owner?.necromancerTalents?.boneWard?.points || 0) >= 1 && Math.hypot((enemy.x || 0) - (owner?.x || 0), (enemy.y || 0) - (owner?.y || 0)) <= (this.config.map.tile * 2) ? 0.1 : 0);
+      enemy.controlledReflectChance = owner === this.player
+        ? getNecromancerBoneWardReflectChance(this, enemy, owner)
+        : ((owner?.necromancerTalents?.boneWard?.points || 0) >= 1 && Math.hypot((enemy.x || 0) - (owner?.x || 0), (enemy.y || 0) - (owner?.y || 0)) <= this.config.map.tile * 2 ? 0.15 : 0);
+      enemy.lifeStealPct = owner === this.player ? getNecromancerGhostLifeSteal(this) : ((owner?.necromancerTalents?.legionMaster?.points || 0) > 0 ? 0.002 : 0);
+      return enemy;
+    }
     const boost = this.getControlledUndeadBoostForPlayer(owner);
     const baseMaxHp = Number.isFinite(enemy.baseMaxHp) ? enemy.baseMaxHp : enemy.maxHp;
     const baseSpeed = Number.isFinite(enemy.baseSpeed) ? enemy.baseSpeed : enemy.speed;
@@ -453,6 +591,7 @@ export class GameRuntimeBase {
     if (!this.canControlMoreUndead(playerEntity)) return false;
     enemy.isControlledUndead = true;
     enemy.controllerPlayerId = typeof playerEntity?.id === "string" && playerEntity.id ? playerEntity.id : null;
+    enemy.controllerNecromancerTalents = playerEntity?.necromancerTalents || null;
     enemy.controllerExplodingDeathPoints = this.isPrimaryPlayerEntity && this.isPrimaryPlayerEntity(playerEntity)
       ? (this.skills.explodingDeath.points || 0)
       : (Number.isFinite(playerEntity?.skills?.explodingDeath?.points) ? playerEntity.skills.explodingDeath.points : 0);
@@ -480,6 +619,7 @@ export class GameRuntimeBase {
 Object.assign(GameRuntimeBase.prototype, runtimeBasePlacementMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeBaseBiomeMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeBaseSupportMethods);
+Object.assign(GameRuntimeBase.prototype, runtimeBaseDevStartMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeBaseDifficultyMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeFloorBossMethods);
 Object.assign(GameRuntimeBase.prototype, runtimeCombatStatsMethods);
