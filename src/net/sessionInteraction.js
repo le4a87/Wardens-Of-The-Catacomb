@@ -1,33 +1,14 @@
 export function collectInput(game, consumeQueued = true) {
-  if (game?.input?.mouse?.hasAim && typeof game.input.refreshAimWorldPosition === "function") {
-    game.input.refreshAimWorldPosition();
-  }
   const playerAlive = !(Number.isFinite(game?.player?.health) && game.player.health <= 0);
   const gameplayBlocked = !playerAlive || !!game?.gameOver || !!game?.paused || !!game?.shopOpen || !!game?.skillTreeOpen;
-  const playerX = Number.isFinite(game?.player?.x) ? game.player.x : 0;
-  const playerY = Number.isFinite(game?.player?.y) ? game.player.y : 0;
-  const rawAimX = game.input.mouse.worldX - playerX;
-  const rawAimY = game.input.mouse.worldY - playerY;
-  const rawAimLen = Math.hypot(rawAimX, rawAimY) || 1;
-  const keys = game.input.keys;
-  let moveX = 0;
-  let moveY = 0;
-  if (keys.has("arrowleft") || keys.has("a")) moveX -= 1;
-  if (keys.has("arrowright") || keys.has("d")) moveX += 1;
-  if (keys.has("arrowup") || keys.has("w")) moveY -= 1;
-  if (keys.has("arrowdown") || keys.has("s")) moveY += 1;
-  return {
-    moveX: gameplayBlocked ? 0 : moveX,
-    moveY: gameplayBlocked ? 0 : moveY,
-    hasAim: !gameplayBlocked && !!game.input.mouse.hasAim,
-    aimX: game.input.mouse.worldX,
-    aimY: game.input.mouse.worldY,
-    aimDirX: !gameplayBlocked && game.input.mouse.hasAim ? rawAimX / rawAimLen : 0,
-    aimDirY: !gameplayBlocked && game.input.mouse.hasAim ? rawAimY / rawAimLen : 0,
-    firePrimaryQueued: !gameplayBlocked && consumeQueued ? game.input.consumeLeftQueued() : false,
-    firePrimaryHeld: !gameplayBlocked && !!game.input.mouse.leftDown,
-    fireAltQueued: !gameplayBlocked && consumeQueued ? game.input.consumeRightQueued() : false
-  };
+  return game.input.getGameplayIntent({
+    playerX: Number.isFinite(game?.player?.x) ? game.player.x : 0,
+    playerY: Number.isFinite(game?.player?.y) ? game.player.y : 0,
+    gameplayBlocked,
+    consumeQueued,
+    fallbackAimDirX: 0,
+    fallbackAimDirY: 0
+  });
 }
 
 export function shouldSendNetworkInput(input, nowMs, previous, lastInputSendAt, forceSendIdleMs) {
@@ -64,6 +45,22 @@ export function handleNetworkUiActions(game, netClient, isController) {
   };
   const toggleLocalStats = (open) => {
     if (typeof game?.toggleStatsPanel === "function") game.toggleStatsPanel(open);
+  };
+  const isAndroidTouchUi = !!game?.isAndroidLayout;
+  const clearPinnedUiTooltip = () => {
+    if (game) game.uiPinnedTooltip = null;
+  };
+  const pinUiTooltip = (tooltip) => {
+    if (game) game.uiPinnedTooltip = tooltip || null;
+  };
+  const isPinnedSkillNode = (node) => {
+    const pinned = game?.uiPinnedTooltip;
+    return !!(
+      pinned &&
+      pinned.source === "skillTree" &&
+      pinned.key === node?.key &&
+      pinned.kind === node?.kind
+    );
   };
   const handleSpectateUi = () => {
     if (!game || !game.input || game.gameOver || (Number.isFinite(game?.player?.health) && game.player.health > 0)) return false;
@@ -180,7 +177,28 @@ export function handleNetworkUiActions(game, netClient, isController) {
     }
   };
   for (const click of clicks) {
+    const consumableSlots = Array.isArray(game.uiRects?.consumableSlots) ? game.uiRects.consumableSlots : [];
+    if (playerAlive && !game.gameOver && !game.shopOpen && !game.skillTreeOpen) {
+      const hitConsumable = consumableSlots.find((slot) => hit(click.x, click.y, slot.rect));
+      if (hitConsumable) {
+        clearPinnedUiTooltip();
+        recordAction(click, `consumable:${hitConsumable.index + 1}`, "useConsumableSlot", `${hitConsumable.index}`);
+        if (isController) netClient.sendAction({ kind: "useConsumableSlot", slot: hitConsumable.index });
+        continue;
+      }
+      if (hit(click.x, click.y, game.uiRects.hudAbilityWidget)) {
+        if (isAndroidTouchUi) {
+          pinUiTooltip({ source: "abilityWidget" });
+        } else {
+          clearPinnedUiTooltip();
+        }
+        recordAction(click, "hudAbilityWidget", "queueAltFire");
+        if (isController) game.input.queueAltFire();
+        continue;
+      }
+    }
     if (hit(click.x, click.y, game.uiRects.gameOverStatsButton)) {
+      clearPinnedUiTooltip();
       recordAction(click, "gameOverStatsButton", "toggleStats");
       if (canUseLocalPanels) toggleLocalStats();
       else if (isController) netClient.sendAction({ kind: "toggleStats" });
@@ -188,6 +206,7 @@ export function handleNetworkUiActions(game, netClient, isController) {
     }
     if (hit(click.x, click.y, game.uiRects.shopButton)) {
       if (!playerAlive) continue;
+      clearPinnedUiTooltip();
       recordAction(click, "shopButton", "toggleShop");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop();
       else if (isController) netClient.sendAction({ kind: "toggleShop" });
@@ -195,6 +214,7 @@ export function handleNetworkUiActions(game, netClient, isController) {
     }
     if (hit(click.x, click.y, game.uiRects.shopClose)) {
       if (!playerAlive) continue;
+      clearPinnedUiTooltip();
       recordAction(click, "shopClose", "closeShop");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop(false);
       else if (isController) netClient.sendAction({ kind: "closeShop" });
@@ -202,6 +222,7 @@ export function handleNetworkUiActions(game, netClient, isController) {
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeButton)) {
       if (!playerAlive) continue;
+      clearPinnedUiTooltip();
       recordAction(click, "skillTreeButton", "toggleSkillTree");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree();
       else if (isController) netClient.sendAction({ kind: "toggleSkillTree" });
@@ -209,30 +230,35 @@ export function handleNetworkUiActions(game, netClient, isController) {
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeClose)) {
       if (!playerAlive) continue;
+      clearPinnedUiTooltip();
       recordAction(click, "skillTreeClose", "closeSkillTree");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree(false);
       else if (isController) netClient.sendAction({ kind: "closeSkillTree" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsButton)) {
+      clearPinnedUiTooltip();
       recordAction(click, "statsButton", "toggleStats");
       if (canUseLocalPanels) toggleLocalStats();
       else if (isController) netClient.sendAction({ kind: "toggleStats" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsClose)) {
+      clearPinnedUiTooltip();
       recordAction(click, "statsClose", "closeStats");
       if (canUseLocalPanels) toggleLocalStats(false);
       else if (isController) netClient.sendAction({ kind: "closeStats" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsRunTab)) {
+      clearPinnedUiTooltip();
       recordAction(click, "statsRunTab", "setStatsView", "run");
       if (typeof game?.setStatsPanelView === "function" && canUseLocalPanels) game.setStatsPanelView("run");
       else if (isController) netClient.sendAction({ kind: "setStatsView", view: "run" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsCharacterTab)) {
+      clearPinnedUiTooltip();
       recordAction(click, "statsCharacterTab", "setStatsView", "character");
       if (typeof game?.setStatsPanelView === "function" && canUseLocalPanels) game.setStatsPanelView("character");
       else if (isController) netClient.sendAction({ kind: "setStatsView", view: "character" });
@@ -242,6 +268,7 @@ export function handleNetworkUiActions(game, netClient, isController) {
     for (const item of itemRects) {
       if (!playerAlive) break;
       if (hit(click.x, click.y, item.rect)) {
+        clearPinnedUiTooltip();
         recordAction(click, `shopItem:${item.key}`, "buyUpgrade", item.key);
         netClient.sendAction({ kind: "buyUpgrade", key: item.key });
         break;
@@ -251,57 +278,83 @@ export function handleNetworkUiActions(game, netClient, isController) {
     let handledSkillNode = false;
     for (const node of skillNodeRects) {
       if (!playerAlive || !hit(click.x, click.y, node.rect)) continue;
-      recordAction(click, `skillNode:${node.key}`, "spendSkill", node.key);
-      netClient.sendAction({ kind: "spendSkill", key: node.key });
+      if (isAndroidTouchUi) {
+        if (isPinnedSkillNode(node)) {
+          clearPinnedUiTooltip();
+          recordAction(click, `skillNode:${node.key}`, "spendSkill", node.key);
+          netClient.sendAction({ kind: "spendSkill", key: node.key });
+        } else {
+          pinUiTooltip({
+            source: "skillTree",
+            key: node.key,
+            kind: node.kind || "node"
+          });
+          recordAction(click, `skillNode:${node.key}`, "pinTooltip", node.key);
+        }
+      } else {
+        clearPinnedUiTooltip();
+        recordAction(click, `skillNode:${node.key}`, "spendSkill", node.key);
+        netClient.sendAction({ kind: "spendSkill", key: node.key });
+      }
       handledSkillNode = true;
       break;
     }
     if (handledSkillNode) continue;
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillFireArrowNode", "spendSkill", "fireArrow");
       netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillPiercingNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillPiercingNode", "spendSkill", "piercingStrike");
       netClient.sendAction({ kind: "spendSkill", key: "piercingStrike" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillMultiarrowNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillMultiarrowNode", "spendSkill", "multiarrow");
       netClient.sendAction({ kind: "spendSkill", key: "multiarrow" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillWarriorMomentumNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillWarriorMomentumNode", "spendSkill", "warriorMomentum");
       netClient.sendAction({ kind: "spendSkill", key: "warriorMomentum" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillWarriorRageNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillWarriorRageNode", "spendSkill", "warriorRage");
       netClient.sendAction({ kind: "spendSkill", key: "warriorRage" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillWarriorExecuteNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillWarriorExecuteNode", "spendSkill", "warriorExecute");
       netClient.sendAction({ kind: "spendSkill", key: "warriorExecute" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillUndeadMasteryNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillUndeadMasteryNode", "spendSkill", "undeadMastery");
       netClient.sendAction({ kind: "spendSkill", key: "undeadMastery" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillDeathBoltNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillDeathBoltNode", "spendSkill", "deathBolt");
       netClient.sendAction({ kind: "spendSkill", key: "deathBolt" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillExplodingDeathNode)) {
+      clearPinnedUiTooltip();
       recordAction(click, "skillExplodingDeathNode", "spendSkill", "explodingDeath");
       netClient.sendAction({ kind: "spendSkill", key: "explodingDeath" });
       continue;
     }
+    if (isAndroidTouchUi) clearPinnedUiTooltip();
     recordAction(click, "", "", "");
     if (hit(click.x, click.y, game.uiRects.returnMenuButton)) {
       if (typeof game.onReturnToMenu === "function") game.onReturnToMenu();

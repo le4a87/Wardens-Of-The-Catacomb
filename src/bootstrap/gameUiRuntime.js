@@ -130,7 +130,7 @@ export function drawSplashFrame({ canvas, splashStartedAt, fadeMs, splashReady, 
   }
 
   const promptAlpha = fade >= 0.92 ? 0.92 : fade * 0.65;
-  const promptText = promptReady ? "Press any key to continue" : "Loading...";
+  const promptText = promptReady ? "Tap, click, press any key, or wait..." : "Loading...";
   ctx.save();
   ctx.textAlign = "center";
   ctx.fillStyle = `rgba(244, 236, 222, ${0.82 * fade})`;

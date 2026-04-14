@@ -27,6 +27,7 @@ import {
   dismissSplash as dismissSplashRuntime,
   getRenderDelayMs as getRenderDelayForRole,
   handleSplashKeydown as handleSplashKeydownRuntime,
+  handleSplashPointerDown as handleSplashPointerDownRuntime,
   returnToMenu as returnToMenuRuntime,
   startSplashScreen as startSplashScreenRuntime,
   updateNetworkStatus as updateNetworkStatusRuntime,
@@ -66,6 +67,17 @@ import {
   submitLocalRunToLeaderboard
 } from "./src/leaderboard/leaderboardClient.js";
 import { spawnTreasureGoblin } from "./src/game/enemySpawnFactories.js";
+import {
+  clearStoredServerUrlOverride,
+  getRuntimeAllowServerUrlOverride,
+  getRuntimePlatform,
+  getRuntimeShowGameplayAds,
+  loadStoredServerUrlOverride,
+  persistStoredServerUrlOverride,
+  resolveActiveServerUrl,
+  resolveLeaderboardApiUrl,
+  resolveDefaultServerUrl
+} from "./src/runtime/runtimeConfig.js";
 
 const canvas = document.getElementById("game");
 const layout = document.querySelector(".layout");
@@ -78,6 +90,8 @@ const characterSelectModeLabel = document.getElementById("character-select-mode-
 const menuSingleButton = document.getElementById("menu-single");
 const menuNetworkButton = document.getElementById("menu-network");
 const menuOptionsButton = document.getElementById("menu-options");
+const modeSelectLogoButton = document.getElementById("mode-select-logo-button");
+const modeSelectDevUnlock = document.getElementById("mode-select-dev-unlock");
 const optionsScreen = document.getElementById("options-screen");
 const optionsBackButton = document.getElementById("options-back");
 const menuVolumeInput = document.getElementById("menu-volume");
@@ -90,11 +104,15 @@ const devBossOverrideSelect = document.getElementById("dev-boss-override");
 const devBossOverrideHint = document.getElementById("dev-boss-override-hint");
 const networkSetupBackButton = document.getElementById("network-setup-back");
 const networkSetupNextButton = document.getElementById("network-setup-next");
+const networkSetupNextTopButton = document.getElementById("network-setup-next-top");
+const networkServerUrlHint = document.getElementById("net-server-url-hint");
+const networkServerUrlResetButton = document.getElementById("net-server-url-reset");
 const characterSelectBackButton = document.getElementById("character-select-back");
 const devStartOptions = document.getElementById("dev-start-options");
 const devStartFloorInput = document.getElementById("dev-start-floor");
 const classButtons = Array.from(document.querySelectorAll("[data-class-option]"));
 const startButton = document.getElementById("start-game");
+const startTopButton = document.getElementById("start-game-top");
 const openLeaderboardButton = document.getElementById("open-leaderboard");
 const serverUrlInput = document.getElementById("net-server-url"), roomIdInput = document.getElementById("net-room-id");
 const playerNameInput = document.getElementById("net-player-name"), networkPlayerNameInput = document.getElementById("net-player-name-setup"), networkSession = document.getElementById("network-session");
@@ -107,12 +125,18 @@ const networkLobbyRoster = document.getElementById("network-lobby-roster");
 const networkLobbyCountdown = document.getElementById("network-lobby-countdown");
 const networkLobbyReadyState = document.getElementById("network-lobby-ready-state");
 const networkLobbyToggleReady = document.getElementById("network-lobby-toggle-ready");
+const networkLobbyToggleReadyTop = document.getElementById("network-lobby-toggle-ready-top");
 const networkLobbyLeaveTop = document.getElementById("network-lobby-leave-top");
 const networkLobbyDevStartOptions = document.getElementById("network-lobby-dev-start-options");
 const networkLobbyDevStartFloorInput = document.getElementById("network-lobby-dev-start-floor");
 const networkLobbyGameRulesPanel = document.getElementById("network-lobby-game-rules");
 const networkLobbyDeathRulesInputs = Array.from(document.querySelectorAll('input[name="network-lobby-death-rules"]'));
 const networkLobbyClassButtons = Array.from(document.querySelectorAll("[data-lobby-class-option]"));
+const androidGameplayControls = document.getElementById("android-gameplay-controls");
+const androidPauseButton = document.getElementById("android-pause-button");
+const androidShopButton = document.getElementById("android-shop-button");
+const androidSkillsButton = document.getElementById("android-skills-button");
+const androidStatsButton = document.getElementById("android-stats-button");
 const leaderboardModal = document.getElementById("leaderboard-modal");
 const leaderboardTitle = document.getElementById("leaderboard-title");
 const leaderboardSubtitle = document.getElementById("leaderboard-subtitle");
@@ -127,9 +151,11 @@ const leaderboardTabGlobal = document.getElementById("leaderboard-tab-global");
 const leaderboardTabSession = document.getElementById("leaderboard-tab-session");
 const leaderboardGlobalBody = document.getElementById("leaderboard-global-body");
 const leaderboardSessionBody = document.getElementById("leaderboard-session-body");
+const menuScrollIndicator = document.getElementById("menu-scroll-indicator");
 const music = new MusicController();
 const splashLogo = new Image();
 const SPLASH_FADE_MS = 1800;
+const SPLASH_AUTO_DISMISS_MS = 5000;
 const MENU_MODE_SINGLE = "single";
 const MENU_MODE_NETWORK = "network";
 let selectedClass = "archer";
@@ -169,7 +195,7 @@ let netLastSnapshotRecvAtMs = 0, netSnapshotIntervalMeanMs = 33, netSnapshotJitt
 let netInitialSnapshotApplied = false;
 let splashActive = true, splashDismissed = false, splashRaf = 0, splashStartedAt = 0, splashReady = false;
 let splashPromptReady = false;
-const isDevMode = new URLSearchParams(window.location.search).get("dev") === "1";
+let isDevMode = new URLSearchParams(window.location.search).get("dev") === "1";
 const menuState = {
   mode: null,
   screen: "mode"
@@ -207,6 +233,52 @@ const AD_IMAGE_SOURCES = [
 let adsDisabled = loadStoredAdsDisabled();
 let currentAdIndex = 0;
 let adRotationTimer = 0;
+const runtimePlatform = getRuntimePlatform(runtimeConfig) || "web";
+const DEV_MODE_STORAGE_KEY = "wotcAndroidDevMode";
+const DEV_UNLOCK_TAP_COUNT = 7;
+const DEV_UNLOCK_MESSAGE_MS = 2200;
+const DESKTOP_CANVAS_SIZE = Object.freeze({ width: 960, height: 640 });
+const ANDROID_CANVAS_SIZE = Object.freeze({ width: 1280, height: 576 });
+let devUnlockTapCount = 0;
+let devUnlockMessageTimer = 0;
+
+function loadStoredAndroidDevMode() {
+  try {
+    return runtimePlatform === "android" && window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistAndroidDevMode(enabled) {
+  try {
+    if (runtimePlatform !== "android") return;
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Ignore storage failures and keep the current session flag.
+  }
+}
+
+if (!isDevMode && loadStoredAndroidDevMode()) isDevMode = true;
+
+function normalizeServerUrlValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getTargetCanvasSize() {
+  return runtimePlatform === "android" ? ANDROID_CANVAS_SIZE : DESKTOP_CANVAS_SIZE;
+}
+
+function syncCanvasMetrics() {
+  if (!canvas) return;
+  const next = getTargetCanvasSize();
+  if (canvas.width !== next.width) canvas.width = next.width;
+  if (canvas.height !== next.height) canvas.height = next.height;
+  if (layout) {
+    layout.style.setProperty("--game-aspect", `${next.width / next.height}`);
+    layout.classList.toggle("is-android-platform", runtimePlatform === "android");
+  }
+}
 
 function normalizeDevStartingFloor(value) {
   return Math.max(MIN_DEV_START_FLOOR, Math.min(MAX_DEV_START_FLOOR, Number.parseInt(value || "1", 10) || 1));
@@ -264,7 +336,9 @@ function startAdRotation() {
 }
 
 function syncTopAdVisibility() {
-  const shouldShow = !splashActive && !adsDisabled && AD_IMAGE_SOURCES.length > 0;
+  const gameplayAdsAllowed = getRuntimeShowGameplayAds(runtimeConfig);
+  const canvasVisible = !!canvas && !canvas.hidden;
+  const shouldShow = !splashActive && !adsDisabled && AD_IMAGE_SOURCES.length > 0 && (gameplayAdsAllowed || !canvasVisible);
   if (topAdBanner) topAdBanner.hidden = !shouldShow;
   if (layout) layout.classList.toggle("has-top-banner", shouldShow);
   if (!shouldShow) {
@@ -289,6 +363,42 @@ function syncDevBossOverrideControl() {
   if (devBossOverrideHint) devBossOverrideHint.textContent = getBossOverrideHint(normalized);
 }
 
+function syncDevModeUi() {
+  if (devStartOptions) devStartOptions.hidden = !isDevMode;
+  syncDevBossOverrideControl();
+  if (menuState.screen === "lobby") renderNetworkLobby();
+}
+
+function showDevUnlockMessage(text) {
+  if (!modeSelectDevUnlock) return;
+  modeSelectDevUnlock.textContent = text;
+  modeSelectDevUnlock.hidden = false;
+  if (devUnlockMessageTimer) window.clearTimeout(devUnlockMessageTimer);
+  devUnlockMessageTimer = window.setTimeout(() => {
+    modeSelectDevUnlock.hidden = true;
+    devUnlockMessageTimer = 0;
+  }, DEV_UNLOCK_MESSAGE_MS);
+}
+
+function unlockAndroidDevMode() {
+  if (runtimePlatform !== "android" || isDevMode) return;
+  isDevMode = true;
+  persistAndroidDevMode(true);
+  syncDevModeUi();
+  showDevUnlockMessage("Dev mode unlocked");
+  if (typeof music.playBossVictoryCue === "function") music.playBossVictoryCue("android-dev-unlock");
+}
+
+function handleModeSelectLogoPress() {
+  if (runtimePlatform !== "android" || menuState.screen !== "mode") return;
+  if (isDevMode) {
+    showDevUnlockMessage("Dev mode enabled");
+    return;
+  }
+  devUnlockTapCount += 1;
+  if (devUnlockTapCount >= DEV_UNLOCK_TAP_COUNT) unlockAndroidDevMode();
+}
+
 function syncNetworkDeathRulesControl({ owner = false, roomMode = selectedNetworkDeathRulesMode } = {}) {
   if (!networkLobbyGameRulesPanel || networkLobbyDeathRulesInputs.length === 0) return;
   const normalized = normalizeNetworkDeathRulesMode(roomMode);
@@ -299,12 +409,68 @@ function syncNetworkDeathRulesControl({ owner = false, roomMode = selectedNetwor
   }
 }
 
-function getConfiguredWsUrl() {
-  return typeof runtimeConfig.defaultWsUrl === "string" ? runtimeConfig.defaultWsUrl.trim() : "";
+function getConfiguredLeaderboardApiUrl() {
+  return resolveLeaderboardApiUrl({
+    runtimeConfig,
+    locationObject: window.location
+  });
 }
 
-function getConfiguredLeaderboardApiUrl() {
-  return typeof runtimeConfig.leaderboardApiUrl === "string" ? runtimeConfig.leaderboardApiUrl.trim() : "";
+function getResolvedDefaultWsUrl() {
+  return resolveDefaultServerUrl({
+    runtimeConfig,
+    locationObject: window.location
+  });
+}
+
+function getResolvedServerUrlFromInput() {
+  return resolveActiveServerUrl({
+    inputValue: serverUrlInput?.value || "",
+    runtimeConfig,
+    storage: window.localStorage,
+    locationObject: window.location
+  });
+}
+
+function persistSuccessfulServerUrl(value) {
+  const normalized = normalizeServerUrlValue(value);
+  const defaultUrl = getResolvedDefaultWsUrl();
+  if (!normalized || normalized === defaultUrl) {
+    clearStoredServerUrlOverride(window.localStorage);
+  } else {
+    persistStoredServerUrlOverride(normalized, window.localStorage);
+  }
+  if (serverUrlInput) serverUrlInput.value = normalized || defaultUrl;
+  syncServerUrlControls({ preserveInput: true });
+}
+
+function syncServerUrlControls({ preserveInput = false } = {}) {
+  const defaultUrl = getResolvedDefaultWsUrl();
+  const savedOverride = loadStoredServerUrlOverride(window.localStorage);
+  const allowOverride = getRuntimeAllowServerUrlOverride(runtimeConfig);
+  const currentValue = normalizeServerUrlValue(serverUrlInput?.value || "");
+  const nextValue = currentValue || savedOverride || defaultUrl;
+
+  if (serverUrlInput) {
+    serverUrlInput.disabled = !allowOverride;
+    if (!preserveInput || !currentValue) serverUrlInput.value = nextValue;
+  }
+  if (networkServerUrlResetButton) {
+    networkServerUrlResetButton.hidden = !allowOverride;
+    networkServerUrlResetButton.disabled = !savedOverride && normalizeServerUrlValue(serverUrlInput?.value || "") === defaultUrl;
+  }
+  if (networkServerUrlHint) {
+    const activeValue = normalizeServerUrlValue(serverUrlInput?.value || nextValue);
+    if (!allowOverride) {
+      networkServerUrlHint.textContent = "Server URL is fixed for this build.";
+    } else if (activeValue && savedOverride && activeValue === savedOverride && activeValue !== defaultUrl) {
+      networkServerUrlHint.textContent = "Saved override";
+    } else if (activeValue && activeValue !== defaultUrl) {
+      networkServerUrlHint.textContent = "Unsaved custom value";
+    } else {
+      networkServerUrlHint.textContent = "Default server";
+    }
+  }
 }
 
 function waitForImageSource(src) {
@@ -375,26 +541,20 @@ if (networkPlayerNameInput) {
   networkPlayerNameInput.required = true;
 }
 if (serverUrlInput) {
-  const configuredWsUrl = getConfiguredWsUrl();
-  if (configuredWsUrl) {
-    serverUrlInput.value = configuredWsUrl;
-  } else if (!serverUrlInput.value || serverUrlInput.value.trim() === "ws://localhost:8090") {
-  const hostname = window.location?.hostname || "localhost";
-  const protocol = window.location?.protocol === "https:" ? "wss" : "ws";
-  serverUrlInput.value = `${protocol}://${hostname}:8090`;
-  }
+  syncServerUrlControls();
 }
-
-if (devStartOptions) devStartOptions.hidden = !isDevMode;
+syncCanvasMetrics();
+syncAndroidGameplayControls();
+syncDevModeUi();
 syncMenuVolumeControl();
 syncDisableAdsControl();
-syncDevBossOverrideControl();
 if (topAdImage && AD_IMAGE_SOURCES.length > 0) rotateTopAd(true);
 syncTopAdVisibility();
 
 function setCanvasVisible(visible) {
   if (!canvas) return;
   canvas.hidden = !visible;
+  syncAndroidGameplayControls();
 }
 
 function getCharacterSelectBackLabel() {
@@ -406,7 +566,29 @@ function syncCharacterSelectCopy() {
     characterSelectModeLabel.textContent = menuState.mode === MENU_MODE_NETWORK ? "Network Game" : "Single Game";
   }
   if (characterSelectBackButton) characterSelectBackButton.textContent = getCharacterSelectBackLabel();
+  const startLabel = menuState.mode === MENU_MODE_NETWORK ? "Join Lobby" : "Start";
   if (startButton) startButton.textContent = menuState.mode === MENU_MODE_NETWORK ? "Join Network Room" : "Start Single Game";
+  if (startTopButton) startTopButton.textContent = startLabel;
+}
+
+function getActiveMenuScreenElement() {
+  if (menuState.screen === "options") return optionsScreen;
+  if (menuState.screen === "network") return networkSetupScreen;
+  if (menuState.screen === "character") return selector;
+  if (menuState.screen === "lobby") return networkLobbyScreen;
+  return modeSelectScreen;
+}
+
+function syncMenuScrollIndicator() {
+  if (!menuScrollIndicator) return;
+  const activeScreen = getActiveMenuScreenElement();
+  const canScroll =
+    !!activeScreen &&
+    !!menuPanel &&
+    !menuPanel.hidden &&
+    document.documentElement.scrollHeight - window.innerHeight > 12 &&
+    window.scrollY < document.documentElement.scrollHeight - window.innerHeight - 12;
+  menuScrollIndicator.hidden = !canScroll;
 }
 
 function renderMenuScreen() {
@@ -416,6 +598,8 @@ function renderMenuScreen() {
   if (selector) selector.hidden = menuState.screen !== "character";
   if (networkLobbyScreen) networkLobbyScreen.hidden = menuState.screen !== "lobby";
   syncCharacterSelectCopy();
+  window.scrollTo(0, 0);
+  requestAnimationFrame(syncMenuScrollIndicator);
 }
 
 function showModeSelect() {
@@ -434,6 +618,7 @@ function showNetworkSetup() {
   if (menuPanel) menuPanel.hidden = false;
   if (networkSession) networkSession.hidden = true;
   setCanvasVisible(false);
+  syncServerUrlControls({ preserveInput: true });
   renderMenuScreen();
   syncTopAdVisibility();
 }
@@ -468,10 +653,59 @@ function showNetworkLobby() {
 }
 
 function getLeaderboardApiUrl() {
-  const configuredApiUrl = getConfiguredLeaderboardApiUrl();
-  if (configuredApiUrl) return configuredApiUrl;
-  return getDefaultLeaderboardApiUrl(window.location);
+  return getConfiguredLeaderboardApiUrl() || getDefaultLeaderboardApiUrl(window.location);
 }
+
+function canShowAndroidGameplayControls() {
+  return !!(
+    runtimePlatform === "android" &&
+    androidGameplayControls &&
+    currentGame &&
+    !splashActive &&
+    canvas &&
+    !canvas.hidden &&
+    menuPanel?.hidden &&
+    !leaderboardState.open &&
+    !currentGame.gameOver
+  );
+}
+
+function syncAndroidGameplayControls() {
+  if (!androidGameplayControls) return;
+  const show = canShowAndroidGameplayControls();
+  androidGameplayControls.hidden = !show;
+  if (!show) return;
+  const game = currentGame;
+  if (androidPauseButton) {
+    androidPauseButton.hidden = !!game?.networkEnabled;
+    androidPauseButton.textContent = game?.paused ? "Resume" : "Pause";
+    androidPauseButton.classList.toggle("is-active", !!game?.paused);
+  }
+  if (androidShopButton) {
+    androidShopButton.textContent = game?.shopOpen ? "Resume" : "Shop";
+    androidShopButton.classList.toggle("is-active", !!game?.shopOpen);
+  }
+  if (androidSkillsButton) {
+    androidSkillsButton.textContent = game?.skillTreeOpen ? "Resume" : "Skills";
+    androidSkillsButton.classList.toggle("is-active", !!game?.skillTreeOpen);
+  }
+  if (androidStatsButton) {
+    androidStatsButton.textContent = game?.statsPanelOpen ? "Hide" : "Stats";
+    androidStatsButton.classList.toggle("is-active", !!game?.statsPanelOpen);
+  }
+}
+
+function toggleAndroidPause() {
+  if (!currentGame || currentGame.networkEnabled || currentGame.gameOver) return;
+  currentGame.paused = !currentGame.paused;
+  if (typeof currentGame.onPauseChanged === "function") currentGame.onPauseChanged(currentGame.paused, currentGame);
+  syncAndroidGameplayControls();
+}
+
+if (androidPauseButton) androidPauseButton.addEventListener("click", () => toggleAndroidPause());
+if (androidShopButton) androidShopButton.addEventListener("click", () => currentGame?.toggleShop?.());
+if (androidSkillsButton) androidSkillsButton.addEventListener("click", () => currentGame?.toggleSkillTree?.());
+if (androidStatsButton) androidStatsButton.addEventListener("click", () => currentGame?.toggleStatsPanel?.());
 
 function getLeaderboardRows(bucket, boardType = leaderboardState.activeBoard) {
   const normalizedBoardType = normalizeLeaderboardBoardType(boardType);
@@ -539,6 +773,7 @@ function renderNetworkLobby() {
   if (localEntry?.classType) setLobbySelectedClass(localEntry.classType);
   if (networkLobbyReadyState) networkLobbyReadyState.textContent = localEntry?.locked ? "Ready" : "Choosing";
   if (networkLobbyToggleReady) networkLobbyToggleReady.textContent = localEntry?.locked ? "Not Ready" : "Ready";
+  if (networkLobbyToggleReadyTop) networkLobbyToggleReadyTop.textContent = localEntry?.locked ? "Not Ready" : "Ready";
   if (networkLobbyCountdown) {
     const remainingMs = typeof netLobbyCountdownEndsAt === "number" ? Math.max(0, netLobbyCountdownEndsAt - Date.now()) : 0;
     networkLobbyCountdown.textContent =
@@ -1169,6 +1404,10 @@ function returnToMenu() {
 
 const drawSplash = (now) => {
   if (!canvas || !splashActive) return;
+  if (now - splashStartedAt >= SPLASH_AUTO_DISMISS_MS) {
+    dismissSplash();
+    return;
+  }
   drawSplashFrame({
     canvas,
     splashStartedAt,
@@ -1193,6 +1432,7 @@ const dismissSplash = () => {
     },
     windowObject: window,
     handleSplashKeydown,
+    handleSplashPointerDown,
     layout,
     splashRaf,
     cancelFrame: (raf) => {
@@ -1210,6 +1450,7 @@ const dismissSplash = () => {
         currentGame = createLocalGame({
           Game,
           canvas,
+          platform: runtimePlatform,
           selectedClass: "archer",
           playerHandle: currentPlayerHandle || "Player",
           returnToMenu,
@@ -1218,16 +1459,20 @@ const dismissSplash = () => {
           onGameOverChanged: (gameOver, nextGame) => {
             if (gameOver) submitCompletedLocalRun(nextGame);
           }
-        });
-      }
-    }
+    });
+  }
+  requestAnimationFrame(syncMenuScrollIndicator);
+}
   });
   syncTopAdVisibility();
 };
 
 const handleSplashKeydown = (event) => {
-  if (!splashPromptReady) return;
   handleSplashKeydownRuntime(event, splashActive, dismissSplash);
+};
+
+const handleSplashPointerDown = (event) => {
+  handleSplashPointerDownRuntime(event, splashActive, dismissSplash);
 };
 
 const startSplashScreen = () => {
@@ -1243,6 +1488,7 @@ const startSplashScreen = () => {
     drawSplash,
     windowObject: window,
     handleSplashKeydown,
+    handleSplashPointerDown,
     now: performance.now()
   });
   splashStartedAt = next.splashStartedAt;
@@ -1372,6 +1618,7 @@ function startLocalGame() {
   currentGame = createLocalGame({
     Game,
     canvas,
+    platform: runtimePlatform,
     selectedClass,
     playerHandle: currentPlayerHandle || "Player",
     returnToMenu,
@@ -1398,6 +1645,7 @@ function startNetworkGameplay() {
   if (networkSession) networkSession.hidden = true;
   currentGame = cleanupCurrentGameRuntime(currentGame);
   const game = new Game(canvas, {
+    platform: runtimePlatform,
     classType: selectedClass,
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, nextGame) => syncMusicForGame(nextGame),
@@ -1492,7 +1740,7 @@ function startNetworkGame() {
   stopNetworkSession();
   if (networkSession) networkSession.hidden = true;
   currentGame = cleanupCurrentGameRuntime(currentGame);
-  netPendingWsUrl = serverUrlInput && serverUrlInput.value ? serverUrlInput.value.trim() : "ws://localhost:8090";
+  netPendingWsUrl = getResolvedServerUrlFromInput();
   netPendingRoomId = roomIdInput && roomIdInput.value ? roomIdInput.value.trim() : "lobby";
   netPendingHandle = handle;
   netJoinedRoomId = netPendingRoomId;
@@ -1502,6 +1750,7 @@ function startNetworkGame() {
 
   netClient = new NetClient(netPendingWsUrl);
   netClient.on("open", () => {
+    persistSuccessfulServerUrl(netPendingWsUrl);
     updateNetworkStatusRuntime(networkStatus, currentGame, `Connected. Joining room "${netPendingRoomId}"...`);
     if (networkLobbyStatusText) networkLobbyStatusText.textContent = "Connected";
     netClient.join(netPendingRoomId, netPendingHandle, selectedClass);
@@ -1936,6 +2185,12 @@ if (menuOptionsButton) {
   });
 }
 
+if (modeSelectLogoButton) {
+  modeSelectLogoButton.addEventListener("click", () => {
+    handleModeSelectLogoPress();
+  });
+}
+
 if (menuVolumeInput) {
   menuVolumeInput.addEventListener("input", () => {
     const nextVolume = Number(menuVolumeInput.value) / 100;
@@ -1973,8 +2228,32 @@ if (networkSetupBackButton) {
   });
 }
 
+if (serverUrlInput) {
+  serverUrlInput.addEventListener("input", () => {
+    syncServerUrlControls({ preserveInput: true });
+  });
+  serverUrlInput.addEventListener("blur", () => {
+    serverUrlInput.value = normalizeServerUrlValue(serverUrlInput.value);
+    syncServerUrlControls({ preserveInput: true });
+  });
+}
+
+if (networkServerUrlResetButton) {
+  networkServerUrlResetButton.addEventListener("click", () => {
+    clearStoredServerUrlOverride(window.localStorage);
+    if (serverUrlInput) serverUrlInput.value = getResolvedDefaultWsUrl();
+    syncServerUrlControls({ preserveInput: true });
+  });
+}
+
 if (networkSetupNextButton) {
   networkSetupNextButton.addEventListener("click", () => {
+    startNetworkGame();
+  });
+}
+
+if (networkSetupNextTopButton) {
+  networkSetupNextTopButton.addEventListener("click", () => {
     startNetworkGame();
   });
 }
@@ -1987,6 +2266,12 @@ if (characterSelectBackButton) {
 
 if (startButton) {
   startButton.addEventListener("click", () => {
+    handlePrimaryStartAction();
+  });
+}
+
+if (startTopButton) {
+  startTopButton.addEventListener("click", () => {
     handlePrimaryStartAction();
   });
 }
@@ -2076,6 +2361,7 @@ if (leaderboardModal) {
 
 const leaderboardUiTick = () => {
   if (leaderboardState.open && leaderboardState.mode === "death") renderLeaderboardModal();
+  syncAndroidGameplayControls();
   requestAnimationFrame(leaderboardUiTick);
 };
 requestAnimationFrame(leaderboardUiTick);
@@ -2095,6 +2381,17 @@ if (networkLeave) {
 
 if (networkLobbyToggleReady) {
   networkLobbyToggleReady.addEventListener("click", () => {
+    if (!netClient) return;
+    const localEntry = getLocalRosterEntry();
+    netClient.sendLobbyUpdate({
+      classType: selectedClass,
+      locked: !localEntry?.locked
+    });
+  });
+}
+
+if (networkLobbyToggleReadyTop) {
+  networkLobbyToggleReadyTop.addEventListener("click", () => {
     if (!netClient) return;
     const localEntry = getLocalRosterEntry();
     netClient.sendLobbyUpdate({
@@ -2136,6 +2433,8 @@ if (networkLobbyLeaveTop) {
 
 renderLeaderboardModal();
 renderMenuScreen();
+window.addEventListener("resize", syncMenuScrollIndicator);
+window.addEventListener("scroll", syncMenuScrollIndicator, { passive: true });
 startSplashScreen();
 preloadStartupAssets().finally(() => {
   splashPromptReady = true;

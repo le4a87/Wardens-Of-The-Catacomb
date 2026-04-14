@@ -1,6 +1,7 @@
 export function createLocalGame({
   Game,
   canvas,
+  platform = "web",
   selectedClass,
   playerHandle = "Player",
   returnToMenu,
@@ -10,6 +11,7 @@ export function createLocalGame({
   onGameOverChanged = null
 }) {
   const game = new Game(canvas, {
+    platform,
     classType: selectedClass,
     onReturnToMenu: returnToMenu,
     onPauseChanged: (_paused, nextGame) => syncMusicForGame(nextGame),

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Wardens of the Catacomb</string>
+    <string name="title_activity_main">Wardens of the Catacomb</string>
+    <string name="package_name">app.wardens.catacomb</string>
+    <string name="custom_url_scheme">app.wardens.catacomb</string>
+</resources>

@@ -235,6 +235,29 @@ export function pointInRect(_game, x, y, rect) {
   return x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
 }
 
+function isAndroidTouchUi(game) {
+  return !!game?.isAndroidLayout;
+}
+
+function clearPinnedUiTooltip(game) {
+  if (game) game.uiPinnedTooltip = null;
+}
+
+function pinUiTooltip(game, tooltip) {
+  if (!game) return;
+  game.uiPinnedTooltip = tooltip || null;
+}
+
+function isPinnedSkillNode(game, node) {
+  const pinned = game?.uiPinnedTooltip;
+  return !!(
+    pinned &&
+    pinned.source === "skillTree" &&
+    pinned.key === node?.key &&
+    pinned.kind === node?.kind
+  );
+}
+
 export function handleUiClicks(game) {
   if (!game.input) return;
   const playerAlive = !(Number.isFinite(game?.player?.health) && game.player.health <= 0);
@@ -280,48 +303,78 @@ export function handleUiClicks(game) {
   if (clicks.length === 0) return;
 
   for (const click of clicks) {
+    const consumableSlots = Array.isArray(game.uiRects.consumableSlots) ? game.uiRects.consumableSlots : [];
+    if (playerAlive && !game.gameOver && !game.shopOpen && !game.skillTreeOpen) {
+      const hitConsumable = consumableSlots.find((slot) => pointInRect(game, click.x, click.y, slot.rect));
+      if (hitConsumable && typeof game.useConsumableSlot === "function") {
+        clearPinnedUiTooltip(game);
+        game.useConsumableSlot(hitConsumable.index);
+        continue;
+      }
+      if (pointInRect(game, click.x, click.y, game.uiRects.hudAbilityWidget)) {
+        if (isAndroidTouchUi(game)) {
+          pinUiTooltip(game, {
+            source: "abilityWidget"
+          });
+        } else {
+          clearPinnedUiTooltip(game);
+        }
+        game.input.queueAltFire();
+        continue;
+      }
+    }
     if (pointInRect(game, click.x, click.y, game.uiRects.shopButton)) {
       if (!playerAlive) continue;
+      clearPinnedUiTooltip(game);
       toggleShop(game);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillTreeButton)) {
       if (!playerAlive) continue;
+      clearPinnedUiTooltip(game);
       toggleSkillTree(game);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsButton)) {
+      clearPinnedUiTooltip(game);
       if (game.gameOver && game.statsPanelOpen && typeof game.onDeathStatsBackToLeaderboard === "function") game.onDeathStatsBackToLeaderboard();
       else toggleStatsPanel(game);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.gameOverLeaderboardButton)) {
+      clearPinnedUiTooltip(game);
       if (typeof game.onDeathStatsBackToLeaderboard === "function") game.onDeathStatsBackToLeaderboard();
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.gameOverMenuButton)) {
+      clearPinnedUiTooltip(game);
       if (game.onReturnToMenu) game.onReturnToMenu();
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsClose)) {
+      clearPinnedUiTooltip(game);
       if (game.gameOver && typeof game.onDeathStatsBackToLeaderboard === "function") game.onDeathStatsBackToLeaderboard();
       else toggleStatsPanel(game, false);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsRunTab)) {
+      clearPinnedUiTooltip(game);
       setStatsPanelView(game, "run");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.statsCharacterTab)) {
+      clearPinnedUiTooltip(game);
       setStatsPanelView(game, "character");
       continue;
     }
     if (!game.shopOpen && !game.skillTreeOpen) continue;
     if (pointInRect(game, click.x, click.y, game.uiRects.shopClose)) {
+      clearPinnedUiTooltip(game);
       toggleShop(game, false);
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillTreeClose)) {
+      clearPinnedUiTooltip(game);
       toggleSkillTree(game, false);
       continue;
     }
@@ -330,54 +383,79 @@ export function handleUiClicks(game) {
     let handledSkillNode = false;
     for (const node of skillNodeRects) {
       if (!pointInRect(game, click.x, click.y, node.rect)) continue;
-      game.spendSkillPoint(node.key);
+      if (isAndroidTouchUi(game)) {
+        if (isPinnedSkillNode(game, node)) {
+          clearPinnedUiTooltip(game);
+          game.spendSkillPoint(node.key);
+        } else {
+          pinUiTooltip(game, {
+            source: "skillTree",
+            key: node.key,
+            kind: node.kind || "node"
+          });
+        }
+      } else {
+        clearPinnedUiTooltip(game);
+        game.spendSkillPoint(node.key);
+      }
       handledSkillNode = true;
       break;
     }
     if (handledSkillNode) continue;
     if (pointInRect(game, click.x, click.y, game.uiRects.skillFireArrowNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("fireArrow");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillPiercingNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("piercingStrike");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillMultiarrowNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("multiarrow");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillWarriorMomentumNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("warriorMomentum");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillWarriorRageNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("warriorRage");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillWarriorExecuteNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("warriorExecute");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillUndeadMasteryNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("undeadMastery");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillDeathBoltNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("deathBolt");
       continue;
     }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillExplodingDeathNode)) {
+      clearPinnedUiTooltip(game);
       game.spendSkillPoint("explodingDeath");
       continue;
     }
     const itemRects = game.uiRects.shopItems || [];
     for (const item of itemRects) {
       if (pointInRect(game, click.x, click.y, item.rect)) {
+        clearPinnedUiTooltip(game);
         buyShopItem(game, item.key);
         break;
       }
     }
+    if (isAndroidTouchUi(game)) clearPinnedUiTooltip(game);
   }
 }
 

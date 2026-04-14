@@ -30,6 +30,10 @@ import {
 } from "./gameUiSessionRuntime.js";
 import { initializeNetworkGameState } from "./networkSessionGameInit.js";
 import { applyNetworkSnapshot, startNetworkRenderLoopRuntime } from "./networkRenderRuntime.js";
+import {
+  persistSuccessfulServerUrlChoice,
+  resolveActiveServerUrl,
+} from "../runtime/runtimeConfig.js";
 
 const NET_INPUT_DT = 1 / 60;
 const NET_CLOCK_OFFSET_SMOOTHING = 0.12;
@@ -194,9 +198,14 @@ export function createNetworkSessionController({
     if (networkSession) networkSession.hidden = false;
     setCurrentGame(cleanupCurrentGame(getCurrentGame()));
 
-    const wsUrl = serverUrlInput && serverUrlInput.value ? serverUrlInput.value.trim() : "ws://localhost:8090";
+    const wsUrl = resolveActiveServerUrl({
+      inputValue: serverUrlInput?.value || "",
+      storage: globalThis?.localStorage,
+      locationObject: globalThis?.location
+    });
     const roomId = roomIdInput && roomIdInput.value ? roomIdInput.value.trim() : "lobby";
     const name = playerNameInput && playerNameInput.value ? playerNameInput.value.trim() : "Player";
+    if (serverUrlInput && !serverUrlInput.value.trim()) serverUrlInput.value = wsUrl;
 
     const game = new Game(canvas, {
       classType: selectedClass,
@@ -247,6 +256,7 @@ export function createNetworkSessionController({
 
     netClient = new NetClient(wsUrl);
     netClient.on("open", () => {
+      persistSuccessfulServerUrlChoice(wsUrl);
       updateNetworkStatusRuntime(networkStatus, getCurrentGame(), `Connected. Joining room "${roomId}"...`);
       netClient.join(roomId, name, selectedClass);
     });

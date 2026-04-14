@@ -114,6 +114,6 @@ export function drawPausedOverlay(renderer, layout) {
   ctx.textAlign = "center";
   ctx.fillText("Paused", layout.playW / 2, renderer.canvas.height / 2 - 4);
   ctx.font = "16px Trebuchet MS";
-  ctx.fillText("Press Esc to resume", layout.playW / 2, renderer.canvas.height / 2 + 24);
+  ctx.fillText(layout.isAndroid ? "Use Pause to resume" : "Press Esc to resume", layout.playW / 2, renderer.canvas.height / 2 + 24);
   ctx.textAlign = "left";
 }
