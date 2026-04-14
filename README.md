@@ -7,6 +7,20 @@ Wardens of the Catacomb is a top-down action roguelite built with vanilla JavaSc
 - Python 3.x
 - Modern browser
 
+## Android Build Requirements
+- JDK 21
+- Android SDK with:
+  - `platform-tools`
+  - `platforms;android-36`
+  - `build-tools;36.0.0`
+- Capacitor dependencies installed via `npm install`
+
+The repo now includes Android packaging and build wrappers that assume the local toolchain lives at:
+- `JAVA_HOME=/home/merrik/.local/lib/jdk-21`
+- `ANDROID_SDK_ROOT=/home/merrik/Android/Sdk`
+
+If your machine uses different locations, set `JAVA_HOME` and `ANDROID_SDK_ROOT` before running the Android commands below.
+
 ## Quick Start
 1. Install dependencies:
    - `npm install`
@@ -32,6 +46,10 @@ Wardens of the Catacomb is a top-down action roguelite built with vanilla JavaSc
 - `npm run dev`: start static host + network server + open browser
 - `npm run serve`: start the static host only
 - `npm run server:net`: start the authoritative WebSocket server only
+- `npm run build:android:web`: build the Capacitor web bundle in `www/` with Android runtime defaults
+- `npm run cap:sync:android`: rebuild the Android web bundle and sync it into the Capacitor native project
+- `npm run android:gradle -- <task>`: run any Gradle task through the repo-local Android toolchain wrapper
+- `npm run android:assembleDebug`: build the Android debug APK without manual env exports
 - `npm run check`: syntax check all JavaScript files
 - `npm run validate:core`: syntax, LOC, and core validation grouping
 - `npm run validate:gameplay`: boss, tactics, minotaur, solo XP attribution, and gameplay regression grouping
@@ -78,9 +96,26 @@ Wardens of the Catacomb is a top-down action roguelite built with vanilla JavaSc
 - Use [docs/CODEX_WORKFLOW.md](docs/CODEX_WORKFLOW.md) for the expected Codex branch, validation, and PR workflow.
 - Run `npm run validate:pre-commit` before committing. Use `npm run validate:closeout` before branch closeout or PR finalization.
 
+## Android Build
+1. Install dependencies:
+   - `npm install`
+2. Build and sync the Android shell:
+   - `npm run cap:sync:android`
+3. Build the debug APK:
+   - `npm run android:assembleDebug`
+
+Debug APK output:
+- `android/app/build/outputs/apk/debug/app-debug.apk`
+
+If you want to run other native Gradle tasks, use:
+- `npm run android:gradle -- help`
+- `npm run android:gradle -- installDebug`
+- `npm run android:gradle -- clean`
+
 ## Troubleshooting
 - If `npm` is missing, install Node.js and reopen the terminal.
 - If `http://localhost:8090` shows an error in the browser, that is expected: `8090` is the WebSocket server, not the game client.
 - If a port is already in use, stop the conflicting process or start with different `HTTP_PORT` / `WS_PORT` values.
 - If `npm run validate:dev-start` cannot launch Chromium, install the missing Playwright browser dependencies for your OS and retry.
 - If you are running from a UNC path in Windows/WSL, the project scripts are already configured to resolve from the repo root even if npm prints the standard UNC warning.
+- If `npm run android:assembleDebug` reports missing Java or SDK files, either install them at the default paths above or export `JAVA_HOME` and `ANDROID_SDK_ROOT` to your local install locations before rerunning.

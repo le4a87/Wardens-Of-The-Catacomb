@@ -19,7 +19,6 @@
           <div class="mode-select-copy">
             <p class="menu-kicker">Wardens of the Catacomb</p>
             <h1>Choose Your Mode</h1>
-            <p class="menu-copy">Start a solo descent or connect to an authoritative room before choosing your class.</p>
             <div class="screen-actions screen-actions--stack">
               <button type="button" id="menu-single" class="start-game">Single</button>
               <button type="button" id="menu-network" class="start-game alt">Network</button>
@@ -27,8 +26,11 @@
               <button type="button" id="open-leaderboard" class="start-game secondary">Leaderboard</button>
             </div>
           </div>
-          <div class="mode-select-logo-wrap" aria-hidden="true">
-            <img class="mode-select-logo" src="./assets/images/logo.png" alt="" />
+          <div class="mode-select-logo-wrap">
+            <button type="button" id="mode-select-logo-button" class="mode-select-logo-button" aria-label="Wardens of the Catacomb logo">
+              <img class="mode-select-logo" src="./assets/images/logo.png" alt="" />
+            </button>
+            <p id="mode-select-dev-unlock" class="mode-select-dev-unlock" hidden>Dev mode unlocked</p>
           </div>
         </div>
       </section>
@@ -81,10 +83,17 @@
             <h2>Connection Setup</h2>
             <p class="menu-copy">Enter the server URL, room ID, and handle before joining the shared lobby.</p>
           </div>
-          <button type="button" id="network-setup-back" class="start-game ghost mini">Back</button>
+          <div class="screen-header__actions">
+            <button type="button" id="network-setup-back" class="start-game ghost mini">Back</button>
+            <button type="button" id="network-setup-next-top" class="start-game alt mini">Join</button>
+          </div>
         </div>
         <label class="field-label" for="net-server-url">Server URL</label>
-        <input id="net-server-url" class="field-input" type="text" value="ws://localhost:8090" />
+        <input id="net-server-url" class="field-input" type="text" value="" />
+        <div class="field-meta-row">
+          <p id="net-server-url-hint" class="field-hint">Default server</p>
+          <button type="button" id="net-server-url-reset" class="start-game ghost mini">Use Default</button>
+        </div>
         <label class="field-label" for="net-room-id">Room ID</label>
         <input id="net-room-id" class="field-input" type="text" value="lobby" />
         <label class="field-label" for="net-player-name-setup">Player Handle</label>
@@ -101,7 +110,10 @@
             <h2>Character Select</h2>
             <p class="menu-copy">Choose a class and begin the run.</p>
           </div>
-          <button type="button" id="character-select-back" class="start-game ghost mini">Back</button>
+          <div class="screen-header__actions">
+            <button type="button" id="character-select-back" class="start-game ghost mini">Back</button>
+            <button type="button" id="start-game-top" class="start-game mini">Start</button>
+          </div>
         </div>
         <label class="field-label" for="net-player-name">Player Handle</label>
         <input id="net-player-name" class="field-input" type="text" maxlength="12" pattern="[A-Za-z0-9 ]+" autocomplete="nickname" required />
@@ -146,7 +158,10 @@
             <h2>Lobby</h2>
             <p class="menu-copy">Choose your class, mark yourself ready, and wait for the room countdown to begin.</p>
           </div>
-          <button type="button" id="network-lobby-leave-top" class="start-game ghost mini">Leave</button>
+          <div class="screen-header__actions">
+            <button type="button" id="network-lobby-leave-top" class="start-game ghost mini">Leave</button>
+            <button type="button" id="network-lobby-toggle-ready-top" class="start-game alt mini">Ready</button>
+          </div>
         </div>
         <div class="network-lobby-meta">
           <div class="network-lobby-room">
@@ -236,8 +251,19 @@
           <button type="button" id="network-leave" class="start-game mini danger">Leave Room</button>
         </div>
       </section>
+      <div id="menu-scroll-indicator" class="menu-scroll-indicator" hidden aria-hidden="true">⌄</div>
     </section>
     <canvas id="game" width="960" height="640" aria-label="Game canvas" hidden></canvas>
+    <section id="android-gameplay-controls" class="android-gameplay-controls" hidden aria-label="Mobile gameplay controls">
+      <div class="android-gameplay-controls__group android-gameplay-controls__group--left">
+        <button type="button" id="android-pause-button" class="android-gameplay-controls__button">Pause</button>
+        <button type="button" id="android-shop-button" class="android-gameplay-controls__button">Shop</button>
+      </div>
+      <div class="android-gameplay-controls__group android-gameplay-controls__group--right">
+        <button type="button" id="android-skills-button" class="android-gameplay-controls__button">Skills</button>
+        <button type="button" id="android-stats-button" class="android-gameplay-controls__button">Stats</button>
+      </div>
+    </section>
   </main>
   <section id="leaderboard-modal" class="leaderboard-modal" hidden aria-label="Leaderboard">
     <div class="leaderboard-card">

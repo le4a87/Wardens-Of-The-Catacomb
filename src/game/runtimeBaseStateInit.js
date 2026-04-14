@@ -83,6 +83,7 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.navPlayerTile = { x: -1, y: -1 };
   game.uiRects = {};
   game.uiScroll = { skillTree: 0, shop: 0 };
+  game.uiPinnedTooltip = null;
   game.floatingTexts = [];
   game.recentPlayerShots = [];
   game.skills = createSkillState();

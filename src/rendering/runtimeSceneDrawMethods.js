@@ -1,5 +1,6 @@
 import { runtimeSceneEnemyDrawMethods } from "./runtimeSceneEnemyDrawMethods.js";
 import { runtimeSceneObjectDrawMethods } from "./runtimeSceneObjectDrawMethods.js";
+import { drawAndroidTouchControls, getAndroidTouchRegions } from "./hud/androidLayout.js";
 import { drawConsumablesBar } from "./hud/consumablesBar.js";
 
 function hexToRgba(color, alpha) {
@@ -24,7 +25,6 @@ export const runtimeSceneDrawMethods = {
     ctx.fillRect(0, 0, layout.playW, this.canvas.height);
     ctx.strokeStyle = "rgba(126, 139, 171, 0.35)";
     ctx.strokeRect(0.5, 0.5, layout.playW - 1, this.canvas.height - 1);
-
     ctx.fillStyle = "#e7edf8";
     ctx.textAlign = "center";
     ctx.font = "bold 30px Trebuchet MS";
@@ -37,7 +37,6 @@ export const runtimeSceneDrawMethods = {
     ctx.fillStyle = "#8fa1c7";
     ctx.fillText("Playable area unlocks after room + map sync.", layout.playW / 2, this.canvas.height / 2 + 34);
     ctx.textAlign = "left";
-
     this.drawHud(game, layout);
     const row0 = Array.isArray(game.map) && game.map.length > 0 ? game.map[0] : null;
     const row0Len = typeof row0 === "string" ? row0.length : Array.isArray(row0) ? row0.length : 0;
@@ -47,8 +46,8 @@ export const runtimeSceneDrawMethods = {
       this.drawGroupPanel(game, layout, statsBottom + this.sidebarPadding);
     }
   },
-
   drawSidebarBackground(layout) {
+    if (layout.sidebarW <= 0) return;
     const ctx = this.ctx;
     ctx.fillStyle = "rgba(6, 10, 16, 0.96)";
     ctx.fillRect(layout.sidebarX, 0, layout.sidebarW, this.canvas.height);
@@ -59,7 +58,6 @@ export const runtimeSceneDrawMethods = {
     ctx.lineTo(layout.sidebarX + 0.5, this.canvas.height);
     ctx.stroke();
   },
-
   drawExperienceBar(game, layout) {
     const ctx = this.ctx;
     const x = 0;
@@ -67,7 +65,6 @@ export const runtimeSceneDrawMethods = {
     const w = layout.playW;
     const h = layout.xpBarH;
     const ratio = game.expToNextLevel > 0 ? Math.max(0, Math.min(1, game.experience / game.expToNextLevel)) : 0;
-
     ctx.fillStyle = "rgba(7, 10, 16, 0.94)";
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = "rgba(126, 139, 171, 0.48)";
@@ -83,7 +80,6 @@ export const runtimeSceneDrawMethods = {
     ctx.fillRect(barX, barY, barW, barH);
     ctx.fillStyle = "#7ea8ff";
     ctx.fillRect(barX, barY, Math.floor(barW * ratio), barH);
-
     ctx.strokeStyle = "rgba(198, 212, 246, 0.35)";
     for (let i = 1; i < 10; i++) {
       const sx = Math.floor(barX + (barW * i) / 10) + 0.5;
@@ -92,14 +88,17 @@ export const runtimeSceneDrawMethods = {
       ctx.lineTo(sx, barY + barH);
       ctx.stroke();
     }
-
     ctx.fillStyle = "#d7e4ff";
     ctx.font = "12px Trebuchet MS";
     ctx.fillText(`XP ${game.experience}/${game.expToNextLevel} (${Math.round(ratio * 100)}%)`, barX, y + 22);
-
     drawConsumablesBar(this, game, layout, y);
+    if (layout.isAndroid) {
+      const regions = getAndroidTouchRegions(layout, y);
+      layout.touchMoveRegion = game.uiRects.touchMoveRegion = regions.move;
+      layout.touchAimRegion = game.uiRects.touchAimRegion = regions.aim;
+      drawAndroidTouchControls(ctx, game.input);
+    }
   },
-
   drawMap(game, cameraX, cameraY) {
     const ctx = this.ctx;
     const map = game.map;

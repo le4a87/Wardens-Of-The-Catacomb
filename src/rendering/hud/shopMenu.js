@@ -29,8 +29,8 @@ function wrapText(ctx, text, maxWidth) {
 
 export function drawShopMenu(renderer, game, layout) {
   const ctx = renderer.ctx;
-  const menuW = 620;
-  const menuH = 404;
+  const menuW = layout.isAndroid ? Math.min(layout.playW - 20, 760) : 620;
+  const menuH = layout.isAndroid ? Math.min(renderer.canvas.height - 18, 430) : 404;
   const menuX = Math.floor((layout.playW - menuW) / 2);
   const menuY = Math.floor((renderer.canvas.height - menuH) / 2);
   const items = typeof game.getShopItems === "function" ? game.getShopItems() : [];
@@ -51,15 +51,15 @@ export function drawShopMenu(renderer, game, layout) {
   ctx.fillStyle = "#d8dfef";
   ctx.fillText(`Gold: ${game.gold}`, menuX + menuW - 120, menuY + 30);
 
-  const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+  const closeRect = layout.isAndroid ? { x: menuX + menuW - 42, y: menuY + 8, w: 28, h: 28 } : { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
   game.uiRects.shopClose = closeRect;
   ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
   ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
   ctx.fillStyle = "#f4ece6";
-  ctx.font = "bold 14px Trebuchet MS";
-  ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+  ctx.font = layout.isAndroid ? "bold 18px Trebuchet MS" : "bold 14px Trebuchet MS";
+  ctx.fillText("X", closeRect.x + (layout.isAndroid ? 8 : 6), closeRect.y + (layout.isAndroid ? 20 : 15));
 
-  const rowH = 66;
+  const rowH = layout.isAndroid ? 74 : 66;
   const contentTop = menuY + 46;
   const footerH = 48;
   const contentBottom = menuY + menuH - footerH;
@@ -84,8 +84,8 @@ export function drawShopMenu(renderer, game, layout) {
     const rarityColor = item.rarity === "Legendary" ? "#f0ce63" : item.rarity === "Rare" ? "#c8a8ff" : "#8ec3ff";
     const portraitX = menuX + 22;
     const portraitY = rowY + 11;
-    const portraitSize = 36;
-    const buyRect = { x: menuX + menuW - 126, y: rowY + 16, w: 96, h: 30 };
+    const portraitSize = layout.isAndroid ? 42 : 36;
+    const buyRect = layout.isAndroid ? { x: menuX + menuW - 142, y: rowY + 14, w: 112, h: 36 } : { x: menuX + menuW - 126, y: rowY + 16, w: 96, h: 30 };
     const textStartX = portraitX + portraitSize + 12;
     const metaWidth = 156;
     const effectStartX = textStartX + metaWidth;
@@ -131,8 +131,8 @@ export function drawShopMenu(renderer, game, layout) {
     ctx.strokeStyle = "rgba(220, 224, 233, 0.52)";
     ctx.strokeRect(buyRect.x, buyRect.y, buyRect.w, buyRect.h);
     ctx.fillStyle = "#f4efe1";
-    ctx.font = "bold 13px Trebuchet MS";
-    ctx.fillText(`${item.priceForFloor}g`, buyRect.x + 28, buyRect.y + 20);
+    ctx.font = layout.isAndroid ? "bold 15px Trebuchet MS" : "bold 13px Trebuchet MS";
+    ctx.fillText(`${item.priceForFloor}g`, buyRect.x + (layout.isAndroid ? 32 : 28), buyRect.y + (layout.isAndroid ? 24 : 20));
 
     rowY += rowH;
   }
@@ -152,7 +152,7 @@ export function drawShopMenu(renderer, game, layout) {
 
   ctx.font = "12px Trebuchet MS";
   ctx.fillStyle = "#8ea1c5";
-  const footerText = game.consumables?.message || "Mouse wheel to scroll items.";
+  const footerText = game.consumables?.message || (layout.isAndroid ? "Drag to scroll items." : "Mouse wheel to scroll items.");
   ctx.fillText(footerText, menuX + 14, menuY + menuH - 28);
   ctx.fillText("All shop entries are consumables.", menuX + 14, menuY + menuH - 12);
 }

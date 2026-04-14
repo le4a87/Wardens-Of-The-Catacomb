@@ -73,6 +73,7 @@ body {
 }
 
 .menu-shell {
+  position: relative;
   width: min(100%, 1180px);
   background: color-mix(in srgb, var(--panel) 88%, black 12%);
   border: 2px solid #314060;
@@ -124,8 +125,17 @@ body {
 
 .mode-select-logo-wrap {
   display: flex;
+  flex-direction: column;
   justify-content: flex-end;
   align-items: center;
+  gap: 8px;
+}
+
+.mode-select-logo-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .mode-select-logo {
@@ -136,11 +146,33 @@ body {
   filter: drop-shadow(0 16px 26px rgba(0, 0, 0, 0.28));
 }
 
+.mode-select-dev-unlock {
+  margin: 0;
+  color: #9bd0ff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .screen-header {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
+}
+
+.screen-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+#network-setup-next-top,
+#start-game-top,
+#network-lobby-toggle-ready-top {
+  display: none;
 }
 
 .character-select {
@@ -478,6 +510,54 @@ body {
   background: #925050;
 }
 
+.android-gameplay-controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 44px;
+  z-index: 16;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.android-gameplay-controls[hidden] {
+  display: none !important;
+}
+
+.android-gameplay-controls__group {
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.android-gameplay-controls__group--left {
+  margin-right: 122px;
+}
+
+.android-gameplay-controls__group--right {
+  margin-left: 122px;
+}
+
+.android-gameplay-controls__button {
+  width: 60px;
+  min-height: 42px;
+  border: 1px solid rgba(218, 228, 246, 0.18);
+  border-radius: 14px;
+  background: rgba(16, 22, 34, 0.34);
+  color: #eef3ff;
+  font: 700 0.74rem "Trebuchet MS", "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(6px);
+}
+
+.android-gameplay-controls__button.is-active {
+  background: rgba(74, 99, 145, 0.46);
+  border-color: rgba(238, 243, 255, 0.34);
+}
+
 .dev-start-options {
   border-top: 1px solid rgba(198, 210, 242, 0.22);
   padding-top: 12px;
@@ -519,6 +599,21 @@ body {
   font-size: 0.84rem;
 }
 
+.field-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #aebcd8;
+  line-height: 1.3;
+}
+
 .network-session {
   border-top: 1px solid rgba(198, 210, 242, 0.22);
   margin-top: 16px;
@@ -553,6 +648,22 @@ body {
 
 .screen-actions--stack .start-game {
   width: 100%;
+}
+
+.menu-scroll-indicator {
+  position: sticky;
+  left: 50%;
+  bottom: 8px;
+  width: fit-content;
+  margin: 8px auto 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(24, 44, 76, 0.78);
+  color: #8fccff;
+  font-size: 1.2rem;
+  line-height: 1;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
 }
 
 .options-panel {
@@ -805,8 +916,12 @@ canvas[hidden] {
 }
 
 @media (max-width: 820px) {
+  .layout {
+    padding: 10px;
+  }
+
   .menu-shell {
-    padding: 18px;
+    padding: 16px;
   }
 
   .mode-select-layout,
@@ -823,6 +938,28 @@ canvas[hidden] {
     grid-template-columns: 1fr;
   }
 
+  .class-option {
+    grid-template-columns: 108px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .class-option > strong,
+  .class-option > span:not(.class-option__portrait) {
+    grid-column: 2;
+  }
+
+  .class-option__portrait {
+    width: 108px;
+    aspect-ratio: 0.76;
+  }
+
+  .class-option__portrait-image {
+    object-fit: contain;
+    object-position: center top;
+  }
+
   .network-lobby-actions {
     grid-template-columns: 1fr;
   }
@@ -830,10 +967,235 @@ canvas[hidden] {
   .screen-header {
     flex-direction: column;
   }
+
+  .start-game {
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 0.98rem;
+  }
+
+  .start-game.mini {
+    min-width: 132px;
+    min-height: 44px;
+  }
+
+  .field-input {
+    padding: 11px 10px;
+    font-size: 0.96rem;
+  }
+
+  .android-gameplay-controls {
+    bottom: 40px;
+  }
+
+  .android-gameplay-controls__group--left {
+    margin-right: 108px;
+  }
+
+  .android-gameplay-controls__group--right {
+    margin-left: 108px;
+  }
+
+  .android-gameplay-controls__button {
+    width: 56px;
+    min-height: 40px;
+    font-size: 0.7rem;
+  }
 }
 
 @media (max-width: 960px) {
   .layout {
     grid-template-columns: 1fr;
   }
+}
+
+.layout.is-android-platform {
+  --page-pad: 8px;
+  gap: 8px;
+}
+
+.layout.is-android-platform canvas {
+  width: min(calc(100vw - 16px), calc((100vh - 16px) * var(--game-aspect)));
+  max-height: calc(100vh - 16px);
+  border-radius: 12px;
+}
+
+.layout.is-android-platform .menu-shell {
+  width: min(100%, 1080px);
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.layout.is-android-platform .menu-kicker {
+  margin-bottom: 6px;
+  font-size: 0.68rem;
+}
+
+.layout.is-android-platform .menu-screen h1,
+.layout.is-android-platform .menu-screen h2 {
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+
+.layout.is-android-platform .menu-copy {
+  margin-top: 6px;
+  font-size: 0.84rem;
+  line-height: 1.24;
+  max-width: 44ch;
+}
+
+.layout.is-android-platform .screen-header {
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.layout.is-android-platform .screen-header__actions {
+  gap: 6px;
+}
+
+.layout.is-android-platform #network-setup-next-top,
+.layout.is-android-platform #start-game-top,
+.layout.is-android-platform #network-lobby-toggle-ready-top {
+  display: inline-flex;
+}
+
+.layout.is-android-platform .mode-select-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.54fr);
+  gap: 14px;
+}
+
+.layout.is-android-platform .mode-select-logo {
+  width: min(100%, 220px);
+}
+
+.layout.is-android-platform .mode-select-dev-unlock {
+  font-size: 0.72rem;
+}
+
+.layout.is-android-platform .screen-actions--stack {
+  max-width: 252px;
+  gap: 8px;
+}
+
+.layout.is-android-platform .start-game {
+  min-height: 42px;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+}
+
+.layout.is-android-platform .start-game.mini {
+  min-width: 88px;
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 0.74rem;
+}
+
+.layout.is-android-platform .field-label {
+  margin: 6px 0 4px;
+  font-size: 0.74rem;
+}
+
+.layout.is-android-platform .field-input {
+  padding: 8px 9px;
+  font-size: 0.82rem;
+}
+
+.layout.is-android-platform #options-screen {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  align-items: start;
+}
+
+.layout.is-android-platform #options-screen .screen-header,
+.layout.is-android-platform #options-screen #dev-boss-options {
+  grid-column: 1 / -1;
+}
+
+.layout.is-android-platform .options-panel {
+  padding: 12px;
+  min-height: 144px;
+  display: grid;
+  align-content: start;
+}
+
+.layout.is-android-platform .options-panel h3 {
+  margin-bottom: 8px;
+  font-size: 0.94rem;
+}
+
+.layout.is-android-platform .menu-volume-control,
+.layout.is-android-platform .menu-toggle-control {
+  padding: 10px;
+}
+
+.layout.is-android-platform #character-select {
+  gap: 10px;
+}
+
+.layout.is-android-platform #character-select .screen-header,
+.layout.is-android-platform #options-screen .screen-header {
+  flex-wrap: nowrap;
+}
+
+.layout.is-android-platform #character-select .screen-header > div,
+.layout.is-android-platform #options-screen .screen-header > div {
+  min-width: 0;
+}
+
+.layout.is-android-platform #character-select .menu-copy,
+.layout.is-android-platform #options-screen .menu-copy {
+  max-width: 34ch;
+}
+
+.layout.is-android-platform #character-select .field-input {
+  max-width: 280px;
+}
+
+.layout.is-android-platform #character-select .class-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.layout.is-android-platform #character-select .class-option {
+  grid-template-columns: none;
+  align-items: start;
+  gap: 7px;
+  padding: 8px;
+}
+
+.layout.is-android-platform #character-select .class-option > strong,
+.layout.is-android-platform #character-select .class-option > span:not(.class-option__portrait) {
+  grid-column: auto;
+}
+
+.layout.is-android-platform #character-select .class-option strong {
+  font-size: 0.84rem;
+}
+
+.layout.is-android-platform #character-select .class-option span {
+  font-size: 0.72rem;
+  line-height: 1.15;
+}
+
+.layout.is-android-platform #character-select .class-option__portrait {
+  width: 100%;
+  aspect-ratio: 0.76;
+  max-height: 132px;
+}
+
+.layout.is-android-platform #character-select .class-option__portrait-image {
+  object-fit: contain;
+  object-position: center top;
+}
+
+.layout.is-android-platform #character-select .screen-actions {
+  margin-top: 0;
+}
+
+.layout.is-android-platform #character-select .screen-actions,
+.layout.is-android-platform #network-setup-screen .screen-actions,
+.layout.is-android-platform #network-lobby-screen .network-lobby-actions {
+  display: none;
 }

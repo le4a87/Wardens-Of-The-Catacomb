@@ -1,10 +1,14 @@
+import { getAndroidHudCardX } from "./androidLayout.js";
+
 export function drawGroupPanel(renderer, game, layout, panelY) {
   const ctx = renderer.ctx;
   const remotePlayers = Array.isArray(game.remotePlayers) ? game.remotePlayers : [];
   game.uiRects.groupPanelRows = [];
   if (remotePlayers.length === 0) return panelY;
-  const panelX = layout.sidebarX + renderer.sidebarPadding;
-  const panelW = layout.sidebarW - renderer.sidebarPadding * 2;
+  const panelW = layout.isAndroid ? 220 : layout.sidebarW - renderer.sidebarPadding * 2;
+  const panelX = layout.isAndroid
+    ? getAndroidHudCardX(layout, panelW)
+    : layout.sidebarX + renderer.sidebarPadding;
   const headerH = 30;
   const rowH = 40;
   const rows = remotePlayers.slice(0, 5);
@@ -22,7 +26,7 @@ export function drawGroupPanel(renderer, game, layout, panelY) {
   ctx.fillText("Group", panelX + 10, panelY + 19);
   ctx.fillStyle = "#9fb0d6";
   ctx.font = "12px Trebuchet MS";
-  ctx.fillText(`${rows.length} teammate${rows.length === 1 ? "" : "s"}`, panelX + panelW - 92, panelY + 19);
+  ctx.fillText(`${rows.length} teammate${rows.length === 1 ? "" : "s"}`, panelX + Math.max(108, panelW - 92), panelY + 19);
 
   let y = panelY + headerH;
   for (const player of rows) {

@@ -6,8 +6,8 @@ import { drawNecromancerSkillTreeMenu } from "./necromancerSkillTreeMenu.js";
 export function drawSkillTreeMenu(renderer, game, layout) {
   game.uiRects.skillRefundButton = null;
   const ctx = renderer.ctx;
-  const menuW = 520;
-  const menuH = Math.min(renderer.canvas.height - 30, 560);
+  const menuW = layout.isAndroid ? Math.min(layout.playW - 18, 560) : 520;
+  const menuH = Math.min(renderer.canvas.height - (layout.isAndroid ? 18 : 30), 560);
   const menuX = Math.floor((layout.playW - menuW) / 2);
   const menuY = Math.floor((renderer.canvas.height - menuH) / 2);
   if (game.isArcherClass && game.isArcherClass()) {
@@ -20,13 +20,13 @@ export function drawSkillTreeMenu(renderer, game, layout) {
     ctx.lineWidth = 1.4;
     ctx.strokeRect(menuX, menuY, menuW, menuH);
 
-    const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+    const closeRect = layout.isAndroid ? { x: menuX + menuW - 42, y: menuY + 8, w: 28, h: 28 } : { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
     game.uiRects.skillTreeClose = closeRect;
     ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
     ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
     ctx.fillStyle = "#f4ece6";
-    ctx.font = "bold 14px Trebuchet MS";
-    ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+    ctx.font = layout.isAndroid ? "bold 18px Trebuchet MS" : "bold 14px Trebuchet MS";
+    ctx.fillText("X", closeRect.x + (layout.isAndroid ? 8 : 6), closeRect.y + (layout.isAndroid ? 20 : 15));
     drawRangerSkillTreeMenu(renderer, game, layout, { menuX, menuY, menuW, menuH });
     return;
   }
@@ -40,13 +40,13 @@ export function drawSkillTreeMenu(renderer, game, layout) {
     ctx.lineWidth = 1.4;
     ctx.strokeRect(menuX, menuY, menuW, menuH);
 
-    const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+    const closeRect = layout.isAndroid ? { x: menuX + menuW - 42, y: menuY + 8, w: 28, h: 28 } : { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
     game.uiRects.skillTreeClose = closeRect;
     ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
     ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
     ctx.fillStyle = "#f4ece6";
-    ctx.font = "bold 14px Trebuchet MS";
-    ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+    ctx.font = layout.isAndroid ? "bold 18px Trebuchet MS" : "bold 14px Trebuchet MS";
+    ctx.fillText("X", closeRect.x + (layout.isAndroid ? 8 : 6), closeRect.y + (layout.isAndroid ? 20 : 15));
     drawWarriorSkillTreeMenu(renderer, game, layout, { menuX, menuY, menuW, menuH });
     return;
   }
@@ -60,13 +60,13 @@ export function drawSkillTreeMenu(renderer, game, layout) {
     ctx.lineWidth = 1.4;
     ctx.strokeRect(menuX, menuY, menuW, menuH);
 
-    const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+    const closeRect = layout.isAndroid ? { x: menuX + menuW - 42, y: menuY + 8, w: 28, h: 28 } : { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
     game.uiRects.skillTreeClose = closeRect;
     ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
     ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
     ctx.fillStyle = "#f4ece6";
-    ctx.font = "bold 14px Trebuchet MS";
-    ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+    ctx.font = layout.isAndroid ? "bold 18px Trebuchet MS" : "bold 14px Trebuchet MS";
+    ctx.fillText("X", closeRect.x + (layout.isAndroid ? 8 : 6), closeRect.y + (layout.isAndroid ? 20 : 15));
     drawNecromancerSkillTreeMenu(renderer, game, layout, { menuX, menuY, menuW, menuH });
     return;
   }
@@ -141,13 +141,13 @@ export function drawSkillTreeMenu(renderer, game, layout) {
   ctx.fillStyle = "#d8dfef";
   ctx.fillText(`Skill Points: ${game.skillPoints}`, menuX + menuW - 150, menuY + 30);
 
-  const closeRect = { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
+  const closeRect = layout.isAndroid ? { x: menuX + menuW - 42, y: menuY + 8, w: 28, h: 28 } : { x: menuX + menuW - 34, y: menuY + 10, w: 20, h: 20 };
   game.uiRects.skillTreeClose = closeRect;
   ctx.fillStyle = "rgba(140, 78, 78, 0.9)";
   ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
   ctx.fillStyle = "#f4ece6";
-  ctx.font = "bold 14px Trebuchet MS";
-  ctx.fillText("X", closeRect.x + 6, closeRect.y + 15);
+  ctx.font = layout.isAndroid ? "bold 18px Trebuchet MS" : "bold 14px Trebuchet MS";
+  ctx.fillText("X", closeRect.x + (layout.isAndroid ? 8 : 6), closeRect.y + (layout.isAndroid ? 20 : 15));
 
   const contentTop = menuY + 50;
   const contentBottom = menuY + menuH - 8;
@@ -316,7 +316,7 @@ export function drawSkillTreeMenu(renderer, game, layout) {
     ctx.fillText(`Base Weapon Damage Bonus: +${curRageBase.toFixed(2)}`, rageCard.x + 14, rageCard.y + 118);
     ctx.fillText(`Victory Rush: +${(curRageRush * 100).toFixed(0)}% max HP per kill over 15s`, rageCard.x + 14, rageCard.y + 138);
     ctx.fillStyle = "#f2bcbc";
-    ctx.fillText(`Pool cap: ${(rageRushCap * 100).toFixed(0)}% max HP. Right click: half incoming damage.`, rageCard.x + 14, rageCard.y + 162);
+    ctx.fillText(`Pool cap: ${(rageRushCap * 100).toFixed(0)}% max HP. Skill input: half incoming damage.`, rageCard.x + 14, rageCard.y + 162);
 
     if (rageSkill.points >= rageSkill.maxPoints) {
       ctx.fillStyle = "#c5a5a5";
@@ -530,5 +530,5 @@ export function drawSkillTreeMenu(renderer, game, layout) {
 
   ctx.font = "12px Trebuchet MS";
   ctx.fillStyle = "#9d8bb7";
-  ctx.fillText("Mouse wheel to scroll skills.", menuX + 18, menuY + menuH - 14);
+  ctx.fillText(layout.isAndroid ? "Drag to scroll skills. Tap once to inspect, tap again to spend." : "Mouse wheel to scroll skills.", menuX + 18, menuY + menuH - 14);
 }

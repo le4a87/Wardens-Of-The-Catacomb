@@ -74,6 +74,12 @@ export function handleSplashKeydown(event, splashActive, dismissSplash) {
   dismissSplash();
 }
 
+export function handleSplashPointerDown(event, splashActive, dismissSplash) {
+  if (!splashActive) return;
+  if (event?.pointerType === "mouse" && event.button !== 0) return;
+  dismissSplash();
+}
+
 export function startSplashScreen({
   layout,
   menuPanel,
@@ -96,7 +102,7 @@ export function startSplashScreen({
   const splashRaf = requestFrame(drawSplash);
   windowObject.addEventListener("keydown", handleSplashKeydown);
   if (typeof handleSplashPointerDown === "function") {
-    windowObject.addEventListener("pointerdown", handleSplashPointerDown);
+    windowObject.addEventListener("pointerdown", handleSplashPointerDown, { passive: true });
   }
   return { splashStartedAt: now, splashRaf };
 }
