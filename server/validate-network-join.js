@@ -151,7 +151,7 @@ async function main() {
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
       return !!state && state.networkReady === true && state.networkRole === "Active";
-    }, { timeout: 15000 });
+    }, null, { timeout: 15000 });
 
     lastState = await page.evaluate(() => window.__WOTC_DEBUG__?.getState?.() || null);
     assert(lastState, "debug state unavailable after join");

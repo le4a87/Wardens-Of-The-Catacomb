@@ -82,7 +82,7 @@ function startServer(port) {
 
     const onData = (buf) => {
       const text = String(buf);
-      if (text.includes("Authoritative network server listening")) {
+      if (text.includes("Authoritative server listening")) {
         readyResolved = true;
         clearTimeout(timer);
         resolveReady();
@@ -215,6 +215,10 @@ async function runNetworkPerfSample(port) {
       if (!msg || typeof msg.type !== "string") return;
       if (msg.type === "hello" && typeof msg.playerId === "string") {
         localPlayerId = msg.playerId;
+        return;
+      }
+      if (msg.type === "join.ok") {
+        send("room.lobbyUpdate", { classType: "archer", locked: true });
         return;
       }
 

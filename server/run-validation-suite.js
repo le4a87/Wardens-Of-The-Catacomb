@@ -12,6 +12,7 @@ const SCRIPT_TARGETS = {
   "validate:tactics": "server/validate-tactics.js",
   "validate:minotaur": "server/validate-minotaur.js",
   "validate:solo-xp": "server/validate-solo-xp.js",
+  "validate:skill-refund": "server/validate-skill-refund.js",
   "validate:dev-start": "server/validate-dev-start.js",
   "validate:loc": "server/validate-loc.js",
   "validate:network-join": "server/validate-network-join.js",
@@ -23,6 +24,7 @@ const SCRIPT_TARGETS = {
   "validate:network-audio": "server/validate-network-audio.js",
   "validate:network-pause": "server/validate-network-pause.js",
   "validate:network-ui": "server/validate-network-ui.js",
+  "validate:network-refund": "server/validate-network-refund.js",
   "perf:test": "server/perfRunner.js",
   "perf:network-browser": "server/perfNetworkBrowser.js",
   "perf:floor-scaling": "server/perfFloorScaling.js"
@@ -30,7 +32,7 @@ const SCRIPT_TARGETS = {
 
 const SUITES = {
   core: ["check", "validate:loc"],
-  gameplay: ["validate:boss", "validate:tactics", "validate:minotaur", "validate:solo-xp", "validate:dev-start"],
+  gameplay: ["validate:boss", "validate:tactics", "validate:minotaur", "validate:solo-xp", "validate:skill-refund", "validate:dev-start"],
   network: [
     "validate:network-join",
     "validate:network-combat",
@@ -40,10 +42,11 @@ const SUITES = {
     "validate:network-archer",
     "validate:network-audio",
     "validate:network-pause",
-    "validate:network-ui"
+    "validate:network-ui",
+    "validate:network-refund"
   ],
   perf: ["perf:test", "perf:network-browser", "perf:floor-scaling"],
-  "pre-commit": ["check", "validate:loc", "validate:boss", "validate:tactics", "validate:minotaur", "validate:solo-xp", "validate:dev-start"],
+  "pre-commit": ["check", "validate:loc", "validate:boss", "validate:tactics", "validate:minotaur", "validate:solo-xp", "validate:skill-refund", "validate:dev-start"],
   closeout: [
     "check",
     "validate:loc",
@@ -51,6 +54,7 @@ const SUITES = {
     "validate:tactics",
     "validate:minotaur",
     "validate:solo-xp",
+    "validate:skill-refund",
     "validate:dev-start",
     "validate:network-join",
     "validate:network-combat",
@@ -61,6 +65,7 @@ const SUITES = {
     "validate:network-audio",
     "validate:network-pause",
     "validate:network-ui",
+    "validate:network-refund",
     "perf:test",
     "perf:network-browser",
     "perf:floor-scaling"

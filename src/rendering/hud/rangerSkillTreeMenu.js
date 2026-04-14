@@ -11,6 +11,7 @@ import {
   getRangerUtilityLevel,
   isRangerRowAccessible
 } from "../../game/rangerTalentTree.js";
+import { drawSkillRefundFooter } from "./skillTreeMenuSections.js";
 
 function isPointInRect(x, y, rect) {
   return !!rect && x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
@@ -73,7 +74,7 @@ export function drawRangerSkillTreeMenu(renderer, game, layout, frame) {
   const menuW = frame.menuW;
   const menuH = frame.menuH;
   const contentTop = menuY + 48;
-  const contentBottom = menuY + menuH - 10;
+  const contentBottom = menuY + menuH - 84;
   const visibleH = contentBottom - contentTop;
   const rowH = 98;
   const contentHeight = 5 * rowH + 40;
@@ -194,5 +195,6 @@ export function drawRangerSkillTreeMenu(renderer, game, layout, frame) {
   }
 
   ctx.restore();
+  drawSkillRefundFooter(ctx, game, menuX, menuY, menuW, menuH);
   if (hovered && Number.isFinite(mouseX) && Number.isFinite(mouseY)) drawTooltip(ctx, renderer, mouseX, mouseY, hovered);
 }

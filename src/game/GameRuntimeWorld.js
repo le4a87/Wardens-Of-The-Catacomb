@@ -55,6 +55,7 @@ import {
   applyConsumableOnHitEffects,
   getConsumableBonusDamage,
   applyPassiveConsumableEvent,
+  refundAllSkills,
   toggleShop,
   toggleSkillTree,
   toggleStatsPanel,
@@ -266,6 +267,10 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   applyPassiveConsumableEvent(eventKey, payload = {}) {
     return applyPassiveConsumableEvent(this, eventKey, payload);
+  }
+
+  refundAllSkills() {
+    return refundAllSkills(this);
   }
 
   toggleShop(open) {

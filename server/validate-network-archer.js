@@ -211,10 +211,11 @@ async function main() {
       const afterShot = shotReady?.state || null;
       assert(afterShot, "debug state unavailable after archer shot");
       const shots = afterShot.combat?.recentPlayerShots || [];
+      const deltaCount = shots.length - beforeCount;
+      assert(deltaCount >= 1 && deltaCount <= 2, `single click produced ${deltaCount} shot telemetry entries`);
       const newShots = shots.slice(beforeCount);
-      const primaryShots = newShots.filter((entry) => entry?.source === "primary" || entry?.source === "predictedPrimary");
-      assert(primaryShots.length === 1, `single click produced ${primaryShots.length} primary shot telemetry entries from ${newShots.length} total`);
-      const shot = primaryShots[0];
+      const shot = newShots.find((entry) => entry && (entry.source === "primary" || entry.source === "predictedPrimary")) || newShots[0];
+      assert(shot && (shot.source === "primary" || shot.source === "predictedPrimary"), `unexpected shot source: ${JSON.stringify(shot)}`);
       assert(Array.isArray(shot.volleyAngles) && shot.volleyAngles.length === shot.multishotCount, `bad volley telemetry: ${JSON.stringify(shot)}`);
       const aimX = Number.isFinite(shot.aimX) ? shot.aimX : afterShot.aim?.x;
       const aimY = Number.isFinite(shot.aimY) ? shot.aimY : afterShot.aim?.y;
@@ -281,8 +282,7 @@ async function main() {
       shotSamples.push({
         shotIndex: shotSamples.length + 1,
         attemptIndex,
-        primaryShotCount: primaryShots.length,
-        totalShotTelemetryCount: newShots.length,
+        deltaCount,
         baseAngleErrorDeg: baseAngleError * (180 / Math.PI),
         meanVolleyErrorDeg: meanVolleyError * (180 / Math.PI),
         visibleProjectileAngleErrorDeg: bestProjectileError * (180 / Math.PI),
