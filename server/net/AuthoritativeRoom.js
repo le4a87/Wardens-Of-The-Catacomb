@@ -222,6 +222,7 @@ export class AuthoritativeRoom {
       experience: 0,
       expToNextLevel: this.sim.config?.progression?.baseXpToLevel || 10,
       skillPoints: 0,
+      refundCount: 0,
       levelWeaponDamageBonus: 0,
       kills: 0,
       damageDealt: 0,
@@ -359,6 +360,7 @@ export class AuthoritativeRoom {
     this.sim.experience = Number.isFinite(state.experience) ? state.experience : this.sim.experience;
     this.sim.expToNextLevel = Number.isFinite(state.expToNextLevel) ? state.expToNextLevel : this.sim.expToNextLevel;
     this.sim.skillPoints = Number.isFinite(state.skillPoints) ? state.skillPoints : this.sim.skillPoints;
+    this.sim.refundCount = Number.isFinite(state.refundCount) ? state.refundCount : this.sim.refundCount;
     this.sim.levelWeaponDamageBonus = Number.isFinite(state.levelWeaponDamageBonus) ? state.levelWeaponDamageBonus : this.sim.levelWeaponDamageBonus;
     this.sim.skills = cloneSkillState(state.skills);
     this.sim.rangerTalents = cloneRangerTalentState(state.rangerTalents);
@@ -408,6 +410,7 @@ export class AuthoritativeRoom {
     state.experience = this.sim.experience;
     state.expToNextLevel = this.sim.expToNextLevel;
     state.skillPoints = this.sim.skillPoints;
+    state.refundCount = Number.isFinite(this.sim.refundCount) ? this.sim.refundCount : 0;
     state.levelWeaponDamageBonus = this.sim.levelWeaponDamageBonus;
     state.kills = this.sim.runStats?.totalKills || 0;
     state.damageDealt = this.sim.runStats?.damageDealt || 0;
@@ -449,6 +452,7 @@ export class AuthoritativeRoom {
       ? state.expToNextLevel
       : this.sim.config?.progression?.baseXpToLevel || 10;
     context.skillPoints = Number.isFinite(state.skillPoints) ? state.skillPoints : 0;
+    context.refundCount = Number.isFinite(state.refundCount) ? state.refundCount : 0;
     context.levelWeaponDamageBonus = Number.isFinite(state.levelWeaponDamageBonus) ? state.levelWeaponDamageBonus : 0;
     context.skills = cloneSkillState(state.skills);
     context.rangerTalents = cloneRangerTalentState(state.rangerTalents);
@@ -489,6 +493,7 @@ export class AuthoritativeRoom {
     state.experience = Number.isFinite(context.experience) ? context.experience : state.experience;
     state.expToNextLevel = Number.isFinite(context.expToNextLevel) ? context.expToNextLevel : state.expToNextLevel;
     state.skillPoints = Number.isFinite(context.skillPoints) ? context.skillPoints : state.skillPoints;
+    state.refundCount = Number.isFinite(context.refundCount) ? context.refundCount : state.refundCount;
     state.levelWeaponDamageBonus = Number.isFinite(context.levelWeaponDamageBonus)
       ? context.levelWeaponDamageBonus
       : state.levelWeaponDamageBonus;

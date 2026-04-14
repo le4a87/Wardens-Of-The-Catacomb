@@ -1,3 +1,18 @@
+import {
+  applyMetaStateToGame,
+  captureEnemyStateById,
+  createProjectileSpawnReconciler,
+  findSnapshotLocalPlayer,
+  getPredictionPressure,
+  queuePlayerDeathNotifications,
+  syncFloorBossState,
+  syncNamedObject,
+  syncRemotePlayers,
+  synthesizeEnemyDamageFloatingTexts
+} from "./clientSnapshotHelpers.js";
+
+export { applyMetaStateToGame } from "./clientSnapshotHelpers.js";
+
 function normalizeMapRow(row) {
   if (typeof row === "string") return Array.from(row);
   if (Array.isArray(row)) return row.slice();
@@ -432,7 +447,6 @@ export function applyMetaStateToGame(game, state) {
   if (!isActiveMultiplayer && state.consumables && typeof state.consumables === "object") game.consumables = syncNamedObject(game.consumables, state.consumables);
   if (!isActiveMultiplayer && Array.isArray(state.shopStock)) game.shopStock = state.shopStock.map((entry) => ({ ...entry }));
 }
-
 export function applySnapshotToGame({
   game,
   state,
@@ -600,6 +614,7 @@ export function applySnapshotToGame({
     if (Number.isFinite(snapshotPlayer.experience)) game.experience = snapshotPlayer.experience;
     if (Number.isFinite(snapshotPlayer.expToNextLevel)) game.expToNextLevel = snapshotPlayer.expToNextLevel;
     if (Number.isFinite(snapshotPlayer.skillPoints)) game.skillPoints = snapshotPlayer.skillPoints;
+    if (Number.isFinite(snapshotPlayer.refundCount)) game.refundCount = snapshotPlayer.refundCount;
     if (Number.isFinite(snapshotPlayer.levelWeaponDamageBonus)) game.levelWeaponDamageBonus = snapshotPlayer.levelWeaponDamageBonus;
     if (Number.isFinite(snapshotPlayer.warriorMomentumTimer)) game.warriorMomentumTimer = snapshotPlayer.warriorMomentumTimer;
     if (Number.isFinite(snapshotPlayer.warriorRageActiveTimer)) game.warriorRageActiveTimer = snapshotPlayer.warriorRageActiveTimer;
@@ -653,7 +668,7 @@ export function applySnapshotToGame({
       game.classSpec = game.config.classes[snapshotPlayer.classType];
     }
   }
-  syncRemotePlayers(game, state, localPlayerId, 0.72);
+  syncRemotePlayers(game, state, localPlayerId, 0.72, syncByIdLerp);
   queuePlayerDeathNotifications(game, previousAliveById, snapshotPlayer, game.remotePlayers);
   if (typeof game.updateSpectateTarget === "function") game.updateSpectateTarget();
 
@@ -662,82 +677,14 @@ export function applySnapshotToGame({
   if (state.portal && typeof state.portal === "object") game.portal = { ...state.portal };
   const snapAlpha = isNetworkController ? 0.72 : 0.62;
   const previousEnemyStateById = captureEnemyStateById(game.enemies);
-  const reconcileProjectileSpawn = (p, type) => {
-    if (!p || !controller || !isNetworkController) return p;
-    if (!netPredictedProjectiles || typeof netPredictedProjectiles.get !== "function") return p;
-    if (typeof p.ownerId === "string" && localPlayerId && p.ownerId !== localPlayerId) return p;
-    const recordAuthoritativeShot = (matched = null, rejected = false) => {
-      if (typeof game?.recordPlayerShotTelemetry !== "function") return;
-      game.recordPlayerShotTelemetry({
-        source: rejected ? "authoritativeProjectileRejected" : "authoritativeProjectile",
-        projectileType: type,
-        playerX: Number.isFinite(game.player?.x) ? game.player.x : 0,
-        playerY: Number.isFinite(game.player?.y) ? game.player.y : 0,
-        authoritativeX: Number.isFinite(p.x) ? p.x : null,
-        authoritativeY: Number.isFinite(p.y) ? p.y : null,
-        authoritativeAngle: Number.isFinite(p.angle) ? p.angle : null,
-        intendedAngle: matched && Number.isFinite(matched.angle) ? matched.angle : (Number.isFinite(p.angle) ? p.angle : null),
-        predictedX: matched && Number.isFinite(matched.x) ? matched.x : null,
-        predictedY: matched && Number.isFinite(matched.y) ? matched.y : null,
-        spawnSeq: Number.isFinite(p.spawnSeq) ? Math.floor(p.spawnSeq) : 0,
-        rejected
-      });
-    };
-    const seq = Number.isFinite(p.spawnSeq) ? Math.floor(p.spawnSeq) : 0;
-    if (seq <= 0) return p;
-    const bucket = netPredictedProjectiles.get(seq);
-    if (!Array.isArray(bucket) || bucket.length === 0) return p;
-    let bestIdx = -1;
-    let bestScore = Infinity;
-    let bestPosDistSq = Infinity;
-    for (let i = 0; i < bucket.length; i++) {
-      const candidate = bucket[i];
-      if (!candidate || candidate.type !== type) continue;
-      const dx = (Number.isFinite(candidate.x) ? candidate.x : 0) - (Number.isFinite(p.x) ? p.x : 0);
-      const dy = (Number.isFinite(candidate.y) ? candidate.y : 0) - (Number.isFinite(p.y) ? p.y : 0);
-      const d2 = dx * dx + dy * dy;
-      let score = d2;
-      if (Number.isFinite(candidate.angle) && Number.isFinite(p.angle)) {
-        let angleDiff = candidate.angle - p.angle;
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-        const anglePenalty = Math.abs(angleDiff) * 180;
-        score += anglePenalty * anglePenalty;
-      }
-      if (score < bestScore) {
-        bestScore = score;
-        bestPosDistSq = d2;
-        bestIdx = i;
-      }
-    }
-    if (bestIdx < 0) return p;
-    const maxPosError = type === "fireArrow" ? 56 : 48;
-    const maxPosErrorSq = maxPosError * maxPosError;
-    if (bestPosDistSq > maxPosErrorSq) {
-      const rejectedMatch = bucket[bestIdx];
-      game.networkPerf.projectileReconcileRejects = (game.networkPerf.projectileReconcileRejects || 0) + 1;
-      bucket.splice(bestIdx, 1);
-      if (bucket.length === 0) netPredictedProjectiles.delete(seq);
-      recordAuthoritativeShot(rejectedMatch, true);
-      return p;
-    }
-    const matched = bucket.splice(bestIdx, 1)[0];
-    if (bucket.length === 0) netPredictedProjectiles.delete(seq);
-    recordAuthoritativeShot(matched, false);
-    const blend = Number.isFinite(p.life) && p.life > 0.85 ? 0.86 : 0.62;
-    const leadSeconds = Math.max(0, Math.min(0.06, frameGapMs / 1000));
-    const predictedAngle = Number.isFinite(matched.angle) ? matched.angle : p.angle;
-    const predictedDriftX = Number.isFinite(matched.vx) ? matched.vx * leadSeconds : 0;
-    const predictedDriftY = Number.isFinite(matched.vy) ? matched.vy * leadSeconds : 0;
-    const serverLeadX = Number.isFinite(p.vx) ? p.vx * leadSeconds : 0;
-    const serverLeadY = Number.isFinite(p.vy) ? p.vy * leadSeconds : 0;
-    return {
-      ...p,
-      x: (matched.x + predictedDriftX) * blend + (p.x + serverLeadX) * (1 - blend),
-      y: (matched.y + predictedDriftY) * blend + (p.y + serverLeadY) * (1 - blend),
-      angle: Number.isFinite(predictedAngle) ? predictedAngle : p.angle
-    };
-  };
+  const reconcileProjectileSpawn = createProjectileSpawnReconciler({
+    controller,
+    isNetworkController,
+    localPlayerId,
+    netPredictedProjectiles,
+    game,
+    frameGapMs
+  });
   if (state.delta && typeof state.delta === "object") {
     const keyframe = !!state.delta.keyframe;
     game.enemies = applyDeltaCollection(game.enemies, state.delta.enemies, { keyframe, positionAlpha: snapAlpha });

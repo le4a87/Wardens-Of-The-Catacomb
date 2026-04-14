@@ -35,6 +35,7 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.skillTreeOpen = false;
   game.time = 0;
   game.skillPoints = 0;
+  game.refundCount = 0;
   game.statsPanelOpen = false;
   game.statsPanelView = "run";
   game.statsPanelPausedGame = false;

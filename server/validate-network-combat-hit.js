@@ -1,11 +1,18 @@
-import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import net from "node:net";
-import process from "node:process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
+import {
+  capturePageFailure,
+  choosePythonCommand,
+  ensurePortAvailable,
+  getDebugState,
+  startChild,
+  stopChildren,
+  waitForHttpReady,
+  waitForTcpReady
+} from "./validation/networkValidationShared.js";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsDir = resolve(projectRoot, "artifacts", "network");
@@ -20,106 +27,39 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function hasCommand(cmd, args = ["--version"]) {
-  const res = spawnSync(cmd, args, { stdio: "ignore" });
-  return res.status === 0;
-}
-
-function choosePythonCommand() {
-  if (hasCommand("python3")) return { cmd: "python3", args: ["-m", "http.server"] };
-  if (hasCommand("python")) return { cmd: "python", args: ["-m", "http.server"] };
-  if (hasCommand("py", ["-3", "--version"])) return { cmd: "py", args: ["-3", "-m", "http.server"] };
-  throw new Error("Python not found. Install Python or add it to PATH.");
-}
-
-function startChild(name, cmd, args, extraEnv = {}) {
-  const child = spawn(cmd, args, {
-    cwd: projectRoot,
-    env: { ...process.env, ...extraEnv },
-    stdio: "pipe",
-    shell: false
-  });
-  child.stdout.on("data", (chunk) => process.stdout.write(`[${name}] ${chunk}`));
-  child.stderr.on("data", (chunk) => process.stderr.write(`[${name}] ${chunk}`));
-  children.push(child);
-  return child;
-}
-
-function stopChildren() {
-  for (const child of children) {
-    if (!child.killed) child.kill("SIGTERM");
-  }
-}
-
-function ensurePortAvailable(port, label) {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const server = net.createServer();
-    server.unref();
-    server.on("error", (err) => {
-      if (err?.code === "EADDRINUSE") {
-        rejectPromise(new Error(`${label} port ${port} is already in use.`));
-        return;
-      }
-      rejectPromise(err);
-    });
-    server.listen(port, "127.0.0.1", () => {
-      server.close((closeErr) => {
-        if (closeErr) rejectPromise(closeErr);
-        else resolvePromise();
-      });
-    });
-  });
-}
-
-async function waitForHttpReady(url, timeoutMs = 15000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-    } catch {}
-    await delay(200);
-  }
-  throw new Error(`Timed out waiting for HTTP server at ${url}`);
-}
-
-async function waitForTcpReady(port, timeoutMs = 15000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const ready = await new Promise((resolvePromise) => {
-      const socket = net.connect({ port, host: "127.0.0.1" }, () => {
-        socket.destroy();
-        resolvePromise(true);
-      });
-      socket.on("error", () => resolvePromise(false));
-    });
-    if (ready) return;
-    await delay(200);
-  }
-  throw new Error(`Timed out waiting for TCP port ${port}`);
-}
-
 async function captureFailure(page, error, state = null, samples = null) {
-  mkdirSync(artifactsDir, { recursive: true });
-  const screenshotPath = resolve(artifactsDir, "validate-network-combat-hit-failure.png");
-  const statePath = resolve(artifactsDir, "validate-network-combat-hit-failure.json");
-  try {
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-  } catch {}
-  writeFileSync(statePath, JSON.stringify({ error: error instanceof Error ? error.message : String(error), state, samples }, null, 2));
-  return { screenshotPath, statePath };
-}
-
-async function getDebugState(page) {
-  return page.evaluate(() => window.__WOTC_DEBUG__?.getState?.() || null);
+  return capturePageFailure(
+    page,
+    {
+      dir: artifactsDir,
+      screenshotPath: resolve(artifactsDir, "validate-network-combat-hit-failure.png"),
+      statePath: resolve(artifactsDir, "validate-network-combat-hit-failure.json")
+    },
+    error,
+    state,
+    samples
+  );
 }
 
 function chooseTarget(state) {
   const hostiles = Array.isArray(state?.hostiles) ? state.hostiles : [];
   const targetable = hostiles.filter((enemy) => enemy && Number.isFinite(enemy.distToPlayer));
   if (targetable.length === 0) return null;
-  const armor = targetable.find((enemy) => enemy.type === "armor" && enemy.distToPlayer <= 260);
-  return armor || targetable[0];
+  const onScreen = targetable.filter(
+    (enemy) =>
+      Number.isFinite(enemy.screenX) &&
+      Number.isFinite(enemy.screenY) &&
+      enemy.screenX >= 24 &&
+      enemy.screenX <= 616 &&
+      enemy.screenY >= 24 &&
+      enemy.screenY <= 456
+  );
+  const preferred = onScreen.length > 0 ? onScreen : targetable;
+  const armor = preferred
+    .filter((enemy) => enemy.type === "armor" && enemy.distToPlayer <= 260)
+    .sort((a, b) => a.distToPlayer - b.distToPlayer)[0];
+  if (armor) return armor;
+  return preferred.sort((a, b) => a.distToPlayer - b.distToPlayer)[0];
 }
 
 function captureEnemyHp(state) {
@@ -181,7 +121,7 @@ async function waitForNetworkSettle(page, timeoutMs = 2200) {
   return last || getDebugState(page);
 }
 
-async function moveWithinAttackRange(page, samples, maxSteps = 24, desiredRange = 88) {
+async function moveWithinAttackRange(page, samples, maxSteps = 24, desiredRange = 220, minRange = 110) {
   let latestState = null;
   let target = null;
   const roamPattern = [
@@ -220,8 +160,13 @@ async function moveWithinAttackRange(page, samples, maxSteps = 24, desiredRange 
       targetType: target.type,
       distToPlayer: target.distToPlayer
     });
-    if (target.distToPlayer <= desiredRange) {
+    if (target.distToPlayer >= minRange && target.distToPlayer <= desiredRange) {
       return { state: latestState, target };
+    }
+    if (target.distToPlayer < minRange) {
+      await tapMovement(page, latestState.player.x - target.x, latestState.player.y - target.y, 95);
+      await delay(65);
+      continue;
     }
     await tapMovement(page, target.x - latestState.player.x, target.y - latestState.player.y, 95);
     await delay(65);
@@ -232,14 +177,19 @@ async function moveWithinAttackRange(page, samples, maxSteps = 24, desiredRange 
   return { state: latestState, target };
 }
 
-async function waitForTargetInReliableRange(page, samples, desiredRange = 220, maxCycles = 3) {
+async function waitForTargetInReliableRange(page, samples, desiredRange = 220, minRange = 110, maxCycles = 4) {
   let latestState = null;
   let target = null;
   for (let cycle = 0; cycle < maxCycles; cycle++) {
-    const result = await moveWithinAttackRange(page, samples, 24, desiredRange);
+    const result = await moveWithinAttackRange(page, samples, 24, desiredRange, minRange);
     latestState = result.state;
     target = result.target;
-    if (target && Number.isFinite(target.distToPlayer) && target.distToPlayer <= desiredRange) {
+    if (
+      target &&
+      Number.isFinite(target.distToPlayer) &&
+      target.distToPlayer >= minRange &&
+      target.distToPlayer <= desiredRange
+    ) {
       return { state: latestState, target };
     }
     samples.push({
@@ -342,7 +292,13 @@ async function waitForHitConfirmation(page, baselineState, timeoutMs = 1500) {
     await delay(40);
   }
 
-  return { latestState, hpResult, textResult, hpLatencyMs: hpResult ? hpResult.atMs - startedAt : null, textLatencyMs: textResult ? textResult.atMs - startedAt : null };
+  return {
+    latestState,
+    hpResult,
+    textResult,
+    hpLatencyMs: hpResult ? hpResult.atMs - startedAt : null,
+    textLatencyMs: textResult ? textResult.atMs - startedAt : null
+  };
 }
 
 async function main() {
@@ -350,8 +306,8 @@ async function main() {
   await ensurePortAvailable(WS_PORT, "WS");
 
   const python = choosePythonCommand();
-  startChild("http", python.cmd, [...python.args, String(HTTP_PORT)]);
-  startChild("ws", process.execPath, ["server/networkServer.js"], { PORT: String(WS_PORT) });
+  startChild(children, projectRoot, "http", python.cmd, [...python.args, String(HTTP_PORT)]);
+  startChild(children, projectRoot, "ws", process.execPath, ["server/networkServer.js"], { PORT: String(WS_PORT) });
 
   await waitForHttpReady(GAME_URL);
   await waitForTcpReady(WS_PORT);
@@ -385,9 +341,10 @@ async function main() {
     assert(box, "game canvas bounding box unavailable");
 
     let successAttempt = null;
-    for (let attemptIndex = 0; attemptIndex < 5; attemptIndex++) {
-      const desiredRange = 72;
-      const { state: approachState, target } = await waitForTargetInReliableRange(page, attempts, desiredRange, 3);
+    for (let attemptIndex = 0; attemptIndex < 8; attemptIndex++) {
+      const desiredRange = 74;
+      const minRange = 0;
+      const { state: approachState, target } = await waitForTargetInReliableRange(page, attempts, desiredRange, minRange, 4);
       lastState = approachState;
       assert(target, "no hostile target available for attack");
       const settledState = await waitForNetworkSettle(page, 2400);
@@ -396,7 +353,10 @@ async function main() {
       const baselineState = settledState || (await getDebugState(page));
       lastState = baselineState;
       assert(baselineState, "debug state unavailable before attack");
-      if (!Number.isFinite(settledTarget?.distToPlayer) || settledTarget.distToPlayer > 84) {
+      if (
+        !Number.isFinite(settledTarget?.distToPlayer) ||
+        settledTarget.distToPlayer > 110
+      ) {
         attempts.push({
           phase: "skipAttack",
           attemptIndex,
@@ -407,69 +367,84 @@ async function main() {
         });
         continue;
       }
-      const freshState = await getDebugState(page);
-      const freshTarget = chooseTarget(freshState) || settledTarget;
-      lastState = freshState || baselineState;
-      const attackScreenX = box.x + freshTarget.screenX;
-      const attackScreenY = box.y + freshTarget.screenY;
-      const clickStartedAt = performance.now();
-      await page.mouse.move(attackScreenX, attackScreenY);
-      await page.mouse.click(attackScreenX, attackScreenY, { button: "left" });
+      let shotBaseline = baselineState;
+      for (let shotIndex = 0; shotIndex < 3; shotIndex++) {
+        const freshState = await getDebugState(page);
+        const freshTarget = chooseTarget(freshState) || settledTarget;
+        lastState = freshState || shotBaseline;
+        const attackScreenX = box.x + freshTarget.screenX;
+        const attackScreenY = box.y + freshTarget.screenY;
+        const clickStartedAt = performance.now();
+        await page.mouse.move(attackScreenX, attackScreenY);
+        await page.mouse.click(attackScreenX, attackScreenY, { button: "left" });
 
-      const emission = await waitForAttackEmission(page, baselineState, 850);
-      const confirmation = await waitForHitConfirmation(page, baselineState, 2200);
-      lastState = confirmation.latestState || emission?.state || baselineState;
-      const attemptRecord = {
-        phase: "attack",
-        attemptIndex,
-        targetId: freshTarget.id,
-        targetType: freshTarget.type,
-        targetDist: freshTarget.distToPlayer,
-        pendingInputsBeforeAttack: baselineState?.net?.pendingInputs || 0,
-        snapshotBufferBeforeAttack: baselineState?.net?.snapshotBuffer || 0,
-        clickStartedAt,
-        attackLatencyMs: emission?.attackLatencyMs ?? null,
-        emitted: emission?.emitted || null,
-        hpLatencyMs: confirmation.hpLatencyMs,
-        textLatencyMs: confirmation.textLatencyMs,
-        hpResult: confirmation.hpResult,
-        textResult: confirmation.textResult
-      };
-      attempts.push(attemptRecord);
-      if (confirmation.hpResult || confirmation.textResult) {
-        successAttempt = attemptRecord;
-        break;
+        const emission = await waitForAttackEmission(page, shotBaseline, 850);
+        const confirmation = await waitForHitConfirmation(page, shotBaseline, 2200);
+        lastState = confirmation.latestState || emission?.state || shotBaseline;
+        const attemptRecord = {
+          phase: "attack",
+          attemptIndex,
+          shotIndex,
+          targetId: freshTarget.id,
+          targetType: freshTarget.type,
+          targetDist: freshTarget.distToPlayer,
+          pendingInputsBeforeAttack: shotBaseline?.net?.pendingInputs || 0,
+          snapshotBufferBeforeAttack: shotBaseline?.net?.snapshotBuffer || 0,
+          clickStartedAt,
+          attackLatencyMs: emission?.attackLatencyMs ?? null,
+          emitted: emission?.emitted || null,
+          hpLatencyMs: confirmation.hpLatencyMs,
+          textLatencyMs: confirmation.textLatencyMs,
+          hpResult: confirmation.hpResult,
+          textResult: confirmation.textResult
+        };
+        attempts.push(attemptRecord);
+        if (confirmation.hpResult && confirmation.textResult) {
+          successAttempt = attemptRecord;
+          break;
+        }
+        shotBaseline = lastState || shotBaseline;
+        await delay(420);
       }
+      if (successAttempt) break;
       await delay(180);
     }
 
-    assert(successAttempt, "network combat hit confirmation never produced hp-drop or floating-text feedback");
+    assert(successAttempt, "network combat hit confirmation never produced both hp-drop and floating-text feedback");
     assert(successAttempt.attackLatencyMs != null, "attack emission never appeared in client combat state");
-    assert(successAttempt.hpResult || successAttempt.textResult, `no hit feedback was observed: ${JSON.stringify(successAttempt)}`);
-    if (successAttempt.hpResult) {
-      assert(successAttempt.hpResult.damage >= 1, `enemy HP did not drop enough: ${JSON.stringify(successAttempt.hpResult)}`);
-      assert(successAttempt.hpLatencyMs != null && successAttempt.hpLatencyMs <= 1100, `enemy HP confirmation latency ${Number(successAttempt.hpLatencyMs).toFixed(1)}ms exceeded threshold`);
-    }
-    if (successAttempt.textResult) {
-      assert(successAttempt.textLatencyMs != null && successAttempt.textLatencyMs <= 1350, `floating-text confirmation latency ${Number(successAttempt.textLatencyMs).toFixed(1)}ms exceeded threshold`);
-    }
+    assert(
+      successAttempt.hpResult && successAttempt.hpResult.damage >= 1,
+      `enemy HP did not drop enough: ${JSON.stringify(successAttempt.hpResult)}`
+    );
+    assert(
+      successAttempt.hpLatencyMs != null && successAttempt.hpLatencyMs <= 1100,
+      `enemy HP confirmation latency ${Number(successAttempt.hpLatencyMs).toFixed(1)}ms exceeded threshold`
+    );
+    assert(
+      successAttempt.textLatencyMs != null && successAttempt.textLatencyMs <= 1350,
+      `floating-text confirmation latency ${Number(successAttempt.textLatencyMs).toFixed(1)}ms exceeded threshold`
+    );
 
     mkdirSync(artifactsDir, { recursive: true });
     const successPath = resolve(artifactsDir, "validate-network-combat-hit-success.json");
     writeFileSync(successPath, JSON.stringify({ attempts, lastState, successAttempt }, null, 2));
-    console.log(JSON.stringify({ attempts, successAttempt, successPath }, null, 2));
+    console.log(JSON.stringify({
+      attempts,
+      successAttempt,
+      successPath
+    }, null, 2));
   } catch (error) {
     const state = await page.evaluate(() => window.__WOTC_DEBUG__?.getState?.() || null).catch(() => lastState);
     const artifacts = await captureFailure(page, error, state, attempts);
     throw new Error(`${error instanceof Error ? error.message : String(error)}\nArtifacts: ${artifacts.screenshotPath}, ${artifacts.statePath}`);
   } finally {
     await browser.close();
-    stopChildren();
+    stopChildren(children);
   }
 }
 
 main().catch((error) => {
-  stopChildren();
+  stopChildren(children);
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

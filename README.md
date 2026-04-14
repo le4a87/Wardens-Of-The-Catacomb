@@ -57,13 +57,14 @@ Wardens of the Catacomb is a top-down action roguelite built with vanilla JavaSc
 - Staged startup flow with splash, mode selection, network setup, character select, class portrait cards, and mode-aware back navigation
 - Expanded in-run HUD with class-aware cooldown widgets, floor objective tracking, boss health bars, a top status bar for run state, and a right panel for player identity and controls
 - Stats panel split into character-build and run-telemetry views, including class-specific activity totals, economy stats, damage totals, kill breakdowns, and scaling readouts
+- Skill trees now track spent points and support full build refunds with escalating gold costs, refund-count tracking, and multiplayer-authoritative sync
 - Necromancer-specific right-panel pet-capacity display using orb slots with pale-green filled active summons
 - Authoritative network mode with a shared pre-run lobby, up to 6 connected players, duplicate classes, stable per-run player colors, and a dedicated pause owner instead of the old controller/spectator gameplay model
 - True multiplayer gameplay with per-player avatars, per-player progression/build state, remote world handles, minimap teammate markers, compact party status UI, and class-colored necromancer summons
 - Multiplayer death flow where dead players spectate living teammates, runs only end when all connected players are dead, and completed network runs return to the room lobby instead of kicking players back to setup
 - Multiplayer final-results overlay with team roster, per-player level/outcome, kills, and damage dealt; multiplayer leaderboard submission is intentionally disabled for now
 - Persistent server-backed leaderboard storage in `data/leaderboard.json` for the global top 25 local solo runs, plus per-session local leaderboard tracking in the browser
-- Browser-driven regression coverage for network join, combat, hit confirmation, audio, archer projectile behavior, UI interaction, dev-start flow, and browser perf
+- Browser-driven regression coverage for solo XP, local skill refunds, network join, combat, hit confirmation, refund sync, audio, archer projectile behavior, UI interaction, dev-start flow, and browser perf
 
 ## Documentation
 - [docs/GAMEPLAY_SYSTEMS.md](docs/GAMEPLAY_SYSTEMS.md): classes, progression, drops, enemies, and difficulty systems

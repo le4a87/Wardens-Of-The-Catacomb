@@ -824,6 +824,30 @@ if (typeof window !== "undefined") {
         enemyHpAfter: nearest.hp || 0
       };
     }
+    if (action === "grantGold") {
+      const amount = Number.isFinite(payload.amount) ? Math.max(0, Math.floor(payload.amount)) : 0;
+      if (game.networkEnabled && netClient && typeof netClient.sendAction === "function") {
+        netClient.sendAction({ kind: "debugGrantProgress", goldDelta: amount });
+        return { ok: true, sent: true, goldDelta: amount };
+      }
+      game.gold = Math.max(0, (Number.isFinite(game.gold) ? game.gold : 0) + amount);
+      return {
+        ok: true,
+        gold: game.gold
+      };
+    }
+    if (action === "grantSkillPoints") {
+      const amount = Number.isFinite(payload.amount) ? Math.max(0, Math.floor(payload.amount)) : 0;
+      if (game.networkEnabled && netClient && typeof netClient.sendAction === "function") {
+        netClient.sendAction({ kind: "debugGrantProgress", skillPointDelta: amount });
+        return { ok: true, sent: true, skillPointDelta: amount };
+      }
+      game.skillPoints = Math.max(0, (Number.isFinite(game.skillPoints) ? game.skillPoints : 0) + amount);
+      return {
+        ok: true,
+        skillPoints: game.skillPoints
+      };
+    }
     return { ok: false, error: `unknown action: ${action}` };
   }
 
@@ -1015,10 +1039,14 @@ if (typeof window !== "undefined") {
           statsPanelOpen: !!game.statsPanelOpen,
           gold: Number.isFinite(game.gold) ? game.gold : 0,
           skillPoints: Number.isFinite(game.skillPoints) ? game.skillPoints : 0,
+          refundCount: Number.isFinite(game.refundCount) ? game.refundCount : 0,
+          spentSkillPoints: typeof game.getSpentSkillPointCount === "function" ? game.getSpentSkillPointCount() : 0,
+          refundCost: typeof game.getSkillRefundCost === "function" ? game.getSkillRefundCost() : 0,
           shopButton: game.uiRects?.shopButton || null,
           skillTreeButton: game.uiRects?.skillTreeButton || null,
           shopClose: game.uiRects?.shopClose || null,
           skillTreeClose: game.uiRects?.skillTreeClose || null,
+          refundButton: game.uiRects?.skillRefundButton || null,
           shopItems: Array.isArray(game.uiRects?.shopItems)
             ? game.uiRects.shopItems.slice(0, 4).map((entry) => ({
                 key: entry.key,
@@ -1036,6 +1064,9 @@ if (typeof window !== "undefined") {
             deathBolt: game.uiRects?.skillDeathBoltNode || null,
             explodingDeath: game.uiRects?.skillExplodingDeathNode || null
           },
+          skillLevels: Object.fromEntries(
+            Object.entries(game.skills || {}).map(([key, skill]) => [key, Number.isFinite(skill?.points) ? skill.points : 0])
+          ),
           recentUiClicks: Array.isArray(game.input?.mouse?.recentUiLeftClicks)
             ? game.input.mouse.recentUiLeftClicks.slice(-8)
             : [],

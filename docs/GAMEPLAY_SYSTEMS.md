@@ -102,6 +102,14 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
   - Damage
   - Defense
 
+## Skills and Refunds
+- Skill points are earned from level-ups and spent per player.
+- Each class skill tree now shows spent-point totals, current refund count, and the current refund gold cost.
+- Full refunds reset all spent skill ranks for the acting player, restore the spent skill points, and increment that player's `refundCount`.
+- Refunds charge gold and use an escalating cost model based on prior refunds, so repeated respecs are possible but not free.
+- Refunds also clear skill-derived active state such as temporary timers or beam/cast state so the reset build cannot keep stale ability effects.
+- In multiplayer, refunds remain per-player and travel through the authoritative action path instead of mutating local UI state directly.
+
 ## Enemy Systems
 - Ambient enemy spawning is controlled by a computed spawn interval.
 - Active enemy count is controlled by a floor-based cap:
@@ -164,6 +172,9 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
 - Shop, skill tree, and stats overlays are per-player UI in multiplayer:
   - pause-owner shop/skill actions pause the room globally
   - other players can open their own local overlays without opening them on teammates' clients
+- Multiplayer skill spend and refund actions are authoritative:
+  - local clicks send actions to the server
+  - the acting player's build state is resynced immediately after spend/refund updates so the next snapshot tick does not revert the UI
 - Pickups are first-touch:
   - gold and health go to the touching player
   - key / exit progression is shared room state
@@ -219,6 +230,7 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
   - join safety
   - multiplayer combat input
   - hit-confirmation timing
+  - refund spend/reset sync
   - archer projectile alignment
   - focused-tab audio stability
 

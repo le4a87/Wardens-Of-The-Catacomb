@@ -56,6 +56,7 @@ export function handleNetworkUiActions(game, netClient, isController) {
   const pauseOwnerId = typeof game?.networkPauseOwnerId === "string" ? game.networkPauseOwnerId : null;
   const isPauseOwner = !!(isActiveMultiplayer && localPlayerId && pauseOwnerId && localPlayerId === pauseOwnerId);
   const canUseLocalPanels = !!game && isActiveMultiplayer;
+  const canSendRoomAction = !!netClient && (isActiveMultiplayer || isController);
   const toggleLocalShop = (open) => {
     if (typeof game?.toggleShop === "function") game.toggleShop(open);
   };
@@ -138,21 +139,21 @@ export function handleNetworkUiActions(game, netClient, isController) {
       if (game.shopOpen) toggleLocalShop(false);
       else if (game.skillTreeOpen) toggleLocalSkillTree(false);
       else if (game.statsPanelOpen) toggleLocalStats(false);
-    } else if (isController) {
+    } else if (canSendRoomAction) {
       netClient.sendAction({ kind: "escape" });
     }
   }
   if (playerAlive && game.input.consumeKeyQueued("b") && !game.gameOver) {
     if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop();
-    else if (isController) netClient.sendAction({ kind: "toggleShop" });
+    else if (canSendRoomAction) netClient.sendAction({ kind: "toggleShop" });
   }
   if (playerAlive && game.input.consumeKeyQueued("k") && !game.gameOver) {
     if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree();
-    else if (isController) netClient.sendAction({ kind: "toggleSkillTree" });
+    else if (canSendRoomAction) netClient.sendAction({ kind: "toggleSkillTree" });
   }
   if (game.input.consumeKeyQueued("c")) {
     if (canUseLocalPanels) toggleLocalStats();
-    else if (isController) netClient.sendAction({ kind: "toggleStats" });
+    else if (canSendRoomAction) netClient.sendAction({ kind: "toggleStats" });
   }
   if (playerAlive && !game.gameOver && !game.shopOpen && !game.skillTreeOpen && !game.statsPanelOpen) {
     for (let i = 0; i < 5; i++) {
@@ -183,59 +184,59 @@ export function handleNetworkUiActions(game, netClient, isController) {
     if (hit(click.x, click.y, game.uiRects.gameOverStatsButton)) {
       recordAction(click, "gameOverStatsButton", "toggleStats");
       if (canUseLocalPanels) toggleLocalStats();
-      else if (isController) netClient.sendAction({ kind: "toggleStats" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "toggleStats" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.shopButton)) {
       if (!playerAlive) continue;
       recordAction(click, "shopButton", "toggleShop");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop();
-      else if (isController) netClient.sendAction({ kind: "toggleShop" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "toggleShop" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.shopClose)) {
       if (!playerAlive) continue;
       recordAction(click, "shopClose", "closeShop");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalShop(false);
-      else if (isController) netClient.sendAction({ kind: "closeShop" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "closeShop" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeButton)) {
       if (!playerAlive) continue;
       recordAction(click, "skillTreeButton", "toggleSkillTree");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree();
-      else if (isController) netClient.sendAction({ kind: "toggleSkillTree" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "toggleSkillTree" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.skillTreeClose)) {
       if (!playerAlive) continue;
       recordAction(click, "skillTreeClose", "closeSkillTree");
       if (isActiveMultiplayer && !isPauseOwner) toggleLocalSkillTree(false);
-      else if (isController) netClient.sendAction({ kind: "closeSkillTree" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "closeSkillTree" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsButton)) {
       recordAction(click, "statsButton", "toggleStats");
       if (canUseLocalPanels) toggleLocalStats();
-      else if (isController) netClient.sendAction({ kind: "toggleStats" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "toggleStats" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsClose)) {
       recordAction(click, "statsClose", "closeStats");
       if (canUseLocalPanels) toggleLocalStats(false);
-      else if (isController) netClient.sendAction({ kind: "closeStats" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "closeStats" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsRunTab)) {
       recordAction(click, "statsRunTab", "setStatsView", "run");
       if (typeof game?.setStatsPanelView === "function" && canUseLocalPanels) game.setStatsPanelView("run");
-      else if (isController) netClient.sendAction({ kind: "setStatsView", view: "run" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "setStatsView", view: "run" });
       continue;
     }
     if (hit(click.x, click.y, game.uiRects.statsCharacterTab)) {
       recordAction(click, "statsCharacterTab", "setStatsView", "character");
       if (typeof game?.setStatsPanelView === "function" && canUseLocalPanels) game.setStatsPanelView("character");
-      else if (isController) netClient.sendAction({ kind: "setStatsView", view: "character" });
+      else if (canSendRoomAction) netClient.sendAction({ kind: "setStatsView", view: "character" });
       continue;
     }
     const itemRects = game.uiRects.shopItems || [];
@@ -260,6 +261,11 @@ export function handleNetworkUiActions(game, netClient, isController) {
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
       recordAction(click, "skillFireArrowNode", "spendSkill", "fireArrow");
       netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });
+      continue;
+    }
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillRefundButton)) {
+      recordAction(click, "skillRefundButton", "refundSkills");
+      netClient.sendAction({ kind: "refundSkills" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillPiercingNode)) {

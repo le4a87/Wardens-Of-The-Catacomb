@@ -70,6 +70,21 @@ import {
 } from "./necromancerTalentTree.js";
 
 export const runtimeCombatStatsMethods = {
+  getSpentSkillPointCount() {
+    const sumPoints = (tree) => {
+      let spent = 0;
+      for (const node of Object.values(tree || {})) {
+        if (!node || !Number.isFinite(node.points)) continue;
+        spent += Math.max(0, Math.floor(node.points));
+      }
+      return spent;
+    };
+    if (isNecromancerTalentGame(this)) return sumPoints(this.necromancerTalents);
+    if (isWarriorTalentGame(this)) return sumPoints(this.warriorTalents);
+    if (this.isArcherClass && this.isArcherClass()) return sumPoints(this.rangerTalents);
+    return sumPoints(this.skills);
+  },
+
   getPlayerResistancePct(damageType = "physical") {
     const normalized = typeof damageType === "string" ? damageType.toLowerCase() : "physical";
     const resistances = this.classSpec?.baseResistances || {};
@@ -561,6 +576,19 @@ export const runtimeCombatStatsMethods = {
     const wasInactive = (this.warriorMomentumTimer || 0) <= 0;
     this.warriorMomentumTimer = Math.max(this.warriorMomentumTimer, this.getWarriorMomentumDuration());
     if (wasInactive && typeof this.recordClassSpecificStat === "function") this.recordClassSpecificStat("warrior", "frenzies", 1);
+  },
+
+  getSkillRefundCost(spentPoints = this.getSpentSkillPointCount(), previousRefunds = this.refundCount) {
+    const spent = Math.max(0, Number.isFinite(spentPoints) ? Math.floor(spentPoints) : 0);
+    const refunds = Math.max(0, Number.isFinite(previousRefunds) ? Math.floor(previousRefunds) : 0);
+    if (spent <= 0) return 0;
+    return Math.floor(50 + spent * 35 + refunds * 90 + spent * refunds * 10);
+  },
+
+  canRefundSkills() {
+    const spent = this.getSpentSkillPointCount();
+    if (spent <= 0) return false;
+    return this.gold >= this.getSkillRefundCost(spent, this.refundCount);
   },
 
   spendSkillPoint(skillKey) {
