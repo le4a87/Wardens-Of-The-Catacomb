@@ -1,3 +1,5 @@
+import { getAndroidConsumablesStartX } from "./androidLayout.js";
+
 function drawConsumableSlot(ctx, slotX, slotY, slotSize, fillStyle, label, count, cooldownRatio = 0, keyLabel = "") {
   ctx.fillStyle = "rgba(8, 12, 18, 0.94)";
   ctx.fillRect(slotX, slotY, slotSize, slotSize);
@@ -26,13 +28,18 @@ export function drawConsumablesBar(renderer, game, layout, xpBarY) {
   const ctx = renderer.ctx;
   const activeSlots = Array.isArray(game.consumables?.activeSlots) ? game.consumables.activeSlots : [];
   const passiveSlots = Array.isArray(game.consumables?.passiveSlots) ? game.consumables.passiveSlots : [];
+  game.uiRects.consumableSlots = [];
   const slotSize = 34;
   const slotGap = 6;
   const barBaseY = xpBarY - slotSize - 8;
-  const activeStartX = 10;
+  const activeWidth = 5 * slotSize + 4 * slotGap;
+  const passiveWidth = passiveSlots.length > 0 ? passiveSlots.length * slotSize + Math.max(0, passiveSlots.length - 1) * slotGap : 0;
+  const totalWidth = activeWidth + (passiveWidth > 0 ? 12 + passiveWidth : 0);
+  const activeStartX = layout.isAndroid ? getAndroidConsumablesStartX(layout, totalWidth) : 10;
 
   for (let i = 0; i < 5; i++) {
     const slotX = activeStartX + i * (slotSize + slotGap);
+    game.uiRects.consumableSlots.push({ index: i, rect: { x: slotX, y: barBaseY, w: slotSize, h: slotSize } });
     const slot = activeSlots[i] || null;
     const cooldownRatio = (game.consumables?.sharedCooldown || 0) > 0
       ? Math.max(0, Math.min(1, (game.consumables.sharedCooldown || 0) / 2))
@@ -50,7 +57,7 @@ export function drawConsumablesBar(renderer, game, layout, xpBarY) {
     );
   }
 
-  const passiveStartX = activeStartX + 5 * (slotSize + slotGap) + 12;
+  const passiveStartX = activeStartX + activeWidth + 12;
   for (let i = 0; i < passiveSlots.length; i++) {
     const slot = passiveSlots[i];
     const slotX = passiveStartX + i * (slotSize + slotGap);

@@ -1,6 +1,8 @@
 import { drawStatsGameOverActions } from "./statsGameOverActions.js";
+import { getAndroidHudCardX } from "./androidLayout.js";
+import { drawPinnedAbilityTooltip } from "./abilityWidgetTooltip.js";
+import { getHudAbilityState } from "./abilityWidgetState.js";
 import { getNecromancerTalentPoints } from "../../game/necromancerTalentTree.js";
-
 function formatEnemyTypeLabel(type) {
   const raw = typeof type === "string" && type.length > 0 ? type : "unknown";
   return raw
@@ -12,54 +14,8 @@ function formatEnemyTypeLabel(type) {
 function createSection(title, rows) {
   return { title, rows: rows.filter(Boolean) };
 }
-
 function isPointInRect(x, y, rect) {
   return !!rect && x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
-}
-
-function getHudAbilityState(game) {
-  if (game.isWarriorClass && game.isWarriorClass()) {
-    const cooldownMax = Math.max(0.01, game.getWarriorRageCooldown());
-    const cooldownRemaining = Math.max(0, game.warriorRageCooldownTimer || 0);
-    return {
-      title: "Rage",
-      color: "#d14f4f",
-      accent: "#ffb0b0",
-      cooldownRemaining,
-      cooldownMax,
-      progress: cooldownRemaining > 0 ? 1 - cooldownRemaining / cooldownMax : 1,
-      hoverText:
-        cooldownRemaining > 0
-          ? `Rage cooldown: ${cooldownRemaining.toFixed(1)}s`
-          : "Rage ready"
-    };
-  }
-  if (game.isNecromancerClass && game.isNecromancerClass()) {
-    const unlocked = (game.skills?.deathBolt?.points || 0) > 0;
-    const cooldownMax = Math.max(0.01, game.config.deathBolt?.cooldown || 10);
-    const cooldownRemaining = Math.max(0, game.player.deathBoltCooldown || 0);
-    return {
-      title: "Death Bolt",
-      color: "#f3f4f7",
-      accent: "#ffffff",
-      cooldownRemaining,
-      cooldownMax,
-      progress: unlocked ? (cooldownRemaining > 0 ? 1 - cooldownRemaining / cooldownMax : 1) : 0,
-      hoverText: !unlocked ? "Death Bolt locked" : cooldownRemaining > 0 ? `Death Bolt cooldown: ${cooldownRemaining.toFixed(1)}s` : "Death Bolt ready"
-    };
-  }
-  const unlocked = game.isFireArrowUnlocked();
-  const cooldownMax = Math.max(0.01, game.config.fireArrow.cooldown);
-  const cooldownRemaining = Math.max(0, game.player.fireArrowCooldown || 0);
-  return {
-    title: "Fire Arrow",
-    color: "#59b85a",
-    accent: "#d7ffd0",
-    cooldownRemaining,
-    cooldownMax,
-    progress: unlocked ? (cooldownRemaining > 0 ? 1 - cooldownRemaining / cooldownMax : 1) : 0,
-    hoverText: !unlocked ? "Fire Arrow locked" : cooldownRemaining > 0 ? `Fire Arrow cooldown: ${cooldownRemaining.toFixed(1)}s` : "Fire Arrow ready"
-  };
 }
 
 function drawAbilityCooldownWidget(renderer, game, x, y, size) {
@@ -72,7 +28,6 @@ function drawAbilityCooldownWidget(renderer, game, x, y, size) {
   const endAngle = startAngle + Math.PI * 2 * Math.max(0, Math.min(1, state.progress));
   const rect = { x, y, w: size, h: size };
   game.uiRects.hudAbilityWidget = rect;
-
   ctx.save();
   ctx.fillStyle = "rgba(10, 14, 20, 0.98)";
   ctx.beginPath();
@@ -90,7 +45,6 @@ function drawAbilityCooldownWidget(renderer, game, x, y, size) {
   ctx.beginPath();
   ctx.arc(cx, cy, radius - 4, startAngle, endAngle);
   ctx.stroke();
-
   ctx.fillStyle = state.color;
   ctx.globalAlpha = state.progress >= 1 ? 0.2 : 0.12;
   ctx.beginPath();
@@ -101,15 +55,14 @@ function drawAbilityCooldownWidget(renderer, game, x, y, size) {
   ctx.fillStyle = "#f2efe3";
   ctx.font = "bold 10px Trebuchet MS";
   ctx.textAlign = "center";
-  ctx.fillText(state.title, cx, y + size + 11);
+  if (!game.isAndroidLayout) ctx.fillText(state.title, cx, y + size + 11);
   ctx.font = "bold 12px Trebuchet MS";
   const text = state.cooldownRemaining > 0 ? `${Math.ceil(state.cooldownRemaining)}` : "R";
   ctx.fillText(text, cx, cy + 4);
   ctx.textAlign = "left";
   ctx.restore();
 
-  const mouseX = game.input?.mouse?.screenX;
-  const mouseY = game.input?.mouse?.screenY;
+  const mouseX = game.input?.mouse?.screenX, mouseY = game.input?.mouse?.screenY;
   if (Number.isFinite(mouseX) && Number.isFinite(mouseY) && isPointInRect(mouseX, mouseY, rect)) {
     const padding = 8;
     ctx.save();
@@ -125,6 +78,7 @@ function drawAbilityCooldownWidget(renderer, game, x, y, size) {
     ctx.fillText(state.hoverText, tipX + padding, tipY);
     ctx.restore();
   }
+  if (game.isAndroidLayout && game.uiPinnedTooltip?.source === "abilityWidget") drawPinnedAbilityTooltip(renderer, rect, state);
 }
 
 function drawHudButton(ctx, rect, label, active, activeFill) {
@@ -388,10 +342,10 @@ function drawStatsTabs(ctx, game, x, y, panelW) {
 
 export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
   const ctx = renderer.ctx;
-  const panelX = layout.sidebarX + renderer.sidebarPadding;
-  const panelW = layout.sidebarW - renderer.sidebarPadding * 2;
+  const panelW = layout.isAndroid ? 220 : layout.sidebarW - renderer.sidebarPadding * 2;
+  const panelX = layout.isAndroid ? getAndroidHudCardX(layout, panelW) : layout.sidebarX + renderer.sidebarPadding;
   const isNecromancer = game.isNecromancerClass && game.isNecromancerClass();
-  const panelH = isNecromancer ? 158 : 142;
+  const panelH = layout.isAndroid ? (isNecromancer ? 132 : 118) : (isNecromancer ? 158 : 142);
   const outpace = game.getEnemyOutpacingStatus();
   const playerHandle = typeof game.playerHandle === "string" && game.playerHandle.trim()
     ? game.playerHandle.trim()
@@ -409,9 +363,7 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
   ctx.fillStyle = "#aebbd8";
   ctx.font = "12px Trebuchet MS";
   ctx.fillText(classLabel, panelX + 10, panelY + 34);
-  if (isNecromancer) {
-    drawNecromancerPetOrbs(ctx, game, panelX + 10, panelY + 49);
-  }
+  if (isNecromancer && !layout.isAndroid) drawNecromancerPetOrbs(ctx, game, panelX + 10, panelY + 49);
   if (game.hasKey) {
     const badgeW = 132;
     const badgeH = 18;
@@ -429,32 +381,35 @@ export function drawPlayerStatsPanel(renderer, game, layout, panelY) {
   }
   ctx.font = "13px Trebuchet MS";
   ctx.fillStyle = "#cfd6e7";
-  const statsRowY = isNecromancer ? panelY + 70 : panelY + 56;
-  const enemyRowY = isNecromancer ? panelY + 91 : panelY + 77;
-  const paceRowY = isNecromancer ? panelY + 112 : panelY + 98;
+  const statsRowY = layout.isAndroid ? panelY + 55 : (isNecromancer ? panelY + 70 : panelY + 56);
+  const enemyRowY = layout.isAndroid ? panelY + 74 : (isNecromancer ? panelY + 91 : panelY + 77);
+  const paceRowY = layout.isAndroid ? panelY + 93 : (isNecromancer ? panelY + 112 : panelY + 98);
   ctx.fillText(`Gold ${game.gold}`, panelX + 10, statsRowY);
   ctx.fillText(`Lvl ${game.level}`, panelX + 94, statsRowY);
-  ctx.fillText(`SP ${game.skillPoints}`, panelX + 152, statsRowY);
+  if (!layout.isAndroid) ctx.fillText(`SP ${game.skillPoints}`, panelX + 152, statsRowY);
   ctx.fillText(`Enemies ${game.enemies.length}`, panelX + 10, enemyRowY);
+  if (layout.isAndroid) ctx.fillText(`SP ${game.skillPoints}`, panelX + 120, enemyRowY);
   ctx.fillText("Pace", panelX + 10, paceRowY);
   ctx.fillStyle = outpace.color;
   ctx.fillText(outpace.label, panelX + 42, paceRowY);
-  drawAbilityCooldownWidget(renderer, game, panelX + panelW - 64, isNecromancer ? panelY + 58 : panelY + 44, 42);
+  drawAbilityCooldownWidget(
+    renderer,
+    game,
+    layout.isAndroid ? 18 : panelX + panelW - 64,
+    layout.isAndroid ? renderer.canvas.height - layout.xpBarH - 132 : (isNecromancer ? panelY + 58 : panelY + 44),
+    layout.isAndroid ? 68 : 42
+  );
 
-  const buttonW = Math.floor((panelW - 20) / 3);
-  const buttonH = 28;
-  const buttonX = panelX + 10;
-  const buttonGap = 5;
-  const skillButtonX = buttonX + buttonW + buttonGap;
-  const statsButtonX = skillButtonX + buttonW + buttonGap;
-  const buttonY = panelY + panelH - buttonH - 8;
-  game.uiRects.shopButton = { x: buttonX, y: buttonY, w: buttonW, h: buttonH };
-  game.uiRects.skillTreeButton = { x: skillButtonX, y: buttonY, w: buttonW, h: buttonH };
-  game.uiRects.statsButton = { x: statsButtonX, y: buttonY, w: buttonW, h: buttonH };
-
-  drawHudButton(ctx, game.uiRects.shopButton, game.shopOpen ? "Resume" : "Shop", game.shopOpen, "rgba(156, 113, 64, 0.95)");
-  drawHudButton(ctx, game.uiRects.skillTreeButton, game.skillTreeOpen ? "Resume" : "Skill Tree", game.skillTreeOpen, "rgba(133, 74, 122, 0.95)");
-  drawHudButton(ctx, game.uiRects.statsButton, game.statsPanelOpen ? "Hide Stats" : "Stats", game.statsPanelOpen, "rgba(88, 130, 105, 0.95)");
+  if (!layout.isAndroid) {
+    const buttonW = Math.floor((panelW - 20) / 3), buttonH = 28, buttonX = panelX + 10, buttonGap = 5;
+    const skillButtonX = buttonX + buttonW + buttonGap, statsButtonX = skillButtonX + buttonW + buttonGap, buttonY = panelY + panelH - buttonH - 8;
+    game.uiRects.shopButton = { x: buttonX, y: buttonY, w: buttonW, h: buttonH };
+    game.uiRects.skillTreeButton = { x: skillButtonX, y: buttonY, w: buttonW, h: buttonH };
+    game.uiRects.statsButton = { x: statsButtonX, y: buttonY, w: buttonW, h: buttonH };
+    drawHudButton(ctx, game.uiRects.shopButton, game.shopOpen ? "Resume" : "Shop", game.shopOpen, "rgba(156, 113, 64, 0.95)");
+    drawHudButton(ctx, game.uiRects.skillTreeButton, game.skillTreeOpen ? "Resume" : "Skill Tree", game.skillTreeOpen, "rgba(133, 74, 122, 0.95)");
+    drawHudButton(ctx, game.uiRects.statsButton, game.statsPanelOpen ? "Hide" : "Stats", game.statsPanelOpen, "rgba(88, 130, 105, 0.95)");
+  }
 
   const panelBottom = panelY + panelH;
   if (!game.statsPanelOpen) return panelBottom;

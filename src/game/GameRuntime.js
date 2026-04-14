@@ -9,33 +9,17 @@ export class Game extends GameRuntimeSystems {
   }
 
   update(dt) {
-    let mx = 0;
-    let my = 0;
-    const keys = this.input.keys;
-    if (keys.has("arrowleft") || keys.has("a")) mx -= 1;
-    if (keys.has("arrowright") || keys.has("d")) mx += 1;
-    if (keys.has("arrowup") || keys.has("w")) my -= 1;
-    if (keys.has("arrowdown") || keys.has("s")) my += 1;
-
-    const mouse = this.input.mouse;
-    if (typeof this.input.refreshAimWorldPosition === "function" && mouse.hasAim) {
-      this.input.refreshAimWorldPosition();
-    }
-    const rawAimX = mouse.worldX - this.player.x;
-    const rawAimY = mouse.worldY - this.player.y;
-    const rawAimLen = Math.hypot(rawAimX, rawAimY) || 1;
+    const input = this.input.getGameplayIntent({
+      playerX: this.player.x,
+      playerY: this.player.y,
+      gameplayBlocked: false,
+      consumeQueued: true,
+      fallbackAimDirX: Number.isFinite(this.player?.dirX) ? this.player.dirX : 1,
+      fallbackAimDirY: Number.isFinite(this.player?.dirY) ? this.player.dirY : 0
+    });
     stepGame(this, dt, {
       processUi: true,
-      moveX: mx,
-      moveY: my,
-      hasAim: !!mouse.hasAim,
-      aimX: mouse.worldX,
-      aimY: mouse.worldY,
-      aimDirX: mouse.hasAim ? rawAimX / rawAimLen : (Number.isFinite(this.player?.dirX) ? this.player.dirX : 1),
-      aimDirY: mouse.hasAim ? rawAimY / rawAimLen : (Number.isFinite(this.player?.dirY) ? this.player.dirY : 0),
-      firePrimaryQueued: this.input.consumeLeftQueued(),
-      firePrimaryHeld: !!mouse.leftDown,
-      fireAltQueued: this.input.consumeRightQueued()
+      ...input
     });
   }
 

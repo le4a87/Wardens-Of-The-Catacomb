@@ -94,12 +94,17 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     const cameraX = camera.x;
     const cameraY = camera.y;
     const biomePalette = typeof game.getBiomeAppearance === "function" ? game.getBiomeAppearance() : null;
+    const isAndroidLayout = !!game?.isAndroidLayout;
+    const sidebarW = isAndroidLayout ? 0 : this.sidebarWidth;
     const layout = {
-      sidebarX: this.canvas.width - this.sidebarWidth,
-      sidebarW: this.sidebarWidth,
+      isAndroid: isAndroidLayout,
+      sidebarX: this.canvas.width - sidebarW,
+      sidebarW,
       topHudH: this.topHudHeight,
-      playW: this.canvas.width - this.sidebarWidth,
-      xpBarH: 28
+      playW: this.canvas.width - sidebarW,
+      xpBarH: 28,
+      touchMoveRegion: null,
+      touchAimRegion: null
     };
     game.uiRects.shopButton = null;
     game.uiRects.shopItems = [];
@@ -128,6 +133,9 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
     game.uiRects.gameOverLeaderboardButton = null;
     game.uiRects.gameOverMenuButton = null;
     game.uiRects.hudAbilityWidget = null;
+    game.uiRects.consumableSlots = [];
+    game.uiRects.touchMoveRegion = null;
+    game.uiRects.touchAimRegion = null;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawSidebarBackground(layout);

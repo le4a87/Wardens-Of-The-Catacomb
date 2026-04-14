@@ -65,6 +65,12 @@ function drawTooltip(ctx, renderer, mouseX, mouseY, tooltip) {
   ctx.restore();
 }
 
+function getPinnedTooltip(game) {
+  const pinned = game?.uiPinnedTooltip;
+  if (!pinned || pinned.source !== "skillTree") return null;
+  return getNecromancerTooltip(game, { key: pinned.key, kind: pinned.kind || "node" });
+}
+
 export function drawNecromancerSkillTreeMenu(renderer, game, layout, frame) {
   const ctx = renderer.ctx;
   const menuX = frame.menuX;
@@ -197,5 +203,12 @@ export function drawNecromancerSkillTreeMenu(renderer, game, layout, frame) {
   }
 
   ctx.restore();
-  if (hovered && Number.isFinite(mouseX) && Number.isFinite(mouseY)) drawTooltip(ctx, renderer, mouseX, mouseY, hovered);
+  if (hovered && Number.isFinite(mouseX) && Number.isFinite(mouseY)) {
+    drawTooltip(ctx, renderer, mouseX, mouseY, hovered);
+    return;
+  }
+  if (layout.isAndroid) {
+    const pinned = getPinnedTooltip(game);
+    if (pinned) drawTooltip(ctx, renderer, menuX + menuW - 280, menuY + 82, pinned);
+  }
 }

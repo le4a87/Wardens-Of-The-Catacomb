@@ -44,6 +44,8 @@ export class GameRuntimeBase {
     };
     this.ctx = this.canvas.getContext ? this.canvas.getContext("2d") : null;
     this.config = CONFIG;
+    this.platform = typeof options.platform === "string" && options.platform.trim() ? options.platform.trim() : "web";
+    this.isAndroidLayout = this.platform === "android";
     this.classType =
       options.classType === "fighter" || options.classType === "necromancer"
         ? options.classType
@@ -64,7 +66,10 @@ export class GameRuntimeBase {
     this.input = null;
     if (!options.headless) {
       this.renderer = new Renderer(this.canvas, this.ctx, this.config);
-      this.input = new InputController(this.canvas, () => this.getCamera(), () => this.isActive());
+      this.input = new InputController(this.canvas, () => this.getCamera(), () => this.isActive(), {
+        platform: this.platform,
+        getUiRects: () => this.uiRects
+      });
     }
     this.last = typeof performance !== "undefined" ? performance.now() : Date.now();
   }
@@ -74,6 +79,7 @@ export class GameRuntimeBase {
   }
 
   getPlayAreaWidth() {
+    if (this.isAndroidLayout) return this.canvas.width;
     return this.canvas.width - this.config.hud.sidebarWidth;
   }
 
