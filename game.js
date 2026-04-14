@@ -326,27 +326,14 @@ function waitForImageSource(src) {
   });
 }
 
-function waitForAudioElement(audio) {
-  return new Promise((resolve) => {
-    if (!audio) {
-      resolve();
-      return;
-    }
-    if ((audio.readyState || 0) >= 2 || audio.error) {
-      resolve();
-      return;
-    }
-    const finish = () => {
-      audio.removeEventListener("loadeddata", finish);
-      audio.removeEventListener("canplaythrough", finish);
-      audio.removeEventListener("error", finish);
-      resolve();
-    };
-    audio.addEventListener("loadeddata", finish, { once: true });
-    audio.addEventListener("canplaythrough", finish, { once: true });
-    audio.addEventListener("error", finish, { once: true });
+function warmAudioElement(audio) {
+  if (!audio) return;
+  if ((audio.readyState || 0) >= 2 || audio.error) return;
+  try {
     if (typeof audio.load === "function") audio.load();
-  });
+  } catch {
+    // Ignore preload failures and let playback recover on interaction.
+  }
 }
 
 function preloadStartupAssets() {
@@ -356,14 +343,15 @@ function preloadStartupAssets() {
       .map((img) => img?.getAttribute("src") || img?.currentSrc || "")
       .filter(Boolean)
   ]);
+  return Promise.all(Array.from(imageSources, (src) => waitForImageSource(src)));
+}
+
+function warmStartupAudio() {
   const startupAudios = [
     ...((Array.isArray(music?.tracks) ? music.tracks : []).map((track) => track?.audio).filter(Boolean)),
     music?.deathAudio
   ].filter(Boolean);
-  return Promise.all([
-    ...Array.from(imageSources, (src) => waitForImageSource(src)),
-    ...startupAudios.map((audio) => waitForAudioElement(audio))
-  ]);
+  for (const audio of startupAudios) warmAudioElement(audio);
 }
 
 if (playerNameInput) {
@@ -1053,6 +1041,13 @@ if (typeof window !== "undefined") {
                 rect: entry.rect
               }))
             : [],
+          skillTreeNodes: Array.isArray(game.uiRects?.skillTreeNodes)
+            ? game.uiRects.skillTreeNodes.map((entry) => ({
+                key: entry?.key || "",
+                kind: entry?.kind || "",
+                rect: entry?.rect || null
+              }))
+            : [],
           skillNodes: {
             fireArrow: game.uiRects?.skillFireArrowNode || null,
             piercingStrike: game.uiRects?.skillPiercingNode || null,
@@ -1066,6 +1061,13 @@ if (typeof window !== "undefined") {
           },
           skillLevels: Object.fromEntries(
             Object.entries(game.skills || {}).map(([key, skill]) => [key, Number.isFinite(skill?.points) ? skill.points : 0])
+          ),
+          talentLevels: Object.fromEntries(
+            [
+              ...Object.entries(game.rangerTalents || {}),
+              ...Object.entries(game.warriorTalents || {}),
+              ...Object.entries(game.necromancerTalents || {})
+            ].map(([key, talent]) => [key, Number.isFinite(talent?.points) ? talent.points : 0])
           ),
           recentUiClicks: Array.isArray(game.input?.mouse?.recentUiLeftClicks)
             ? game.input.mouse.recentUiLeftClicks.slice(-8)
@@ -1224,6 +1226,7 @@ const dismissSplash = () => {
     },
     windowObject: window,
     handleSplashKeydown,
+    handleSplashPointerDown,
     layout,
     splashRaf,
     cancelFrame: (raf) => {
@@ -1261,6 +1264,11 @@ const handleSplashKeydown = (event) => {
   handleSplashKeydownRuntime(event, splashActive, dismissSplash);
 };
 
+const handleSplashPointerDown = () => {
+  if (!splashPromptReady) return;
+  dismissSplash();
+};
+
 const startSplashScreen = () => {
   setCanvasVisible(true);
   const next = startSplashScreenRuntime({
@@ -1274,6 +1282,7 @@ const startSplashScreen = () => {
     drawSplash,
     windowObject: window,
     handleSplashKeydown,
+    handleSplashPointerDown,
     now: performance.now()
   });
   splashStartedAt = next.splashStartedAt;
@@ -2167,10 +2176,20 @@ if (networkLobbyLeaveTop) {
 
 renderLeaderboardModal();
 renderMenuScreen();
-startSplashScreen();
-preloadStartupAssets().finally(() => {
+warmStartupAudio();
+if (isDevMode) {
+  splashActive = false;
+  splashDismissed = true;
+  setCanvasVisible(false);
+  showModeSelect();
   splashPromptReady = true;
-});
+  music.playMenuMusic();
+} else {
+  startSplashScreen();
+  preloadStartupAssets().finally(() => {
+    splashPromptReady = true;
+  });
+}
 
 const networkLobbyTick = () => {
   if (menuState.screen === "lobby") renderNetworkLobby();

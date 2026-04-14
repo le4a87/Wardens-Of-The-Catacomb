@@ -373,6 +373,10 @@ export function handleUiClicks(game) {
       continue;
     }
     if (!playerAlive) continue;
+    if (pointInRect(game, click.x, click.y, game.uiRects.skillRefundButton)) {
+      game.refundAllSkills();
+      continue;
+    }
     const skillNodeRects = Array.isArray(game.uiRects.skillTreeNodes) ? game.uiRects.skillTreeNodes : [];
     let handledSkillNode = false;
     for (const node of skillNodeRects) {
@@ -382,14 +386,6 @@ export function handleUiClicks(game) {
       break;
     }
     if (handledSkillNode) continue;
-    if (pointInRect(game, click.x, click.y, game.uiRects.skillRefundButton)) {
-      game.refundAllSkills();
-      continue;
-    }
-    if (pointInRect(game, click.x, click.y, game.uiRects.skillRefundButton)) {
-      game.refundAllSkills();
-      continue;
-    }
     if (pointInRect(game, click.x, click.y, game.uiRects.skillFireArrowNode)) {
       game.spendSkillPoint("fireArrow");
       continue;

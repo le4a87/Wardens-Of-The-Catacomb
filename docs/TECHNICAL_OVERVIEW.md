@@ -167,6 +167,7 @@ This document summarizes the current high-level architecture and validation work
 - `server/perfRunner.js` was hardened to resolve its root from `import.meta.url`, matching the other tooling fixes.
 - `server/run-validation-suite.js` now groups the growing validation surface into maintainable suites instead of requiring every workflow step to list individual commands manually.
 - Shared browser/network harness helpers now live under `server/validation/`, which keeps individual validators below the LOC gate while preserving a common startup, port-probing, and failure-capture path.
+- `?dev=1` now bypasses the splash and goes straight to Mode Select so local playtesting and `validate:dev-start` are not blocked by browser-specific media preload timing.
 - The perf baselines were refreshed from post-fix runs on 2026-03-17/18, so future comparisons should use the current baseline files instead of the earlier pre-correction artifacts.
 - `server/validate-floor-boss.js` now validates the generalized floor-boss flow rather than assuming only the necromancer boss exists.
 - `server/validate-dev-start.js` now covers higher-floor local dev starts so larger-floor spawn regressions are caught by automation instead of manual testing.

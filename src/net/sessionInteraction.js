@@ -248,6 +248,11 @@ export function handleNetworkUiActions(game, netClient, isController) {
         break;
       }
     }
+    if (playerAlive && hit(click.x, click.y, game.uiRects.skillRefundButton)) {
+      recordAction(click, "skillRefundButton", "refundSkills");
+      netClient.sendAction({ kind: "refundSkills" });
+      continue;
+    }
     const skillNodeRects = Array.isArray(game.uiRects.skillTreeNodes) ? game.uiRects.skillTreeNodes : [];
     let handledSkillNode = false;
     for (const node of skillNodeRects) {
@@ -261,11 +266,6 @@ export function handleNetworkUiActions(game, netClient, isController) {
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillFireArrowNode)) {
       recordAction(click, "skillFireArrowNode", "spendSkill", "fireArrow");
       netClient.sendAction({ kind: "spendSkill", key: "fireArrow" });
-      continue;
-    }
-    if (playerAlive && hit(click.x, click.y, game.uiRects.skillRefundButton)) {
-      recordAction(click, "skillRefundButton", "refundSkills");
-      netClient.sendAction({ kind: "refundSkills" });
       continue;
     }
     if (playerAlive && hit(click.x, click.y, game.uiRects.skillPiercingNode)) {

@@ -128,6 +128,11 @@ async function getDebugState(page) {
   return page.evaluate(() => window.__WOTC_DEBUG__?.getState?.() || null);
 }
 
+function findSkillTreeNode(state, key) {
+  const nodes = Array.isArray(state?.ui?.skillTreeNodes) ? state.ui.skillTreeNodes : [];
+  return nodes.find((node) => node?.key === key)?.rect || null;
+}
+
 async function getActionLog(page) {
   return page.evaluate(() => Array.isArray(window.__WOTC_NET_SEND_LOG__) ? window.__WOTC_NET_SEND_LOG__.slice() : []);
 }
@@ -245,14 +250,16 @@ async function main() {
     await clickCanvasRect(page, lastState.ui.skillTreeButton);
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
-      return !!state && state.ui?.skillTreeOpen === true && !!state.ui?.skillNodes?.fireArrow && !!state.ui?.refundButton;
+      return !!state && state.ui?.skillTreeOpen === true && !!state.ui?.refundButton && Array.isArray(state.ui?.skillTreeNodes) && state.ui.skillTreeNodes.some((node) => node?.key === "fireArrowActive");
     }, null, { timeout: 5000 });
 
     let skillState = await getDebugState(page);
-    await clickCanvasRect(page, skillState.ui.skillNodes.fireArrow);
+    const fireArrowNode = findSkillTreeNode(skillState, "fireArrowActive");
+    assert(fireArrowNode, "fireArrowActive node not available in skill tree");
+    await clickCanvasRect(page, fireArrowNode);
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
-      return !!state && state.ui?.skillLevels?.fireArrow === 1 && state.ui?.spentSkillPoints === 1;
+      return !!state && state.ui?.talentLevels?.fireArrowActive === 1 && state.ui?.spentSkillPoints === 1;
     }, null, { timeout: 5000 });
 
     skillState = await getDebugState(page);
@@ -264,7 +271,7 @@ async function main() {
     await clickCanvasRect(page, skillState.ui.refundButton);
     await page.waitForFunction(() => {
       const state = window.__WOTC_DEBUG__?.getState?.();
-      return !!state && state.ui?.refundCount === 1 && state.ui?.spentSkillPoints === 0 && state.ui?.skillLevels?.fireArrow === 0;
+      return !!state && state.ui?.refundCount === 1 && state.ui?.spentSkillPoints === 0 && state.ui?.talentLevels?.fireArrowActive === 0;
     }, null, { timeout: 5000 });
 
     lastState = await getDebugState(page);
@@ -273,7 +280,7 @@ async function main() {
     assert(lastState.ui.gold === goldBeforeRefund - refundCost, `refund sync gold mismatch: before=${goldBeforeRefund}, cost=${refundCost}, after=${lastState.ui.gold}`);
     assert(actionLog.some((entry) => entry.type === "action" && entry.actionKind === "debugGrantProgress" && entry.skillPointDelta === 2), "missing debugGrantProgress skill point action");
     assert(actionLog.some((entry) => entry.type === "action" && entry.actionKind === "debugGrantProgress" && entry.goldDelta === 400), "missing debugGrantProgress gold action");
-    assert(actionLog.some((entry) => entry.type === "action" && entry.actionKind === "spendSkill" && entry.actionKey === "fireArrow"), "missing spendSkill fireArrow action");
+    assert(actionLog.some((entry) => entry.type === "action" && entry.actionKind === "spendSkill" && entry.actionKey === "fireArrowActive"), "missing spendSkill fireArrowActive action");
     assert(actionLog.some((entry) => entry.type === "action" && entry.actionKind === "refundSkills"), "missing refundSkills action");
 
     mkdirSync(artifactsDir, { recursive: true });

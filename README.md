@@ -20,12 +20,13 @@ Wardens of the Catacomb is a top-down action roguelite built with vanilla JavaSc
 ## Local Run Flow
 - Enter a `Player Handle` before starting a local or network run. The game trims the value to 20 characters and persists it in local storage.
 - After the splash screen, choose either `Single` or `Network`.
+- `?dev=1` skips the splash and opens directly to Mode Select so local validation and playtesting do not depend on startup media preload timing.
 - `Single` goes directly to Character Select. `Network` goes to Connection Setup first, then into a dedicated shared room lobby.
 - Single-player Character Select includes class portraits, class descriptions, and the local run start button.
 - Network class selection happens inside the shared room lobby. Players can change class there, mark ready, see the room roster, and auto-start after the shared countdown when everyone is ready.
 - Open `Leaderboard` from the start menu to view the persistent global top 25 local solo runs and the current browser session's local results.
 - After a local run ends, the leaderboard opens automatically, submits the run to the server-backed global board, and returns to Character Select for the same mode after 10 seconds unless you continue immediately.
-- Add `?dev=1` to the URL to expose `Dev Start`, which lets you begin a local run on floors 2-5 with the matching minimum entry level applied automatically.
+- Add `?dev=1` to the URL to skip the splash and expose `Dev Start`, which lets you begin a local run on floors 2-5 with the matching minimum entry level applied automatically.
 
 ## Scripts
 - `npm run dev`: start static host + network server + open browser

@@ -73,7 +73,7 @@ export function drawNecromancerSkillTreeMenu(renderer, game, layout, frame) {
   const menuW = frame.menuW;
   const menuH = frame.menuH;
   const contentTop = menuY + 48;
-  const contentBottom = menuY + menuH - 58;
+  const contentBottom = menuY + menuH - 84;
   const visibleH = contentBottom - contentTop;
   const rowH = 98;
   const contentHeight = 5 * rowH + 40;
