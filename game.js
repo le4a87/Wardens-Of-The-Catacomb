@@ -492,27 +492,14 @@ function waitForImageSource(src) {
   });
 }
 
-function waitForAudioElement(audio) {
-  return new Promise((resolve) => {
-    if (!audio) {
-      resolve();
-      return;
-    }
-    if ((audio.readyState || 0) >= 2 || audio.error) {
-      resolve();
-      return;
-    }
-    const finish = () => {
-      audio.removeEventListener("loadeddata", finish);
-      audio.removeEventListener("canplaythrough", finish);
-      audio.removeEventListener("error", finish);
-      resolve();
-    };
-    audio.addEventListener("loadeddata", finish, { once: true });
-    audio.addEventListener("canplaythrough", finish, { once: true });
-    audio.addEventListener("error", finish, { once: true });
+function warmAudioElement(audio) {
+  if (!audio) return;
+  if ((audio.readyState || 0) >= 2 || audio.error) return;
+  try {
     if (typeof audio.load === "function") audio.load();
-  });
+  } catch {
+    // Ignore preload failures and let playback recover on interaction.
+  }
 }
 
 function preloadStartupAssets() {
@@ -522,14 +509,15 @@ function preloadStartupAssets() {
       .map((img) => img?.getAttribute("src") || img?.currentSrc || "")
       .filter(Boolean)
   ]);
+  return Promise.all(Array.from(imageSources, (src) => waitForImageSource(src)));
+}
+
+function warmStartupAudio() {
   const startupAudios = [
     ...((Array.isArray(music?.tracks) ? music.tracks : []).map((track) => track?.audio).filter(Boolean)),
     music?.deathAudio
   ].filter(Boolean);
-  return Promise.all([
-    ...Array.from(imageSources, (src) => waitForImageSource(src)),
-    ...startupAudios.map((audio) => waitForAudioElement(audio))
-  ]);
+  for (const audio of startupAudios) warmAudioElement(audio);
 }
 
 if (playerNameInput) {
@@ -1059,6 +1047,30 @@ if (typeof window !== "undefined") {
         enemyHpAfter: nearest.hp || 0
       };
     }
+    if (action === "grantGold") {
+      const amount = Number.isFinite(payload.amount) ? Math.max(0, Math.floor(payload.amount)) : 0;
+      if (game.networkEnabled && netClient && typeof netClient.sendAction === "function") {
+        netClient.sendAction({ kind: "debugGrantProgress", goldDelta: amount });
+        return { ok: true, sent: true, goldDelta: amount };
+      }
+      game.gold = Math.max(0, (Number.isFinite(game.gold) ? game.gold : 0) + amount);
+      return {
+        ok: true,
+        gold: game.gold
+      };
+    }
+    if (action === "grantSkillPoints") {
+      const amount = Number.isFinite(payload.amount) ? Math.max(0, Math.floor(payload.amount)) : 0;
+      if (game.networkEnabled && netClient && typeof netClient.sendAction === "function") {
+        netClient.sendAction({ kind: "debugGrantProgress", skillPointDelta: amount });
+        return { ok: true, sent: true, skillPointDelta: amount };
+      }
+      game.skillPoints = Math.max(0, (Number.isFinite(game.skillPoints) ? game.skillPoints : 0) + amount);
+      return {
+        ok: true,
+        skillPoints: game.skillPoints
+      };
+    }
     return { ok: false, error: `unknown action: ${action}` };
   }
 
@@ -1250,14 +1262,25 @@ if (typeof window !== "undefined") {
           statsPanelOpen: !!game.statsPanelOpen,
           gold: Number.isFinite(game.gold) ? game.gold : 0,
           skillPoints: Number.isFinite(game.skillPoints) ? game.skillPoints : 0,
+          refundCount: Number.isFinite(game.refundCount) ? game.refundCount : 0,
+          spentSkillPoints: typeof game.getSpentSkillPointCount === "function" ? game.getSpentSkillPointCount() : 0,
+          refundCost: typeof game.getSkillRefundCost === "function" ? game.getSkillRefundCost() : 0,
           shopButton: game.uiRects?.shopButton || null,
           skillTreeButton: game.uiRects?.skillTreeButton || null,
           shopClose: game.uiRects?.shopClose || null,
           skillTreeClose: game.uiRects?.skillTreeClose || null,
+          refundButton: game.uiRects?.skillRefundButton || null,
           shopItems: Array.isArray(game.uiRects?.shopItems)
             ? game.uiRects.shopItems.slice(0, 4).map((entry) => ({
                 key: entry.key,
                 rect: entry.rect
+              }))
+            : [],
+          skillTreeNodes: Array.isArray(game.uiRects?.skillTreeNodes)
+            ? game.uiRects.skillTreeNodes.map((entry) => ({
+                key: entry?.key || "",
+                kind: entry?.kind || "",
+                rect: entry?.rect || null
               }))
             : [],
           skillNodes: {
@@ -1271,6 +1294,16 @@ if (typeof window !== "undefined") {
             deathBolt: game.uiRects?.skillDeathBoltNode || null,
             explodingDeath: game.uiRects?.skillExplodingDeathNode || null
           },
+          skillLevels: Object.fromEntries(
+            Object.entries(game.skills || {}).map(([key, skill]) => [key, Number.isFinite(skill?.points) ? skill.points : 0])
+          ),
+          talentLevels: Object.fromEntries(
+            [
+              ...Object.entries(game.rangerTalents || {}),
+              ...Object.entries(game.warriorTalents || {}),
+              ...Object.entries(game.necromancerTalents || {})
+            ].map(([key, talent]) => [key, Number.isFinite(talent?.points) ? talent.points : 0])
+          ),
           recentUiClicks: Array.isArray(game.input?.mouse?.recentUiLeftClicks)
             ? game.input.mouse.recentUiLeftClicks.slice(-8)
             : [],
@@ -2435,10 +2468,20 @@ renderLeaderboardModal();
 renderMenuScreen();
 window.addEventListener("resize", syncMenuScrollIndicator);
 window.addEventListener("scroll", syncMenuScrollIndicator, { passive: true });
-startSplashScreen();
-preloadStartupAssets().finally(() => {
+warmStartupAudio();
+if (isDevMode) {
+  splashActive = false;
+  splashDismissed = true;
+  setCanvasVisible(false);
+  showModeSelect();
   splashPromptReady = true;
-});
+  music.playMenuMusic();
+} else {
+  startSplashScreen();
+  preloadStartupAssets().finally(() => {
+    splashPromptReady = true;
+  });
+}
 
 const networkLobbyTick = () => {
   if (menuState.screen === "lobby") renderNetworkLobby();

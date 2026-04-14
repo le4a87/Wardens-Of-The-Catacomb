@@ -70,6 +70,10 @@ This document summarizes the current high-level architecture and validation work
   - `players` for the full active roster
   - room/meta ownership and phase fields
   - per-player progression/build state needed for multiplayer HUD and ability correctness
+- Per-player skill refund state now moves through the same authoritative pipeline:
+  - `refundCount` is cloned with player context
+  - spend/refund actions mutate only the acting player's authoritative build state
+  - post-action active-player resync happens immediately so the next snapshot does not overwrite freshly updated refund UI
 - Remote players now participate in:
   - movement
   - hostile targeting and damage intake
@@ -110,6 +114,8 @@ This document summarizes the current high-level architecture and validation work
 - `validate:solo-xp`
   - verifies that single-player kill rewards still grant XP/score
   - now fills the required local player handle, uses the solo character-select path, and spawns a deterministic hostile target so the check is not floor-generation dependent
+- `validate:skill-refund`
+  - verifies local skill spend plus full refund flow, including gold cost, point restoration, and refund-count updates
 - `validate:network-join`
   - verifies real browser room join, authoritative spawn adoption, and post-join movement
 - `validate:network-combat`
@@ -126,6 +132,8 @@ This document summarizes the current high-level architecture and validation work
   - runs the audio validator in explicit focus-cycle mode and records focus/visibility telemetry; use `--headed` when a real desktop session is available and strict blur/focus assertions are desired
 - `validate:network-ui`
   - verifies that controller clients can open and interact with skill/shop UI paths in live network sessions
+- `validate:network-refund`
+  - verifies multiplayer-authoritative refund actions, snapshot propagation, and acting-player build-state resync
 - `validate:network-pause`
   - verifies pause-owner shop flow pauses the room without opening overlays on other clients
   - checks that the passive `<handle> paused the game.` banner clears when the pause owner unpauses
@@ -158,6 +166,8 @@ This document summarizes the current high-level architecture and validation work
 - Repo scripts were updated to resolve from the project root in UNC-path environments.
 - `server/perfRunner.js` was hardened to resolve its root from `import.meta.url`, matching the other tooling fixes.
 - `server/run-validation-suite.js` now groups the growing validation surface into maintainable suites instead of requiring every workflow step to list individual commands manually.
+- Shared browser/network harness helpers now live under `server/validation/`, which keeps individual validators below the LOC gate while preserving a common startup, port-probing, and failure-capture path.
+- `?dev=1` now bypasses the splash and goes straight to Mode Select so local playtesting and `validate:dev-start` are not blocked by browser-specific media preload timing.
 - The perf baselines were refreshed from post-fix runs on 2026-03-17/18, so future comparisons should use the current baseline files instead of the earlier pre-correction artifacts.
 - `server/validate-floor-boss.js` now validates the generalized floor-boss flow rather than assuming only the necromancer boss exists.
 - `server/validate-dev-start.js` now covers higher-floor local dev starts so larger-floor spawn regressions are caught by automation instead of manual testing.

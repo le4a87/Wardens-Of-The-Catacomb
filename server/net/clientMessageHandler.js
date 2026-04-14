@@ -6,6 +6,10 @@ export function handleActionMessage(room, clientId, action) {
   const sim = room.sim;
   const isPauseOwner = room.pauseOwnerId === clientId;
   const playerAlive = (sim.player?.health || 0) > 0;
+  const syncPauseOwnerActiveState = () => {
+    if (room.phase !== "active" || typeof room.syncPrimaryActivePlayerFromSim !== "function") return;
+    room.syncPrimaryActivePlayerFromSim();
+  };
   if (kind === "escape") {
     if (!isPauseOwner) return;
     if (sim.shopOpen) {
@@ -66,6 +70,7 @@ export function handleActionMessage(room, clientId, action) {
     if (isPauseOwner) {
       if (!playerAlive) return;
       sim.buyUpgrade(action.key);
+      syncPauseOwnerActiveState();
       return;
     }
     if (room.phase !== "active" || typeof room.performActionForActivePlayer !== "function") return;
@@ -93,12 +98,47 @@ export function handleActionMessage(room, clientId, action) {
     if (isPauseOwner) {
       if (!playerAlive) return;
       sim.spendSkillPoint(action.key);
+      syncPauseOwnerActiveState();
       return;
     }
     if (room.phase !== "active" || typeof room.performActionForActivePlayer !== "function") return;
     room.performActionForActivePlayer(clientId, (context) => {
       if (typeof context.spendSkillPoint !== "function") return false;
       return context.spendSkillPoint(action.key);
+    });
+    return;
+  }
+  if (kind === "refundSkills") {
+    if (isPauseOwner) {
+      if (!playerAlive) return;
+      if (typeof sim.refundAllSkills !== "function") return;
+      sim.refundAllSkills();
+      syncPauseOwnerActiveState();
+      return;
+    }
+    if (room.phase !== "active" || typeof room.performActionForActivePlayer !== "function") return;
+    room.performActionForActivePlayer(clientId, (context) => {
+      if (typeof context.refundAllSkills !== "function") return false;
+      return context.refundAllSkills();
+    });
+    return;
+  }
+  if (kind === "debugGrantProgress") {
+    const goldDelta = Number.isFinite(action.goldDelta) ? Math.max(0, Math.floor(action.goldDelta)) : 0;
+    const skillPointDelta = Number.isFinite(action.skillPointDelta) ? Math.max(0, Math.floor(action.skillPointDelta)) : 0;
+    if (goldDelta <= 0 && skillPointDelta <= 0) return;
+    if (isPauseOwner) {
+      if (!playerAlive) return;
+      sim.gold = Math.max(0, (Number.isFinite(sim.gold) ? sim.gold : 0) + goldDelta);
+      sim.skillPoints = Math.max(0, (Number.isFinite(sim.skillPoints) ? sim.skillPoints : 0) + skillPointDelta);
+      syncPauseOwnerActiveState();
+      return;
+    }
+    if (room.phase !== "active" || typeof room.performActionForActivePlayer !== "function") return;
+    room.performActionForActivePlayer(clientId, (context) => {
+      context.gold = Math.max(0, (Number.isFinite(context.gold) ? context.gold : 0) + goldDelta);
+      context.skillPoints = Math.max(0, (Number.isFinite(context.skillPoints) ? context.skillPoints : 0) + skillPointDelta);
+      return true;
     });
   }
 }

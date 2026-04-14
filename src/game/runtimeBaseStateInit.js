@@ -1,9 +1,30 @@
 import { DEFAULT_BIOME_KEY, getBiomeDefinition } from "../biomes.js";
-import { createNecromancerBeamState, createNecromancerRuntimeState, createPlayerState, createRangerRuntimeState, createRunStats, createSkillState, createUpgradeState, createWarriorRuntimeState } from "./runtimeBaseStateFactories.js";
+import * as runtimeBaseStateFactories from "./runtimeBaseStateFactories.js";
 import { createRangerTalentState } from "./rangerTalentTree.js";
 import { createWarriorTalentState } from "./warriorTalentTree.js";
 import { createNecromancerTalentState } from "./necromancerTalentTree.js";
 import { createConsumableInventoryState, rollConsumableShopStock } from "./consumables.js";
+
+const {
+  createNecromancerBeamState,
+  createPlayerState,
+  createRangerRuntimeState,
+  createRunStats,
+  createSkillState,
+  createUpgradeState,
+  createWarriorRuntimeState
+} = runtimeBaseStateFactories;
+
+const createNecromancerRuntimeState = typeof runtimeBaseStateFactories.createNecromancerRuntimeState === "function"
+  ? runtimeBaseStateFactories.createNecromancerRuntimeState
+  : () => ({
+      vigorTimer: 0,
+      vigorBeamTimer: 0,
+      vigorHealPool: 0,
+      vigorTotalDuration: 0,
+      harvesterBonusPct: 0,
+      tempHp: 0
+    });
 
 export function initializeRuntimeBaseState(game, { classType, classSpec, config }) {
   game.debugBossOverride = "auto";
@@ -35,6 +56,7 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.skillTreeOpen = false;
   game.time = 0;
   game.skillPoints = 0;
+  game.refundCount = 0;
   game.statsPanelOpen = false;
   game.statsPanelView = "run";
   game.statsPanelPausedGame = false;

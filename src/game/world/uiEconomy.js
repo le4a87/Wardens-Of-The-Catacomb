@@ -162,6 +162,53 @@ export function getShopItems(game) {
     });
 }
 
+function resetPointTree(tree) {
+  if (!tree || typeof tree !== "object") return;
+  for (const node of Object.values(tree)) {
+    if (!node || !Number.isFinite(node.points)) continue;
+    node.points = 0;
+  }
+}
+
+function clearRefundedSkillState(game) {
+  game.warriorMomentumTimer = 0;
+  game.warriorRageActiveTimer = 0;
+  game.warriorRageCooldownTimer = 0;
+  game.warriorRageVictoryRushPool = 0;
+  game.warriorRageVictoryRushTimer = 0;
+  if (!game.necromancerBeam || typeof game.necromancerBeam !== "object") {
+    game.necromancerBeam = {};
+  }
+  game.necromancerBeam.active = false;
+  game.necromancerBeam.targetEnemy = null;
+  game.necromancerBeam.targetId = null;
+  game.necromancerBeam.targetX = 0;
+  game.necromancerBeam.targetY = 0;
+  game.necromancerBeam.progress = 0;
+  game.necromancerBeam.healTickTimer = 0;
+}
+
+export function refundAllSkills(game) {
+  if (!game || typeof game.getSpentSkillPointCount !== "function" || typeof game.getSkillRefundCost !== "function") return false;
+  const spent = game.getSpentSkillPointCount();
+  if (spent <= 0) return false;
+  const cost = game.getSkillRefundCost(spent, game.refundCount);
+  if (!Number.isFinite(cost) || cost < 0 || game.gold < cost) return false;
+  game.gold -= cost;
+  game.skillPoints += spent;
+  game.refundCount = Math.max(0, Number.isFinite(game.refundCount) ? Math.floor(game.refundCount) : 0) + 1;
+  if (typeof game.recordRunGoldSpent === "function") game.recordRunGoldSpent(cost);
+  resetPointTree(game.skills);
+  resetPointTree(game.rangerTalents);
+  resetPointTree(game.warriorTalents);
+  resetPointTree(game.necromancerTalents);
+  clearRefundedSkillState(game);
+  if (typeof game.spawnFloatingText === "function" && game.player) {
+    game.spawnFloatingText(game.player.x, game.player.y - 26, `Skills refunded -${cost}g`, "#f0d28a", 0.95, 16);
+  }
+  return true;
+}
+
 export function toggleShop(game, open) {
   if (game.gameOver || (Number.isFinite(game?.player?.health) && game.player.health <= 0)) return;
   game.shopOpen = typeof open === "boolean" ? open : !game.shopOpen;
@@ -379,6 +426,10 @@ export function handleUiClicks(game) {
       continue;
     }
     if (!playerAlive) continue;
+    if (pointInRect(game, click.x, click.y, game.uiRects.skillRefundButton)) {
+      game.refundAllSkills();
+      continue;
+    }
     const skillNodeRects = Array.isArray(game.uiRects.skillTreeNodes) ? game.uiRects.skillTreeNodes : [];
     let handledSkillNode = false;
     for (const node of skillNodeRects) {

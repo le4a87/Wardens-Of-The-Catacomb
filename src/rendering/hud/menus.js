@@ -4,6 +4,7 @@ import { drawWarriorSkillTreeMenu } from "./warriorSkillTreeMenu.js";
 import { drawNecromancerSkillTreeMenu } from "./necromancerSkillTreeMenu.js";
 
 export function drawSkillTreeMenu(renderer, game, layout) {
+  game.uiRects.skillRefundButton = null;
   const ctx = renderer.ctx;
   const menuW = layout.isAndroid ? Math.min(layout.playW - 18, 560) : 520;
   const menuH = Math.min(renderer.canvas.height - (layout.isAndroid ? 18 : 30), 560);

@@ -51,7 +51,9 @@ export function dismissSplash({
   setSplashDismissed(true);
   setSplashActive(false);
   windowObject.removeEventListener("keydown", handleSplashKeydown);
-  windowObject.removeEventListener("pointerdown", handleSplashPointerDown);
+  if (typeof handleSplashPointerDown === "function") {
+    windowObject.removeEventListener("pointerdown", handleSplashPointerDown);
+  }
   if (layout) layout.classList.remove("is-splash");
   if (splashRaf) cancelFrame(splashRaf);
   clearSplashRender();
@@ -99,6 +101,8 @@ export function startSplashScreen({
   music.playMenuMusic({ fadeInMs: fadeMs });
   const splashRaf = requestFrame(drawSplash);
   windowObject.addEventListener("keydown", handleSplashKeydown);
-  windowObject.addEventListener("pointerdown", handleSplashPointerDown, { passive: true });
+  if (typeof handleSplashPointerDown === "function") {
+    windowObject.addEventListener("pointerdown", handleSplashPointerDown, { passive: true });
+  }
   return { splashStartedAt: now, splashRaf };
 }
