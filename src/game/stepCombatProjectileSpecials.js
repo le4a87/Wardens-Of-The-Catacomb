@@ -1,5 +1,20 @@
 import { vecLength } from "../utils.js";
 
+function spawnFleshBallBloodPool(game, x, y, ownerId = null) {
+  if (!game || !Array.isArray(game.fireZones)) return;
+  game.fireZones.push({
+    x,
+    y,
+    radius: (game.config.enemy.golemFleshBallPoolRadiusTiles || 1.2) * (game.config.map?.tile || 32),
+    life: game.config.enemy.golemFleshBallPoolDuration || 4.2,
+    zoneType: "bloodPool",
+    ownerId,
+    damageMultiplier: game.config.enemy.golemFleshBallPoolDamageMultiplier || 0.26,
+    damageMin: game.config.enemy.golemBoulderDamageMin,
+    damageMax: game.config.enemy.golemBoulderDamageMax
+  });
+}
+
 export function resolveSpecialProjectileCollision({
   game,
   projectile,
@@ -139,6 +154,42 @@ export function resolveSpecialProjectileCollision({
     }
     return true;
   }
+  if (projectile.projectileType === "fleshBall") {
+    let hit = false;
+    for (const br of activeBreakables) {
+      if (vecLength(projectile.x - br.x, projectile.y - br.y) >= (br.size + projectile.size) * 0.5) continue;
+      br.hp = 0;
+      hit = true;
+      break;
+    }
+    if (!hit) {
+      for (const player of getLivingPlayers()) {
+        const playerRadius = typeof game.getPlayerEnemyCollisionRadiusFor === "function" ? game.getPlayerEnemyCollisionRadiusFor(player) : playerEnemyRadius;
+        if (vecLength(projectile.x - player.x, projectile.y - player.y) >= playerRadius + projectile.size * 0.5) continue;
+        if (tryReflect(player)) return true;
+        const rawDamage = game.rollEnemyContactDamage({ damageMin: projectile.damageMin, damageMax: projectile.damageMax });
+        damagePlayer(player, rawDamage * game.getEnemyDamageScale(), projectile.damageType || "physical");
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) {
+      for (const enemy of activeEnemies) {
+        if (!game.isEnemyFriendlyToPlayer || !game.isEnemyFriendlyToPlayer(enemy)) continue;
+        if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+        if (vecLength(projectile.x - enemy.x, projectile.y - enemy.y) >= (enemy.size + projectile.size) * 0.5) continue;
+        const rawDamage = game.rollEnemyContactDamage({ damageMin: projectile.damageMin, damageMax: projectile.damageMax });
+        game.applyEnemyDamage(enemy, rawDamage * game.getEnemyDamageScale(), projectile.damageType || "physical", projectile.ownerId || null);
+        hit = true;
+        break;
+      }
+    }
+    if (hit) {
+      spawnFleshBallBloodPool(game, projectile.x, projectile.y, projectile.ownerId || null);
+      projectile.life = 0;
+    }
+    return true;
+  }
   return false;
 }
 
@@ -169,9 +220,14 @@ export function finalizeProjectilesAndTransientState(game) {
       }
       bullet.life = 0;
     }
+    if (bullet.projectileType === "fleshBall" && bullet.life > 0 && game.isWallAt(bullet.x, bullet.y, false)) {
+      spawnFleshBallBloodPool(game, bullet.x, bullet.y, bullet.ownerId || null);
+      bullet.life = 0;
+    }
     if (
       bullet.projectileType !== "deathBolt" &&
       bullet.projectileType !== "sonyaFireball" &&
+      bullet.projectileType !== "fleshBall" &&
       bullet.life > 0 &&
       (bullet.remainingRicochets || 0) > 0 &&
       game.isWallAt(bullet.x, bullet.y, false)

@@ -9,6 +9,8 @@ export {
   spawnSkeletonWarrior,
   spawnNecromancer,
   spawnMinotaur,
+  spawnGolemBoss,
+  spawnShardling,
   spawnSonyaBoss,
   spawnLeprechaunBoss,
   spawnSkeleton
@@ -24,6 +26,8 @@ export {
   updateSkeletonWarrior,
   updateNecromancer,
   updateMinotaur,
+  updateGolemBoss,
+  updateShardling,
   updateSonyaBoss,
   updateLeprechaunBoss
 } from "./enemyAi.js";
@@ -46,5 +50,6 @@ export {
   dropArmorLoot,
   dropNecromancerLoot,
   dropMinotaurLoot,
+  dropGolemLoot,
   dropLeprechaunLoot
 } from "./enemyRewards.js";

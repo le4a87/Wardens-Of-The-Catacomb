@@ -4,6 +4,7 @@ export const FLOOR_BOSS_OVERRIDE_OPTIONS = [
   { value: FLOOR_BOSS_OVERRIDE_AUTO, label: "Auto", hint: "Use the normal boss rules and seasonal chance." },
   { value: "necromancer", label: "Necromancer", hint: "Odd floors only." },
   { value: "minotaur", label: "Minotaur", hint: "Even floors only." },
+  { value: "golem", label: "Golem", hint: "Floor 3 only." },
   { value: "sonya", label: "Sonya", hint: "Floor 1 only." },
   { value: "leprechaun", label: "Leprechaun", hint: "Floor 1 only." }
 ];
@@ -21,6 +22,7 @@ export function isFloorBossVariantAllowedOnFloor(variant, floor = 1) {
   const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
   const normalized = normalizeFloorBossOverride(variant);
   if (normalized === FLOOR_BOSS_OVERRIDE_AUTO) return true;
+  if (normalized === "golem") return safeFloor === 3;
   if (normalized === "minotaur") return safeFloor % 2 === 0;
   if (normalized === "necromancer") return safeFloor % 2 === 1;
   return safeFloor === 1;

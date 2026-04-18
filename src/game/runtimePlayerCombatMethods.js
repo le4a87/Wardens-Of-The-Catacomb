@@ -1,6 +1,7 @@
 import { vecLength } from "../utils.js";
 import {
   dropArmorLoot as dropArmorLootEntity,
+  dropGolemLoot as dropGolemLootEntity,
   dropMinotaurLoot as dropMinotaurLootEntity,
   dropNecromancerLoot as dropNecromancerLootEntity,
   dropTreasureBag as dropTreasureBagEntity,
@@ -78,6 +79,10 @@ export const runtimePlayerCombatMethods = {
 
   dropMinotaurLoot(x, y) {
     dropMinotaurLootEntity(this, x, y);
+  },
+
+  dropGolemLoot(x, y) {
+    dropGolemLootEntity(this, x, y);
   },
 
   fire(dx, dy) {

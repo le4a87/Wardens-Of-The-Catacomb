@@ -40,8 +40,12 @@ export function xpFromEnemy(game, enemy) {
       ? 140
       : enemy.type === "necromancer" || enemy.type === "sonya"
       ? 90
+      : enemy.type === "golem"
+      ? 140
       : enemy.type === "minotaur"
       ? 120
+      : enemy.type === "shardling"
+      ? 9
       : enemy.type === "skeleton"
       ? 10
       : enemy.type === "prisoner"
@@ -178,6 +182,31 @@ export function dropMinotaurLoot(game, x, y) {
     type: "health",
     x: x - 16,
     y: y - 8,
+    size: 12,
+    amount: healthAmount,
+    life: game.config.drops.life + 4
+  });
+}
+
+export function dropGolemLoot(game, x, y) {
+  const amountMult = game.getGoldDropAmountMultiplier ? game.getGoldDropAmountMultiplier() : 1;
+  const healthAmount = typeof game.getHealthPickupAmount === "function" ? game.getHealthPickupAmount() : 1;
+  const c = game.config.enemy;
+  const baseAmount =
+    Math.min(c.golemRewardGoldMin, c.golemRewardGoldMax) +
+    Math.floor(Math.random() * (Math.abs(c.golemRewardGoldMax - c.golemRewardGoldMin) + 1));
+  game.drops.push({
+    type: "gold_bag",
+    x,
+    y,
+    size: 24,
+    amount: Math.max(1, Math.floor(baseAmount * amountMult)),
+    life: game.config.drops.life + 12
+  });
+  game.drops.push({
+    type: "health",
+    x: x + 14,
+    y: y - 12,
     size: 12,
     amount: healthAmount,
     life: game.config.drops.life + 4

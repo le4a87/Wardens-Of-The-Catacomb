@@ -25,6 +25,8 @@ import {
   spawnSkeletonWarrior,
   spawnNecromancer,
   spawnMinotaur,
+  spawnGolemBoss,
+  spawnShardling,
   spawnSonyaBoss,
   spawnLeprechaunBoss,
   spawnSkeleton,
@@ -159,6 +161,14 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   spawnMinotaur(x, y) {
     return spawnMinotaur(this, x, y);
+  }
+
+  spawnGolemBoss(x, y, options) {
+    return spawnGolemBoss(this, x, y, options);
+  }
+
+  spawnShardling(x, y) {
+    return spawnShardling(this, x, y);
   }
 
   spawnSonyaBoss(x, y) {

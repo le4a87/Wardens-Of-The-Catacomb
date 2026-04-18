@@ -9,6 +9,8 @@ import {
   updateSkeletonWarrior,
   updateNecromancer,
   updateMinotaur,
+  updateGolemBoss,
+  updateShardling,
   updateSonyaBoss,
   updateLeprechaunBoss
 } from "./enemyAi.js";
@@ -25,6 +27,8 @@ const DEFAULT_TACTIC_KEY_BY_TYPE = {
   skeleton: "skeleton",
   mummy: "mummy",
   minotaur: "minotaur",
+  golem: "golem",
+  shardling: "shardling",
   sonya: "sonya",
   leprechaun: "leprechaun"
 };
@@ -92,6 +96,16 @@ const TACTIC_DEFINITIONS = {
     key: "minotaur",
     label: "Rush Bruiser",
     update: updateMinotaur
+  },
+  golem: {
+    key: "golem",
+    label: "Fracture Juggernaut",
+    update: updateGolemBoss
+  },
+  shardling: {
+    key: "shardling",
+    label: "Crystal Swarm",
+    update: updateShardling
   },
   sonya: {
     key: "sonya",

@@ -1,11 +1,11 @@
 import { clamp } from "../utils.js";
 
 export const runtimeBasePlacementMethods = {
-  findNearestSafePoint(x, y, maxRadiusTiles = 8) {
+  findNearestSafePoint(x, y, maxRadiusTiles = 8, radiusOverride = null) {
     const tile = this.config.map.tile;
     const tx = Math.floor(x / tile);
     const ty = Math.floor(y / tile);
-    const radius = Math.max(4, (this.player?.size || tile * 0.6) * 0.5);
+    const radius = Math.max(4, Number.isFinite(radiusOverride) ? radiusOverride : (this.player?.size || tile * 0.6) * 0.5);
     const isSafe = (cx, cy) => {
       const px = cx * tile + tile * 0.5;
       const py = cy * tile + tile * 0.5;
