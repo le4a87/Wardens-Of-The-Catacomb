@@ -45,6 +45,7 @@ export const runtimeFloorBossMethods = {
     const forcedVariant = getForcedFloorBossVariant(safeFloor, this.debugBossOverride);
     if (forcedVariant) return forcedVariant;
     const bossType = this.getFloorBossType(safeFloor);
+    if (bossType === "golem") return "golem";
     if (bossType === "minotaur") return "minotaur";
     if (safeFloor === 1 && this.isHaleyBirthday()) return "sonya";
     if (safeFloor === 1 && this.isStPatricksWeek()) {
@@ -63,6 +64,7 @@ export const runtimeFloorBossMethods = {
   getFloorBossDisplayName(variant = this.floorBoss?.variant || this.getFloorBossVariant()) {
     if (variant === "sonya") return "Sonya";
     if (variant === "leprechaun") return "Leprechaun";
+    if (variant === "golem") return "Flesh Golem";
     if (variant === "minotaur") return "Minotaur";
     return "Necromancer";
   },
@@ -118,10 +120,12 @@ export const runtimeFloorBossMethods = {
 
   getFloorBossType(floor = this.floor) {
     const safeFloor = Number.isFinite(floor) ? Math.max(1, Math.floor(floor)) : 1;
+    if (safeFloor === 3) return "golem";
     return safeFloor % 2 === 0 ? "minotaur" : "necromancer";
   },
 
   getFloorBossName(type = this.getFloorBossType()) {
+    if (type === "golem") return "Flesh Golem";
     return type === "minotaur" ? "Minotaur" : "Necromancer";
   },
 
@@ -204,8 +208,26 @@ export const runtimeFloorBossMethods = {
     return dx * dx + dy * dy <= touchRadius * touchRadius;
   },
 
+  getActiveFloorBossEnemies() {
+    return (this.enemies || []).filter((enemy) => enemy && enemy.isFloorBoss && enemy.hp > 0);
+  },
+
   getActiveFloorBossEnemy() {
-    return (this.enemies || []).find((enemy) => enemy && enemy.isFloorBoss && enemy.hp > 0) || null;
+    const bosses = typeof this.getActiveFloorBossEnemies === "function"
+      ? this.getActiveFloorBossEnemies()
+      : (this.enemies || []).filter((enemy) => enemy && enemy.isFloorBoss && enemy.hp > 0);
+    if (!Array.isArray(bosses) || bosses.length === 0) return null;
+    if (!this.player) return bosses[0];
+    let best = bosses[0];
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const boss of bosses) {
+      const dist = Math.hypot((boss.x || 0) - this.player.x, (boss.y || 0) - this.player.y);
+      if (dist < bestDist) {
+        best = boss;
+        bestDist = dist;
+      }
+    }
+    return best;
   },
 
   setFloorBossEncounterPhase(encounterPhase) {
@@ -294,6 +316,10 @@ export const runtimeFloorBossMethods = {
         if (Number.isFinite(timer)) return `Enraged. Defeat him in ${Math.ceil(timer)}s or die.`;
         return "The leprechaun is enraged. Watch the punches and lucky charms.";
       }
+      if (boss.variant === "golem") {
+        if (boss.encounterPhase === "split") return "The flesh golem ruptured. Two smaller hulks remain.";
+        if (boss.encounterPhase === "collapse") return "The dungeon is collapsing. Move off orange warning tiles.";
+      }
       if (activeBoss) {
         const dx = activeBoss.x - this.player.x;
         const dy = activeBoss.y - this.player.y;
@@ -301,12 +327,16 @@ export const runtimeFloorBossMethods = {
         const horizontal = Math.abs(dx) >= this.config.map.tile * 0.75 ? (dx > 0 ? "E" : "W") : "";
         const vertical = Math.abs(dy) >= this.config.map.tile * 0.75 ? (dy > 0 ? "S" : "N") : "";
         const dir = `${vertical}${horizontal}` || "HERE";
-        const hint = boss.bossType === "minotaur"
+        const hint = boss.bossType === "golem"
+          ? "Watch for hands, blood pools, and collapse markers."
+          : boss.bossType === "minotaur"
           ? "Avoid charges and stomp range."
           : "Avoid volleys and skeleton summons.";
         return `${bossName} ${distTiles} tiles ${dir}. ${hint}`;
       }
-      return boss.bossType === "minotaur"
+      return boss.bossType === "golem"
+        ? "Mini-boss active. Dodge flesh bombs and move off collapse warnings."
+        : boss.bossType === "minotaur"
         ? "Mini-boss active. Avoid charges and stomp range."
         : "Mini-boss active. Avoid volleys and skeleton summons.";
     }

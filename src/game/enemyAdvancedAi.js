@@ -13,6 +13,51 @@ import {
   moveEnemyTowardPoint
 } from "./enemyAiShared.js";
 
+function applyContactHitToTarget(game, enemy, target, ownerId = null, damageMultiplier = 1, damageType = "physical") {
+  if (!game || !enemy || !target) return false;
+  const rawDamage = game.rollEnemyContactDamage(enemy) * Math.max(0.1, damageMultiplier);
+  const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
+  if (game.isPlayerEntity && game.isPlayerEntity(target)) {
+    if ((target.hitCooldown || 0) > 0) return false;
+    target.hitCooldown = 1.0;
+    game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, damageType), damageType);
+    return true;
+  }
+  if ((target.hp || 0) <= 0) return false;
+  game.applyEnemyDamage(target, scaledEnemyDamage, damageType, ownerId);
+  return true;
+}
+
+function spawnGolemCollapseWarning(game, target, ownerId = "golem") {
+  if (!game || !target || !Array.isArray(game.fireZones)) return false;
+  const tile = game.config?.map?.tile || 32;
+  const warningDuration = Math.max(0.8, game.config.enemy.golemCollapseWarningDuration || 1.9);
+  const impactLife = Math.max(0.15, game.config.enemy.golemCollapseImpactLife || 0.4);
+  const tx = Math.floor((target.x || 0) / tile);
+  const ty = Math.floor((target.y || 0) / tile);
+  const x = tx * tile + tile * 0.5;
+  const y = ty * tile + tile * 0.5;
+  if (game.fireZones.some((zone) => zone.zoneType === "golemCollapseWarning" && Math.abs((zone.x || 0) - x) < 2 && Math.abs((zone.y || 0) - y) < 2)) {
+    return false;
+  }
+  game.fireZones.push({
+    x,
+    y,
+    radius: tile * 0.5,
+    size: tile,
+    life: warningDuration + impactLife,
+    totalLife: warningDuration + impactLife,
+    zoneType: "golemCollapseWarning",
+    ownerId,
+    strikeAt: warningDuration,
+    impactLife,
+    damageMin: game.config.enemy.golemCollapseDamageMin,
+    damageMax: game.config.enemy.golemCollapseDamageMax,
+    struck: false
+  });
+  return true;
+}
+
 function findControlledSkeletonGuardTarget(game, enemy, owner) {
   if (!game || !enemy || !owner) return null;
   const tile = game.config?.map?.tile || 32;
@@ -119,6 +164,145 @@ function updateFriendlySkeletonBodyguard(game, enemy, dt, speedScale, attackRang
     moveEnemyTowardPoint(game, enemy, anchor, dt, Math.max(0.92, speedScale), Math.max(6, tile * 0.18));
   }
   return true;
+}
+
+export function updateShardling(game, enemy, dt, speedScale) {
+  const ownerId = getEnemyAttackOwnerId(game, enemy);
+  const tile = game.config?.map?.tile || 32;
+  const attackRange = (game.config.enemy.shardlingAttackRangeTiles || 0.95) * tile;
+  const target = getPriorityTarget(game, enemy, tile * 10);
+  const dx = target.x - enemy.x;
+  const dy = target.y - enemy.y;
+  const dist = vecLength(dx, dy) || 1;
+  enemy.dirX = dx / dist;
+  enemy.dirY = dy / dist;
+  enemy.contactAttackCooldown = Math.max(0, (enemy.contactAttackCooldown || 0) - dt);
+  if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, dist <= attackRange ? "slice" : "rush");
+  if (dist <= attackRange && (enemy.contactAttackCooldown || 0) <= 0) {
+    if (applyContactHitToTarget(game, enemy, target, ownerId, 1, "physical")) {
+      enemy.contactAttackCooldown = game.config.enemy.shardlingAttackCooldown || 0.46;
+      return;
+    }
+  }
+  moveEnemyTowardPoint(game, enemy, target, dt, Math.max(1.12, speedScale), Math.max(4, attackRange * 0.45));
+}
+
+export function updateGolemBoss(game, enemy, dt, speedScale) {
+  const ownerId = getEnemyAttackOwnerId(game, enemy);
+  const tile = game.config?.map?.tile || 32;
+  const target = getPriorityTarget(game, enemy, tile * 14);
+  const dx = target.x - enemy.x;
+  const dy = target.y - enemy.y;
+  const dist = vecLength(dx, dy) || 1;
+  const dirX = dx / dist;
+  const dirY = dy / dist;
+  enemy.dirX = dirX;
+  enemy.dirY = dirY;
+  const meleeRange = (game.config.enemy.golemMeleeRangeTiles || 2) * tile;
+  const boulderRange = (game.config.enemy.golemBoulderRangeTiles || 7.5) * tile;
+  const collapseThreshold = (enemy.maxHp || 1) * 0.5;
+  const prevMeleeWindup = Number.isFinite(enemy.meleeWindup) ? enemy.meleeWindup : 0;
+  const prevBoulderWindup = Number.isFinite(enemy.boulderWindup) ? enemy.boulderWindup : 0;
+  enemy.contactAttackCooldown = Math.max(0, (enemy.contactAttackCooldown || 0) - dt);
+  enemy.meleeWindup = Math.max(0, prevMeleeWindup - dt);
+  enemy.boulderCooldown = Math.max(0, (enemy.boulderCooldown || 0) - dt);
+  enemy.boulderWindup = Math.max(0, prevBoulderWindup - dt);
+  enemy.fractureSpawnCooldown = Math.max(0, (enemy.fractureSpawnCooldown || 0) - dt);
+  enemy.collapseCooldown = Math.max(0, (enemy.collapseCooldown || 0) - dt);
+  enemy.movementSampleCooldown = Math.max(0, (enemy.movementSampleCooldown || 0) - dt);
+
+  if (prevBoulderWindup > 0) {
+    if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "lob");
+    if (enemy.boulderWindup <= 0.0001) {
+      const angle = Math.atan2(dirY, dirX);
+      const speed = game.config.enemy.golemBoulderSpeed || 240;
+      game.bullets.push({
+        x: enemy.x + Math.cos(angle) * (enemy.size * 0.42),
+        y: enemy.y + Math.sin(angle) * (enemy.size * 0.42),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        angle,
+        life: game.config.enemy.golemBoulderLife || 2.2,
+        size: game.config.enemy.golemBoulderSize || 16,
+        projectileType: "fleshBall",
+        damageMin: game.config.enemy.golemBoulderDamageMin,
+        damageMax: game.config.enemy.golemBoulderDamageMax,
+        damageType: "physical",
+        ownerId,
+        faction: "enemy"
+      });
+      enemy.boulderWindup = 0;
+      enemy.boulderCooldown = game.config.enemy.golemBoulderCooldown || 4.2;
+      return;
+    }
+    return;
+  }
+
+  if (prevMeleeWindup > 0) {
+    if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "slam");
+    if (!enemy.meleeApplied && dist <= meleeRange * 1.15) {
+      enemy.meleeApplied = applyContactHitToTarget(game, enemy, target, ownerId, 1.15, "physical");
+    }
+    if (enemy.meleeWindup <= 0.0001) {
+      enemy.contactAttackCooldown = game.config.enemy.golemMeleeCooldown || 1.45;
+      enemy.meleeApplied = false;
+    }
+    return;
+  }
+
+  if ((enemy.hp || 0) <= collapseThreshold) {
+    enemy.collapseActive = true;
+    if (enemy.isFloorBoss && typeof game.setFloorBossEncounterPhase === "function") game.setFloorBossEncounterPhase("collapse");
+    if (enemy.collapseCooldown <= 0) {
+      const livingPlayers = typeof game.getLivingPlayerEntities === "function" ? game.getLivingPlayerEntities() : [game.player];
+      const primaryTarget = livingPlayers[Math.floor(Math.random() * Math.max(1, livingPlayers.length))] || target;
+      const targets = [primaryTarget];
+      if (livingPlayers.length > 1 && Math.random() < 0.45) {
+        const secondary = livingPlayers.find((entry) => entry && entry !== primaryTarget);
+        if (secondary) targets.push(secondary);
+      }
+      for (const strikeTarget of targets) {
+        const jitterX = (Math.random() - 0.5) * tile * 1.6;
+        const jitterY = (Math.random() - 0.5) * tile * 1.6;
+        spawnGolemCollapseWarning(game, { x: strikeTarget.x + jitterX, y: strikeTarget.y + jitterY }, ownerId || "golem");
+      }
+      enemy.collapseCooldown = game.config.enemy.golemCollapseCooldown || 2.4;
+    }
+  }
+
+  if (enemy.movementSampleCooldown <= 0) {
+    const previousDistance = Number.isFinite(enemy.previousTargetDistance) ? enemy.previousTargetDistance : dist;
+    const previousTargetX = Number.isFinite(enemy.previousTargetX) ? enemy.previousTargetX : target.x;
+    const previousTargetY = Number.isFinite(enemy.previousTargetY) ? enemy.previousTargetY : target.y;
+    const targetMoveAway = ((target.x - previousTargetX) * dirX + (target.y - previousTargetY) * dirY) > tile * 0.08;
+    const distancing = dist > meleeRange * 1.15 && dist < boulderRange * 1.05 && (dist > previousDistance + tile * 0.08 || targetMoveAway);
+    enemy.kiteDetectTimer = distancing
+      ? (enemy.kiteDetectTimer || 0) + 0.2
+      : Math.max(0, (enemy.kiteDetectTimer || 0) - 0.16);
+    enemy.previousTargetDistance = dist;
+    enemy.previousTargetX = target.x;
+    enemy.previousTargetY = target.y;
+    enemy.movementSampleCooldown = 0.2;
+  }
+
+  const kiteThreshold = game.config.enemy.golemKiteDetectThreshold || 0.8;
+  const shouldThrow = dist > meleeRange * 1.25 && dist <= boulderRange && enemy.boulderCooldown <= 0 && (enemy.kiteDetectTimer || 0) >= kiteThreshold;
+  if (shouldThrow) {
+    if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "windup");
+    enemy.boulderWindup = game.config.enemy.golemBoulderWindup || 0.55;
+    enemy.kiteDetectTimer = 0;
+    return;
+  }
+
+  if (dist <= meleeRange && (enemy.contactAttackCooldown || 0) <= 0) {
+    if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, "windup");
+    enemy.meleeWindup = game.config.enemy.golemMeleeWindup || 0.26;
+    enemy.meleeApplied = false;
+    return;
+  }
+
+  if (typeof game.setEnemyTacticPhase === "function") game.setEnemyTacticPhase(enemy, enemy.collapseActive ? "collapsing" : "advancing");
+  moveEnemyTowardPoint(game, enemy, target, dt, Math.max(0.92, speedScale), Math.max(10, meleeRange * 0.62));
 }
 
 export function updateRatArcher(game, enemy, dt, speedScale) {

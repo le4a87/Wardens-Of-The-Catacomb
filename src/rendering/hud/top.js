@@ -74,7 +74,11 @@ export function drawHud(renderer, game, layout) {
   ctx.fillText(detail, 22, objectiveY + 13);
 
   if (boss && Number.isFinite(boss.maxHp) && boss.maxHp > 0) {
-    const ratio = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
+    const bossGroup = typeof game.getActiveFloorBossEnemies === "function" ? game.getActiveFloorBossEnemies() : [boss];
+    const groupedGolems = Array.isArray(bossGroup) && bossGroup.length > 1 && bossGroup.every((entry) => entry?.type === "golem");
+    const displayHp = groupedGolems ? bossGroup.reduce((sum, entry) => sum + Math.max(0, entry.hp || 0), 0) : boss.hp;
+    const displayMaxHp = groupedGolems ? bossGroup.reduce((sum, entry) => sum + Math.max(1, entry.maxHp || 1), 0) : boss.maxHp;
+    const ratio = Math.max(0, Math.min(1, displayHp / displayMaxHp));
     const barW = Math.max(180, Math.min(360, layout.playW - 40));
     const barX = Math.floor((layout.playW - barW) / 2);
     const barY = 64;
@@ -84,15 +88,16 @@ export function drawHud(renderer, game, layout) {
     ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, 17);
     ctx.fillStyle = "#3a1f48";
     ctx.fillRect(barX + 4, barY + 4, barW - 8, 10);
-    const bossLabel = game.floorBoss?.bossName || (boss.type === "leprechaun" ? "Leprechaun" : boss.type === "sonya" ? "Sonya" : "Necromancer");
+    const bossLabel = game.floorBoss?.bossName || (boss.type === "leprechaun" ? "Leprechaun" : boss.type === "sonya" ? "Sonya" : boss.type === "golem" ? "Flesh Golem" : "Necromancer");
     const isLeprechaun = boss.type === "leprechaun";
     const isSonya = boss.type === "sonya";
-    ctx.fillStyle = isLeprechaun ? "#74d74d" : isSonya ? "#ff8a4a" : "#b86cff";
+    const isGolem = boss.type === "golem";
+    ctx.fillStyle = isLeprechaun ? "#74d74d" : isSonya ? "#ff8a4a" : isGolem ? "#ffae63" : "#b86cff";
     ctx.fillRect(barX + 4, barY + 4, Math.floor((barW - 8) * ratio), 10);
     ctx.fillStyle = "#f7e8ff";
     ctx.font = "bold 12px Trebuchet MS";
     ctx.textAlign = "center";
-    let title = `${bossLabel} ${Math.ceil(Math.max(0, boss.hp))}/${boss.maxHp}`;
+    let title = `${bossLabel}${groupedGolems ? " x2" : ""} ${Math.ceil(Math.max(0, displayHp))}/${displayMaxHp}`;
     if (isLeprechaun && typeof game.getRemainingFloorBossTimer === "function") {
       const remaining = game.getRemainingFloorBossTimer();
       if (remaining !== null) title += ` | ${formatTime(remaining)}`;

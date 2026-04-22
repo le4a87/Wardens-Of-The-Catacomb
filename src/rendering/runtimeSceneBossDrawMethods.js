@@ -283,6 +283,72 @@ export const runtimeSceneBossDrawMethods = {
     ctx.stroke();
   },
 
+  drawGolemBoss(enemy, screenX, screenY, time = 0) {
+    const ctx = this.ctx;
+    const half = enemy.size * 0.5;
+    const pulse = 0.55 + Math.sin(time * 4.8 + (enemy.x || 0) * 0.01) * 0.12;
+    const collapseGlow = enemy.collapseActive ? 0.22 : 0.08;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.9, half * 1.12, half * 0.46, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const glow = ctx.createRadialGradient(screenX, screenY - half * 0.12, 2, screenX, screenY - half * 0.12, half * 1.5);
+    glow.addColorStop(0, `rgba(255, 153, 111, ${collapseGlow + pulse * 0.08})`);
+    glow.addColorStop(0.5, `rgba(168, 62, 62, ${0.12 + pulse * 0.08})`);
+    glow.addColorStop(1, "rgba(48, 18, 18, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - half * 0.08, half * 1.42, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#7c5148";
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.62, screenY - half * 0.1);
+    ctx.lineTo(screenX - half * 0.46, screenY - half * 0.82);
+    ctx.lineTo(screenX + half * 0.42, screenY - half * 0.9);
+    ctx.lineTo(screenX + half * 0.72, screenY - half * 0.08);
+    ctx.lineTo(screenX + half * 0.56, screenY + half * 0.88);
+    ctx.lineTo(screenX - half * 0.54, screenY + half * 0.9);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#9a6b61";
+    ctx.fillRect(screenX - half * 0.42, screenY - half * 0.18, half * 0.84, half * 1.05);
+    ctx.fillStyle = "#6b423a";
+    ctx.fillRect(screenX - half * 0.66, screenY + half * 0.02, half * 0.18, half * 0.62);
+    ctx.fillRect(screenX + half * 0.48, screenY + half * 0.02, half * 0.18, half * 0.62);
+
+    ctx.strokeStyle = "#5d2f2f";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.26, screenY - half * 0.84);
+    ctx.lineTo(screenX - half * 0.1, screenY + half * 0.82);
+    ctx.moveTo(screenX + half * 0.18, screenY - half * 0.88);
+    ctx.lineTo(screenX + half * 0.34, screenY + half * 0.8);
+    ctx.stroke();
+
+    ctx.fillStyle = "#d9b09c";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - half * 0.5, half * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#6f1717";
+    ctx.beginPath();
+    ctx.arc(screenX - half * 0.16, screenY - half * 0.34, half * 0.08, 0, Math.PI * 2);
+    ctx.arc(screenX + half * 0.16, screenY - half * 0.34, half * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#8b2020";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.32, screenY - half * 0.06);
+    ctx.lineTo(screenX + half * 0.34, screenY + half * 0.18);
+    ctx.moveTo(screenX - half * 0.18, screenY + half * 0.36);
+    ctx.lineTo(screenX + half * 0.12, screenY + half * 0.62);
+    ctx.stroke();
+  },
+
   drawLeprechaunBoss(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size * 0.5;

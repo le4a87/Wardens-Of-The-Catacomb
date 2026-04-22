@@ -423,7 +423,9 @@ export function stepGame(game, dt, controls = {}) {
     const bossRequest = game.consumeFloorBossSpawnRequest();
     if (bossRequest) {
       const point = game.randomEnemySpawnPoint() || { x: game.door.x || game.player.x, y: game.door.y || game.player.y };
-      const boss = bossRequest.bossType === "minotaur"
+      const boss = bossRequest.bossType === "golem"
+        ? game.spawnGolemBoss(point.x, point.y, { isFloorBoss: true })
+        : bossRequest.bossType === "minotaur"
         ? game.spawnMinotaur(point.x, point.y)
         : bossRequest.variant === "sonya"
         ? game.spawnSonyaBoss(point.x, point.y)
@@ -448,6 +450,8 @@ export function stepGame(game, dt, controls = {}) {
             ? "#a2f06e"
             : bossRequest.variant === "sonya"
             ? "#ff9f68"
+            : bossRequest.variant === "golem"
+            ? "#ffb570"
             : "#d49dff";
         game.spawnFloatingText(game.player.x, game.player.y - 96, bossLabel, bossColor, 1.5, 18);
       }

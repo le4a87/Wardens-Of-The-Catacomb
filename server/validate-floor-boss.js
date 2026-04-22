@@ -46,6 +46,20 @@ function killFloorBoss(game) {
   stepGame(game, 0.016, { processUi: false });
 }
 
+function spawnBossForCurrentFloor(game, x, y) {
+  const variant = game.getFloorBossVariant();
+  const bossType = game.floorBoss?.bossType;
+  return bossType === "golem"
+    ? game.spawnGolemBoss(x, y, { isFloorBoss: true })
+    : bossType === "minotaur"
+    ? game.spawnMinotaur(x, y)
+    : variant === "sonya"
+    ? game.spawnSonyaBoss(x, y)
+    : variant === "leprechaun"
+    ? game.spawnLeprechaunBoss(x, y)
+    : game.spawnNecromancer(x, y);
+}
+
 function validateTriggerLevels() {
   const floors = [];
   for (const floor of [1, 2, 3]) {
@@ -76,6 +90,19 @@ function validateSonyaBirthdayVariant() {
   };
 }
 
+function validateFloorThreeGolemVariant() {
+  const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
+  while (game.floor < 3) game.advanceToNextFloor();
+  game._floorBossVariantByFloor = {};
+  game.floorBoss = game.createFloorBossState(3);
+  assert(game.getFloorBossVariant(3) === "golem", `floor 3 variant expected golem, got ${game.getFloorBossVariant(3)}`);
+  assert(game.floorBoss?.bossName === "Flesh Golem", `floor 3 boss name expected Flesh Golem, got ${game.floorBoss?.bossName}`);
+  return {
+    floor: 3,
+    variant: game.getFloorBossVariant(3)
+  };
+}
+
 function validateSafePlayerSpawn() {
   const game = new GameSim({ classType: "archer", viewportWidth: 960, viewportHeight: 640 });
   const playerRadius = (game.player.size || 20) * 0.5;
@@ -103,13 +130,7 @@ function validateLocalProgression() {
   game.level = game.getFloorBossTriggerLevel();
   assert(game.updateFloorBossTrigger() === true, "boss did not queue locally");
   const variant = game.getFloorBossVariant();
-  const boss = game.floorBoss?.bossType === "minotaur"
-    ? game.spawnMinotaur(game.player.x + 96, game.player.y)
-    : variant === "sonya"
-    ? game.spawnSonyaBoss(game.player.x + 96, game.player.y)
-    : variant === "leprechaun"
-    ? game.spawnLeprechaunBoss(game.player.x + 96, game.player.y)
-    : game.spawnNecromancer(game.player.x + 96, game.player.y);
+  const boss = spawnBossForCurrentFloor(game, game.player.x + 96, game.player.y);
   game.enemies.push(boss);
   game.markFloorBossActive();
   if (variant === "leprechaun") {
@@ -138,13 +159,7 @@ function validateNetworkReconciliation() {
   sim.level = sim.getFloorBossTriggerLevel();
   assert(sim.updateFloorBossTrigger() === true, "network sim boss did not queue");
   const variant = sim.getFloorBossVariant();
-  const boss = sim.floorBoss?.bossType === "minotaur"
-    ? sim.spawnMinotaur(sim.player.x + 96, sim.player.y)
-    : variant === "sonya"
-    ? sim.spawnSonyaBoss(sim.player.x + 96, sim.player.y)
-    : variant === "leprechaun"
-    ? sim.spawnLeprechaunBoss(sim.player.x + 96, sim.player.y)
-    : sim.spawnNecromancer(sim.player.x + 96, sim.player.y);
+  const boss = spawnBossForCurrentFloor(sim, sim.player.x + 96, sim.player.y);
   sim.enemies.push(boss);
   sim.markFloorBossActive();
   if (variant === "leprechaun") {
@@ -206,9 +221,7 @@ function validateBossLocksAmbientSpawns() {
   while (game.floor < 2) game.advanceToNextFloor();
   game.level = game.getFloorBossTriggerLevel();
   assert(game.updateFloorBossTrigger() === true, "boss lockout test did not queue boss");
-  const boss = game.floorBoss?.bossType === "minotaur"
-    ? game.spawnMinotaur(game.player.x + 96, game.player.y)
-    : game.spawnNecromancer(game.player.x + 96, game.player.y);
+  const boss = spawnBossForCurrentFloor(game, game.player.x + 96, game.player.y);
   game.enemies.push(boss);
   game.markFloorBossActive();
 
@@ -249,6 +262,23 @@ function validateNecromancerTeleportSafety() {
   };
 }
 
+function validateGolemSplitMechanics() {
+  const game = new GameSim({ classType: "fighter", viewportWidth: 960, viewportHeight: 640 });
+  while (game.floor < 3) game.advanceToNextFloor();
+  const boss = game.spawnGolemBoss(game.player.x + 160, game.player.y, { isFloorBoss: true });
+  game.enemies.push(boss);
+  game.markFloorBossActive();
+  const preSplitMax = boss.maxHp;
+  game.applyEnemyDamage(boss, preSplitMax * 1.1, "physical", game.player.id || null);
+  const splitBosses = game.enemies.filter((enemy) => enemy.type === "golem" && enemy.isFloorBoss && (enemy.hp || 0) > 0);
+  assert(splitBosses.length === 2, `expected 2 split golems, got ${splitBosses.length}`);
+  assert(splitBosses.every((enemy) => enemy.canSplit === false), "split golems should not split again");
+  return {
+    splitCount: splitBosses.length,
+    hp: splitBosses.map((enemy) => Math.round(enemy.hp))
+  };
+}
+
 function validateRegressionSurface() {
   const game = new GameSim({ classType: "fighter", viewportWidth: 960, viewportHeight: 640 });
   assert(Array.isArray(game.map) && game.map.length > 0, "map generation failed");
@@ -272,12 +302,14 @@ function main() {
   const results = {
     triggerLevels: validateTriggerLevels(),
     sonyaBirthdayVariant: validateSonyaBirthdayVariant(),
+    floorThreeGolemVariant: validateFloorThreeGolemVariant(),
     safePlayerSpawn: validateSafePlayerSpawn(),
     localProgression: validateLocalProgression(),
     networkReconciliation: validateNetworkReconciliation(),
     controllerJoinSpawnSync: validateControllerJoinSpawnSync(),
     bossSpawnLockout: validateBossLocksAmbientSpawns(),
     necromancerTeleportSafety: validateNecromancerTeleportSafety(),
+    golemSplitMechanics: validateGolemSplitMechanics(),
     regressionSurface: validateRegressionSurface()
   };
   console.log(JSON.stringify(results, null, 2));
