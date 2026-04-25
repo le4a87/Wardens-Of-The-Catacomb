@@ -1,15 +1,19 @@
+import { getWarriorClassSkillColor, getWarriorClassSkillCooldown, getWarriorClassSkillName } from "../../game/warriorTalentTree.js";
+
 export function getHudAbilityState(game) {
   if (game.isWarriorClass && game.isWarriorClass()) {
-    const cooldownMax = Math.max(0.01, game.getWarriorRageCooldown());
+    const title = getWarriorClassSkillName(game);
+    const color = getWarriorClassSkillColor(game);
+    const cooldownMax = Math.max(0.01, getWarriorClassSkillCooldown(game));
     const cooldownRemaining = Math.max(0, game.warriorRageCooldownTimer || 0);
     return {
-      title: "Rage",
-      color: "#d14f4f",
+      title,
+      color,
       accent: "#ffb0b0",
       cooldownRemaining,
       cooldownMax,
       progress: cooldownRemaining > 0 ? 1 - cooldownRemaining / cooldownMax : 1,
-      hoverText: cooldownRemaining > 0 ? `Rage cooldown: ${cooldownRemaining.toFixed(1)}s` : "Rage ready"
+      hoverText: cooldownRemaining > 0 ? `${title} cooldown: ${cooldownRemaining.toFixed(1)}s` : `${title} ready`
     };
   }
   if (game.isNecromancerClass && game.isNecromancerClass()) {

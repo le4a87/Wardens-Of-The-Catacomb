@@ -55,6 +55,27 @@ export function drawHud(renderer, game, layout) {
     ctx.fillStyle = game.networkRole === "Controller" ? "#8fe3a2" : "#dfc670";
     ctx.fillText(`Net: ${game.networkRole || "Connected"}`, 470, 24);
   }
+  if (game.isWarriorClass && game.isWarriorClass()) {
+    const runtime = game.warriorRuntime || {};
+    const weaponName = typeof game.getWarriorWeaponProfile === "function" ? game.getWarriorWeaponProfile().weaponLabel : "Broadswing";
+    const stanceAName = typeof game.getWarriorModeDisplayName === "function" ? game.getWarriorModeDisplayName("primary") : "Balanced";
+    const stanceBName = typeof game.getWarriorModeDisplayName === "function" ? game.getWarriorModeDisplayName("secondary") : "Balanced";
+    const mode = runtime.activeAttackMode === "secondary" ? stanceBName : stanceAName;
+    const swapCd = Math.max(0, runtime.attackSwapCooldownTimer || 0);
+    const guardTimer = Math.max(0, game.player?.blockBonusTimer || 0);
+    const wardHp = Math.max(0, runtime.eldritchWardHp || 0);
+    const shockReady = !!runtime.shockReleaseReady;
+    const shockCharges = Math.max(0, runtime.shockReleaseCharges || 0);
+    const shockThreshold = typeof game.getWarriorShockReleaseThreshold === "function" ? game.getWarriorShockReleaseThreshold() : 5;
+    ctx.fillStyle = "#dce7fb";
+    ctx.fillText(`Mode: ${mode}${swapCd > 0 ? ` (${swapCd.toFixed(1)}s)` : ""}`, 620, 24);
+    ctx.font = "12px Trebuchet MS";
+    ctx.fillStyle = "#9eb0d6";
+    const hasShockRelease = (game?.warriorTalents?.shockRelease?.points || 0) > 0;
+    const status = `${guardTimer > 0 ? ` | Guard ${guardTimer.toFixed(1)}s${wardHp > 0 ? ` | Ward ${Math.round(wardHp)}` : ""}` : ""}${hasShockRelease ? ` | Shock ${shockReady ? "Ready" : `${shockCharges}/${shockThreshold}`}` : ""}`;
+    ctx.fillText(`${weaponName} | A: ${stanceAName} | B: ${stanceBName}${status}`, 620, 42);
+    ctx.font = "16px Trebuchet MS";
+  }
 
   const objective = typeof game.getFloorObjectiveText === "function" ? game.getFloorObjectiveText() : "";
   const detail = typeof game.getFloorObjectiveDetail === "function" ? game.getFloorObjectiveDetail() : "";

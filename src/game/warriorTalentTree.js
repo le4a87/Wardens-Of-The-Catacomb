@@ -1,206 +1,457 @@
-const WARRIOR_ROW_REQUIREMENTS = {
-  0: 0,
-  1: 1,
+const WARRIOR_TIER_LEVELS = {
+  1: 2,
   2: 3,
-  3: 8,
-  4: 14
+  3: 4,
+  4: 6,
+  5: 8,
+  6: 10
 };
 
-const WARRIOR_LANE_ORDER = {
-  vanguard: 0,
-  executioner: 1,
-  berserker: 2
+const WARRIOR_TIER_PICK_LIMITS = {
+  1: 1,
+  2: 1,
+  3: 1,
+  4: 1,
+  5: 2,
+  6: 1
 };
+
+const WEAPON_KEYS = ["broadswing", "longspear", "warWhip", "twinHatchets"];
+const STANCE_MODIFIER_KEYS = ["cleaving", "focused", "swift", "heavy", "guarded", "marked"];
+const DOCTRINE_KEYS = ["paladinDoctrine", "berserkerDoctrine", "gladiatorDoctrine", "eldritchDoctrine"];
+const EXTRA_KEYS = ["consecratedGround", "cleaveDiscipline", "executionersReach", "battleFrenzy", "shockRelease", "butchersPath", "redTempest", "secondWind"];
+const CAPSTONE_KEYS = ["bastion", "ravager", "paragon", "spellknight"];
 
 const WARRIOR_TALENT_DEFS = [
   {
-    key: "rageActive",
-    label: "Rage",
-    row: 0,
-    lane: "core",
-    maxRanks: 1,
-    icon: "RG",
-    color: "#d36a62",
+    key: "broadswing",
+    label: "Broadswing",
+    tier: 1,
+    family: "Weapon",
+    icon: "BW",
+    color: "#d7a06a",
     description: [
-      "Unlocks the warrior right-click skill.",
-      "Enter a short combat commitment window.",
-      "Half incoming damage from physical, melee, and arrow damage while active."
+      "Wide sweeping weapon form.",
+      "Balanced crowd clear and stable front-line control."
     ]
   },
   {
-    key: "ironGuard",
-    label: "Sanctified Steel",
-    row: 1,
-    lane: "vanguard",
-    maxRanks: 3,
-    icon: "SS",
-    color: "#d8c77e",
+    key: "longspear",
+    label: "Longspear",
+    tier: 1,
+    family: "Weapon",
+    icon: "LS",
+    color: "#c8c39a",
     description: [
-      "Rank 1: +4% defense.",
-      "Rank 2: +4% defense, +8 max health.",
-      "Rank 3: +4% defense, +8 max health, +6% damage against undead."
+      "Long-reaching thrust weapon form.",
+      "Best spacing and disciplined lane control."
     ]
   },
   {
-    key: "heavyHand",
-    label: "Heavy Hand",
-    row: 1,
-    lane: "executioner",
-    maxRanks: 3,
-    icon: "HH",
-    color: "#d99a72",
+    key: "warWhip",
+    label: "War Whip",
+    tier: 1,
+    family: "Weapon",
+    icon: "WW",
+    color: "#9b8fd4",
     description: [
-      "Rank 1: +4% melee damage.",
-      "Rank 2: +4% melee damage, +10% cleave arc.",
-      "Rank 3: +4% damage against enemies above 70% health."
+      "Mid-range lash weapon form.",
+      "Fast control-oriented strikes with setup potential."
     ]
   },
   {
-    key: "bloodheat",
-    label: "Bloodheat",
-    row: 1,
-    lane: "berserker",
-    maxRanks: 3,
-    icon: "BH",
-    color: "#de7868",
+    key: "twinHatchets",
+    label: "Twin Hatchets",
+    tier: 1,
+    family: "Weapon",
+    icon: "TH",
+    color: "#d86f5e",
     description: [
-      "Rank 1: +5% attack speed.",
-      "Rank 2: +5% attack speed, +5% move speed while Rage is active.",
-      "Rank 3: +5% attack speed, +5% passive move speed."
+      "Rapid close-range weapon form.",
+      "Highest tempo and strongest aggression curve."
     ]
   },
   {
-    key: "guardedAdvance",
-    label: "Consecrated Rage",
-    row: 2,
-    lane: "vanguard",
-    maxRanks: 1,
-    icon: "CR",
-    color: "#ead692",
+    key: "stanceACleaving",
+    label: "Cleaving Form",
+    tier: 2,
+    family: "Stance A",
+    icon: "CL",
+    color: "#dfb57f",
     description: [
-      "While raging, create a consecrated area where Rage was activated.",
-      "Consecrated area radius: 4 tiles before Purging Light.",
-      "Consecrated area deals holy damage over time, stronger against undead, and increases healing received within it.",
-      "While standing in it, gain 5% damage reduction."
+      "Stance A gains roughly 25% wider coverage.",
+      "Trades some first-target damage for clear horde pressure."
+    ]
+  },
+  {
+    key: "stanceAFocused",
+    label: "Focused Form",
+    tier: 2,
+    family: "Stance A",
+    icon: "FC",
+    color: "#f0c39b",
+    description: [
+      "Stance A narrows and hits about 33% harder.",
+      "Adds stronger impact and low-health finishing pressure."
+    ]
+  },
+  {
+    key: "stanceASwift",
+    label: "Swift Form",
+    tier: 2,
+    family: "Stance A",
+    icon: "SW",
+    color: "#b5e0b9",
+    description: [
+      "Stance A attacks much faster with reduced single-target DPS.",
+      "Lower per-hit damage, better tempo and easier uptime."
+    ]
+  },
+  {
+    key: "stanceAHeavy",
+    label: "Heavy Form",
+    tier: 2,
+    family: "Stance A",
+    icon: "HV",
+    color: "#d48b72",
+    description: [
+      "Stance A attacks slower but hits about 25% harder.",
+      "Adds meaningful knockback and short hit-stun on impact."
+    ]
+  },
+  {
+    key: "stanceAGuarded",
+    label: "Guarded Form",
+    tier: 2,
+    family: "Stance A",
+    icon: "GD",
+    color: "#ced8bf",
+    description: [
+      "Stance A becomes safer and more stable.",
+      "Lower offense, but grants guard windows and better trading."
+    ]
+  },
+  {
+    key: "stanceAMarked",
+    label: "Marked Form",
+    tier: 2,
+    family: "Stance A",
+    icon: "MK",
+    color: "#aab7c9",
+    description: [
+      "Stance A applies a setup mark on hit.",
+      "Marks are generic at base and doctrines convert them into payoffs."
+    ]
+  },
+  {
+    key: "stanceBCleaving",
+    label: "Cleaving Form",
+    tier: 3,
+    family: "Stance B",
+    icon: "CL",
+    color: "#dfb57f",
+    description: [
+      "Stance B gains roughly 25% wider coverage.",
+      "Trades some first-target damage for clear horde pressure."
+    ]
+  },
+  {
+    key: "stanceBFocused",
+    label: "Focused Form",
+    tier: 3,
+    family: "Stance B",
+    icon: "FC",
+    color: "#f0c39b",
+    description: [
+      "Stance B narrows and hits about 33% harder.",
+      "Adds stronger impact and low-health finishing pressure."
+    ]
+  },
+  {
+    key: "stanceBSwift",
+    label: "Swift Form",
+    tier: 3,
+    family: "Stance B",
+    icon: "SW",
+    color: "#b5e0b9",
+    description: [
+      "Stance B attacks much faster with reduced single-target DPS.",
+      "Lower per-hit damage, better tempo and easier uptime."
+    ]
+  },
+  {
+    key: "stanceBHeavy",
+    label: "Heavy Form",
+    tier: 3,
+    family: "Stance B",
+    icon: "HV",
+    color: "#d48b72",
+    description: [
+      "Stance B attacks slower but hits about 25% harder.",
+      "Adds meaningful knockback and short hit-stun on impact."
+    ]
+  },
+  {
+    key: "stanceBGuarded",
+    label: "Guarded Form",
+    tier: 3,
+    family: "Stance B",
+    icon: "GD",
+    color: "#ced8bf",
+    description: [
+      "Stance B becomes safer and more stable.",
+      "Lower offense, but grants guard windows and better trading."
+    ]
+  },
+  {
+    key: "stanceBMarked",
+    label: "Marked Form",
+    tier: 3,
+    family: "Stance B",
+    icon: "MK",
+    color: "#aab7c9",
+    description: [
+      "Stance B applies a setup mark on hit.",
+      "Marks are generic at base and doctrines convert them into payoffs."
+    ]
+  },
+  {
+    key: "paladinDoctrine",
+    label: "Paladin Doctrine",
+    tier: 4,
+    family: "Doctrine",
+    icon: "PD",
+    color: "#edd98f",
+    description: [
+      "Class skill becomes Sanctify.",
+      "Holy defense, support, and zone-control doctrine."
+    ]
+  },
+  {
+    key: "berserkerDoctrine",
+    label: "Berserker Doctrine",
+    tier: 4,
+    family: "Doctrine",
+    icon: "BD",
+    color: "#ef7f67",
+    description: [
+      "Class skill becomes Bloodhowl.",
+      "Speed, leech, and aggression doctrine."
+    ]
+  },
+  {
+    key: "gladiatorDoctrine",
+    label: "Gladiator Doctrine",
+    tier: 4,
+    family: "Doctrine",
+    icon: "GD",
+    color: "#d8b37b",
+    description: [
+      "Class skill becomes Arena Command.",
+      "Balanced weapon-mastery and tempo doctrine."
+    ]
+  },
+  {
+    key: "eldritchDoctrine",
+    label: "Eldritch Doctrine",
+    tier: 4,
+    family: "Doctrine",
+    icon: "ED",
+    color: "#8ea4ff",
+    description: [
+      "Class skill becomes Arcane Armament.",
+      "Pure arcane melee hybrid doctrine."
+    ]
+  },
+  {
+    key: "consecratedGround",
+    label: "War Circle",
+    tier: 5,
+    family: "Extras",
+    icon: "CG",
+    color: "#f0d58d",
+    description: [
+      "Class skill creates a doctrine-flavored combat field.",
+      "The field gains holy, arcane, brutal, or tactical behavior based on doctrine."
     ]
   },
   {
     key: "cleaveDiscipline",
     label: "Cleave Discipline",
-    row: 2,
-    lane: "executioner",
-    maxRanks: 1,
+    tier: 5,
+    family: "Extras",
     icon: "CD",
-    color: "#ebb089",
+    color: "#e8c18d",
     description: [
-      "The first attack after Rage activates is a guaranteed critical hit.",
-      "Rage increases critical damage by 20%.",
-      "While raging, cleave width is increased by 10%."
-    ]
-  },
-  {
-    key: "rageMastery",
-    label: "Rage Mastery",
-    row: 2,
-    lane: "berserker",
-    maxRanks: 1,
-    icon: "RM",
-    color: "#f08a78",
-    description: [
-      "Rage increases attack speed by 25%.",
-      "Rage increases movement speed by 10%.",
-      "Rage lasts 15% longer."
-    ]
-  },
-  {
-    key: "unbroken",
-    label: "Purging Light",
-    row: 3,
-    lane: "vanguard",
-    maxRanks: 3,
-    icon: "PL",
-    color: "#f2e6b8",
-    description: [
-      "Rank 1: +15% consecrated area radius.",
-      "Rank 2: +15% consecrated area holy damage.",
-      "Rank 3: Undead inside the consecrated area take 20% more damage.",
-      "Rage still grants Second Wind, healing 25% max health over 10 seconds.",
-      "Nearby allies still gain 10% max health over 10 seconds when Rage is triggered."
+      "After using your class skill, the next attack crits.",
+      "During the skill window, your swings gain visibly wider coverage."
     ]
   },
   {
     key: "executionersReach",
     label: "Executioner's Reach",
-    row: 3,
-    lane: "executioner",
-    maxRanks: 3,
+    tier: 5,
+    family: "Extras",
     icon: "ER",
-    color: "#f0c39b",
+    color: "#d8b494",
     description: [
-      "Each rank adds +10% chance to instantly kill enemies when damage leaves them under 30% health.",
-      "While raging, attack range is +10% longer."
+      "During your class skill, melee range increases.",
+      "Low-health enemies are easier to execute."
     ]
   },
   {
     key: "battleFrenzy",
     label: "Battle Frenzy",
-    row: 3,
-    lane: "berserker",
-    maxRanks: 3,
+    tier: 5,
+    family: "Extras",
     icon: "BF",
-    color: "#f2a08f",
+    color: "#e27f65",
     description: [
-      "Rank 1: While raging, kills grant Battle Frenzy for 3s: +10% move speed and +5% damage. 10s internal cooldown.",
-      "Rank 2: While under Battle Frenzy, gain another +10% move speed and +5% damage.",
-      "Rank 3: While under Battle Frenzy, gain another +10% move speed and +5% damage.",
-      "Kills during Rage also feed a shared Victory Rush-style heal-over-time pool."
+      "Kills during your class skill trigger a frenzy burst.",
+      "Frenzy adds movement, damage, and delayed healing."
     ]
   },
   {
-    key: "judgmentWave",
-    label: "Judgment Wave",
-    row: 4,
-    lane: "vanguard",
-    maxRanks: 1,
-    icon: "JW",
-    color: "#fff0bd",
+    key: "shockRelease",
+    label: "Shock Release",
+    tier: 5,
+    family: "Extras",
+    icon: "SR",
+    color: "#d9d1bb",
     description: [
-      "Cleave attacks have a chance to release a holy wave in the swing arc.",
-      "Holy wave travels forward, damaging enemies it passes through.",
-      "Holy wave weakens undead defenses, causing them to take more damage."
+      "Primary attacks can release a forward strike wave.",
+      "The base wave is physical; doctrines recolor and empower it."
     ]
   },
   {
     key: "butchersPath",
     label: "Butcher's Path",
-    row: 4,
-    lane: "executioner",
-    maxRanks: 1,
+    tier: 5,
+    family: "Extras",
     icon: "BP",
-    color: "#ffd2a9",
+    color: "#d37a66",
     description: [
-      "After executing an enemy, your next hit is a guaranteed critical.",
-      "While raging, your execution chance is doubled.",
-      "After executing an enemy, your next cleave gains +20% width and +20% damage."
+      "Executing an enemy empowers your next hit.",
+      "The next swing crits, grows larger, and hits much harder."
     ]
   },
   {
     key: "redTempest",
-    label: "Red Tempest",
-    row: 4,
-    lane: "berserker",
-    maxRanks: 1,
+    label: "Tempest",
+    tier: 5,
+    family: "Extras",
     icon: "RT",
-    color: "#ffc0b3",
+    color: "#da6d5f",
     description: [
-      "While raging, gain +20% movement speed.",
-      "When Rage activates, gain temporary hitpoints equal to 25% of max health.",
-      "For the first 5 seconds of Rage, attacks use a 360-degree arc."
+      "The first few seconds of class skill radiate doctrine-flavored AOE damage.",
+      "Also grants temporary HP and a short, high-impact power window."
+    ]
+  },
+  {
+    key: "secondWind",
+    label: "Second Wind",
+    tier: 5,
+    family: "Extras",
+    icon: "SW",
+    color: "#b2d8a7",
+    description: [
+      "Using your class skill starts a heal-over-time effect.",
+      "Nearby allies receive a smaller version."
+    ]
+  },
+  {
+    key: "bastion",
+    label: "Bastion",
+    tier: 6,
+    family: "Capstone",
+    icon: "BA",
+    color: "#f3ddb0",
+    description: [
+      "Defense and protection capstone.",
+      "Enhances holy and guarded front-line play."
+    ]
+  },
+  {
+    key: "ravager",
+    label: "Ravager",
+    tier: 6,
+    family: "Capstone",
+    icon: "RV",
+    color: "#f08d77",
+    description: [
+      "Aggression capstone.",
+      "Missing health increases attack speed, move speed, and damage."
+    ]
+  },
+  {
+    key: "paragon",
+    label: "Paragon",
+    tier: 6,
+    family: "Capstone",
+    icon: "PG",
+    color: "#e0c692",
+    description: [
+      "Technical mastery capstone.",
+      "Rewards swapping and makes both stances stronger."
+    ]
+  },
+  {
+    key: "spellknight",
+    label: "Spellknight",
+    tier: 6,
+    family: "Capstone",
+    icon: "SK",
+    color: "#a7b7ff",
+    description: [
+      "Arcane melee capstone.",
+      "Adds echo damage, bursts, and arcane blade waves."
     ]
   }
 ];
 
 const DEF_BY_KEY = Object.fromEntries(WARRIOR_TALENT_DEFS.map((def) => [def.key, def]));
+
+function getTierKeys(tier) {
+  return WARRIOR_TALENT_DEFS.filter((def) => def.tier === tier).map((def) => def.key);
+}
+
+function getTierSelections(game, tier) {
+  return getTierKeys(tier).filter((key) => getWarriorTalentPoints(game, key) > 0);
+}
+
+function hasRequiredPreviousTier(game, tier) {
+  if (tier <= 1) return true;
+  return getTierSelections(game, tier - 1).length > 0;
+}
+
+function getTierLabel(tier) {
+  if (tier === 1) return "Weapon";
+  if (tier === 2) return "Stance A";
+  if (tier === 3) return "Stance B";
+  if (tier === 4) return "Doctrine";
+  if (tier === 5) return "Extras";
+  if (tier === 6) return "Capstone";
+  return "Warrior";
+}
+
+function getSelectedStanceKey(game, stance) {
+  const prefix = stance === "B" ? "stanceB" : "stanceA";
+  const selected = STANCE_MODIFIER_KEYS.find((modifier) => getWarriorTalentPoints(game, `${prefix}${modifier[0].toUpperCase()}${modifier.slice(1)}`) > 0);
+  return selected || "";
+}
+
+function modifierLabel(modifier) {
+  if (!modifier) return "Balanced";
+  return `${modifier[0].toUpperCase()}${modifier.slice(1)}`;
+}
+
+function wouldDuplicateStanceModifier(game, key) {
+  const match = /^stance([AB])([A-Z].+)$/.exec(key);
+  if (!match) return false;
+  const nextModifier = match[2].charAt(0).toLowerCase() + match[2].slice(1);
+  const otherStance = match[1] === "A" ? "B" : "A";
+  return getSelectedStanceKey(game, otherStance) === nextModifier;
+}
 
 export function createWarriorTalentState() {
   return Object.fromEntries(
@@ -209,7 +460,7 @@ export function createWarriorTalentState() {
       {
         key: def.key,
         points: 0,
-        maxPoints: def.maxRanks
+        maxPoints: 1
       }
     ])
   );
@@ -219,7 +470,7 @@ export function cloneWarriorTalentState(source = null) {
   const next = createWarriorTalentState();
   if (!source || typeof source !== "object") return next;
   for (const [key, node] of Object.entries(next)) {
-    const raw = source[key] || (key === "judgmentWave" ? source.stonewall : null);
+    const raw = source[key];
     if (!raw || typeof raw !== "object") continue;
     if (Number.isFinite(raw.points)) node.points = Math.max(0, Math.min(node.maxPoints, Math.floor(raw.points)));
   }
@@ -227,11 +478,11 @@ export function cloneWarriorTalentState(source = null) {
 }
 
 export function getWarriorTalentDefs() {
-  return WARRIOR_TALENT_DEFS.map((def) => ({ ...def }));
+  return WARRIOR_TALENT_DEFS.map((def) => ({ ...def, row: def.tier - 1, lane: def.family.toLowerCase() }));
 }
 
 export function getWarriorTalentDef(key) {
-  return DEF_BY_KEY[key] ? { ...DEF_BY_KEY[key] } : null;
+  return DEF_BY_KEY[key] ? { ...DEF_BY_KEY[key], row: DEF_BY_KEY[key].tier - 1, lane: DEF_BY_KEY[key].family.toLowerCase() } : null;
 }
 
 export function isWarriorTalentGame(game) {
@@ -243,73 +494,36 @@ export function getWarriorTalentPoints(game, key) {
   return Number.isFinite(points) ? Math.max(0, points) : 0;
 }
 
-export function getWarriorUtilityKeys() {
-  return ["moveSpeed", "attackSpeed", "damage", "defense"];
-}
-
-export function getWarriorUtilityLevel(game, key) {
-  const level = game?.upgrades?.[key]?.level;
-  return Number.isFinite(level) ? Math.max(0, Math.min(4, Math.floor(level))) : 0;
-}
-
-export function getWarriorSpentSkillPoints(game) {
-  let total = 0;
-  for (const key of getWarriorUtilityKeys()) total += getWarriorUtilityLevel(game, key);
-  for (const def of WARRIOR_TALENT_DEFS) total += getWarriorTalentPoints(game, def.key);
-  return total;
-}
-
 export function getWarriorAvailableSkillPoints(game) {
   return Number.isFinite(game?.skillPoints) ? Math.max(0, game.skillPoints) : 0;
 }
 
+export function getWarriorSpentSkillPoints(game) {
+  let total = 0;
+  for (const def of WARRIOR_TALENT_DEFS) total += getWarriorTalentPoints(game, def.key);
+  return total;
+}
+
 export function getWarriorRowRequirement(row) {
-  return Number.isFinite(WARRIOR_ROW_REQUIREMENTS[row]) ? WARRIOR_ROW_REQUIREMENTS[row] : 0;
+  const tier = Math.max(1, Math.min(6, Math.floor(row) + 1));
+  return WARRIOR_TIER_LEVELS[tier] || 99;
 }
 
 export function isWarriorRowAccessible(game, row) {
-  return getWarriorSpentSkillPoints(game) >= getWarriorRowRequirement(row);
-}
-
-function getWarriorPreviousRowOptions(def) {
-  if (!def || def.row <= 1) return [];
-  const currentLaneIndex = Number.isFinite(WARRIOR_LANE_ORDER[def.lane]) ? WARRIOR_LANE_ORDER[def.lane] : 0;
-  return WARRIOR_TALENT_DEFS.filter((entry) => {
-    if (!entry || entry.row !== def.row - 1) return false;
-    if (def.row === 4) return entry.lane === def.lane;
-    const previousLaneIndex = Number.isFinite(WARRIOR_LANE_ORDER[entry.lane]) ? WARRIOR_LANE_ORDER[entry.lane] : 0;
-    return Math.abs(previousLaneIndex - currentLaneIndex) <= 1;
-  }).map((entry) => entry.key);
-}
-
-export function getWarriorSelectedCapstones(game) {
-  return ["butchersPath", "judgmentWave", "redTempest"].reduce((sum, key) => sum + (getWarriorTalentPoints(game, key) > 0 ? 1 : 0), 0);
+  const tier = Math.max(1, Math.min(6, Math.floor(row) + 1));
+  const level = Number.isFinite(game?.level) ? Math.max(1, Math.floor(game.level)) : 1;
+  return level >= getWarriorRowRequirement(row) && hasRequiredPreviousTier(game, tier);
 }
 
 export function getWarriorUnlockRequirementText(game, def) {
   if (!def) return "";
-  if (def.row === 0) return "Available immediately.";
-  if (def.row === 1) {
-    if (getWarriorTalentPoints(game, "rageActive") > 0) return "Available now.";
-    return "Requires Rage first.";
-  }
-  const previousRowOptions = getWarriorPreviousRowOptions(def);
-  if (def.row === 4) {
-    const capstonesSpent = getWarriorSelectedCapstones(game);
-    const neededTotal = capstonesSpent <= 0 ? 14 : 20;
-    if (previousRowOptions.length > 0 && !previousRowOptions.some((key) => getWarriorTalentPoints(game, key) > 0)) {
-      const labels = previousRowOptions.map((key) => getWarriorTalentDef(key)?.label || key).join(" or ");
-      return `Requires ${labels} first.`;
-    }
-    if (getWarriorSpentSkillPoints(game) < neededTotal) return `Requires ${neededTotal} total points spent.`;
-    if (capstonesSpent >= 2) return "Capstone limit reached.";
-    return capstonesSpent <= 0 ? "Select your first capstone." : "Select your second capstone.";
-  }
-  if (previousRowOptions.length > 0 && !previousRowOptions.some((key) => getWarriorTalentPoints(game, key) > 0)) {
-    const labels = previousRowOptions.map((key) => getWarriorTalentDef(key)?.label || key).join(" or ");
-    return `Requires ${labels} first.`;
-  }
-  return `Requires ${getWarriorRowRequirement(def.row)} total skill points spent.`;
+  const level = Number.isFinite(game?.level) ? Math.max(1, Math.floor(game.level)) : 1;
+  if (level < (WARRIOR_TIER_LEVELS[def.tier] || 99)) return `Requires level ${WARRIOR_TIER_LEVELS[def.tier]}.`;
+  if (!hasRequiredPreviousTier(game, def.tier)) return `Requires a Tier ${def.tier - 1} pick first.`;
+  if (wouldDuplicateStanceModifier(game, def.key)) return "Cannot pick the same stance modifier twice.";
+  const selected = getTierSelections(game, def.tier);
+  if (selected.length >= (WARRIOR_TIER_PICK_LIMITS[def.tier] || 0) && !selected.includes(def.key)) return `${getTierLabel(def.tier)} choice already made.`;
+  return "";
 }
 
 export function canSpendWarriorNode(game, key) {
@@ -318,70 +532,42 @@ export function canSpendWarriorNode(game, key) {
   if (!def) return false;
   const node = game?.warriorTalents?.[key];
   if (!node || node.points >= node.maxPoints) return false;
-  if (def.row === 0) return true;
-  if (getWarriorTalentPoints(game, "rageActive") <= 0) return false;
-  if (!isWarriorRowAccessible(game, def.row)) return false;
-  const previousRowOptions = getWarriorPreviousRowOptions(def);
-  if (previousRowOptions.length > 0 && !previousRowOptions.some((nodeKey) => getWarriorTalentPoints(game, nodeKey) > 0)) return false;
-  if (def.row === 4) {
-    const capstonesSpent = getWarriorSelectedCapstones(game);
-    const neededTotal = capstonesSpent <= 0 ? 14 : 20;
-    if (getWarriorSpentSkillPoints(game) < neededTotal) return false;
-    if (capstonesSpent >= 2) return false;
-  }
+  const level = Number.isFinite(game?.level) ? Math.max(1, Math.floor(game.level)) : 1;
+  if (level < (WARRIOR_TIER_LEVELS[def.tier] || 99)) return false;
+  if (!hasRequiredPreviousTier(game, def.tier)) return false;
+  if (wouldDuplicateStanceModifier(game, key)) return false;
+  const selected = getTierSelections(game, def.tier);
+  if (selected.length >= (WARRIOR_TIER_PICK_LIMITS[def.tier] || 0) && !selected.includes(key)) return false;
   return true;
 }
 
-export function canSpendWarriorUtility(game, key) {
-  if (!isWarriorTalentGame(game) || getWarriorAvailableSkillPoints(game) <= 0) return false;
-  if (getWarriorSpentSkillPoints(game) <= 0 && getWarriorTalentPoints(game, "rageActive") <= 0) return false;
-  const upgrade = game?.upgrades?.[key];
-  return !!upgrade && Number.isFinite(upgrade.level) && upgrade.level < 4;
+export function canSpendWarriorUtility() {
+  return false;
 }
 
 export function spendWarriorNode(game, key) {
   if (!canSpendWarriorNode(game, key)) return false;
-  const node = game.warriorTalents[key];
-  node.points += 1;
+  game.warriorTalents[key].points = 1;
   game.skillPoints -= 1;
   return true;
 }
 
-export function spendWarriorUtility(game, key) {
-  if (!canSpendWarriorUtility(game, key)) return false;
-  game.upgrades[key].level += 1;
-  game.skillPoints -= 1;
-  return true;
+export function spendWarriorUtility() {
+  return false;
 }
 
 export function formatWarriorLaneLabel(lane) {
-  if (lane === "vanguard") return "Crusader";
-  if (lane === "executioner") return "Executioner";
-  if (lane === "berserker") return "Berserker";
-  return "Core";
+  if (lane === "weapon") return "Weapon Form";
+  if (lane === "stance a") return "Stance A";
+  if (lane === "stance b") return "Stance B";
+  if (lane === "doctrine") return "Class Skill";
+  if (lane === "extras") return "Extra Modifier";
+  if (lane === "capstone") return "Capstone";
+  return "Warrior";
 }
 
 export function getWarriorTooltip(game, entry) {
-  if (!entry) return null;
-  if (entry.kind === "utility") {
-    const labelMap = {
-      moveSpeed: "Move Speed Training",
-      attackSpeed: "Attack Speed Training",
-      damage: "Damage Training",
-      defense: "Defense Training"
-    };
-    const bodyMap = {
-      moveSpeed: ["Spend 1 SP for +5% move speed.", "Warrior utility node. Counts toward row unlocks."],
-      attackSpeed: ["Spend 1 SP for +6% attack speed.", "Warrior utility node. Counts toward row unlocks."],
-      damage: ["Spend 1 SP for +8% damage.", "Warrior utility node. Counts toward row unlocks."],
-      defense: ["Spend 1 SP for +1.5 flat defense.", "Warrior utility node. Counts toward row unlocks."]
-    };
-    return {
-      title: labelMap[entry.key] || entry.key,
-      lines: bodyMap[entry.key] || [],
-      requirement: entry.locked ? "Requires at least 1 available skill point." : ""
-    };
-  }
+  if (!entry || entry.kind === "utility") return null;
   const def = DEF_BY_KEY[entry.key];
   if (!def) return null;
   return {
@@ -391,188 +577,110 @@ export function getWarriorTooltip(game, entry) {
   };
 }
 
-export function getWarriorIronGuardMaxHealthBonusPct(game) {
-  return 0;
+export function getWarriorWeaponForm(game) {
+  return WEAPON_KEYS.find((key) => getWarriorTalentPoints(game, key) > 0) || "broadswing";
 }
 
-export function getWarriorIronGuardMaxHealthFlat(game) {
-  const rank = getWarriorTalentPoints(game, "ironGuard");
-  return rank >= 2 ? 8 : 0;
+export function getWarriorPrimaryStyle(game) {
+  return getWarriorWeaponForm(game);
 }
 
-export function getWarriorIronGuardDefenseBonusPct(game) {
-  return getWarriorTalentPoints(game, "ironGuard") >= 1 ? 0.04 : 0;
+export function getWarriorStanceModifier(game, stance = "A") {
+  return getSelectedStanceKey(game, stance);
 }
 
-export function getWarriorPassiveRegenBonusPct(game) {
-  return 0;
+export function getWarriorStanceLabel(game, stance = "A") {
+  return modifierLabel(getWarriorStanceModifier(game, stance));
 }
 
-export function getWarriorCrusaderUndeadDamageBonus(game, enemy = null) {
-  if (getWarriorTalentPoints(game, "ironGuard") < 3) return 0;
-  if (!enemy) return 0;
-  return enemy?.type === "ghost" || enemy?.type === "skeleton_warrior" || enemy?.type === "skeleton" || enemy?.type === "necromancer" || enemy?.type === "mummy"
-    ? 0.06
-    : 0;
+export function getWarriorSecondaryStyle(game) {
+  return getWarriorStanceModifier(game, "B");
 }
 
-export function getWarriorHeavyHandDamageBonus(game, enemy = null) {
-  const rank = getWarriorTalentPoints(game, "heavyHand");
-  let bonus = 0;
-  if (rank >= 1) bonus += 0.04;
-  if (rank >= 2) bonus += 0.04;
-  if (
-    rank >= 3 &&
-    enemy &&
-    Number.isFinite(enemy.hp) &&
-    Number.isFinite(enemy.maxHp) &&
-    enemy.maxHp > 0 &&
-    enemy.hp / enemy.maxHp > 0.7
-  ) {
-    bonus += 0.04;
+export function getWarriorDoctrine(game) {
+  if (getWarriorTalentPoints(game, "paladinDoctrine") > 0) return "paladin";
+  if (getWarriorTalentPoints(game, "berserkerDoctrine") > 0) return "berserker";
+  if (getWarriorTalentPoints(game, "gladiatorDoctrine") > 0) return "gladiator";
+  if (getWarriorTalentPoints(game, "eldritchDoctrine") > 0) return "eldritch";
+  return "battlecry";
+}
+
+export function getWarriorCapstone(game) {
+  if (getWarriorTalentPoints(game, "bastion") > 0) return "bastion";
+  if (getWarriorTalentPoints(game, "ravager") > 0) return "ravager";
+  if (getWarriorTalentPoints(game, "paragon") > 0) return "paragon";
+  if (getWarriorTalentPoints(game, "spellknight") > 0) return "spellknight";
+  return "";
+}
+
+export function getWarriorClassSkillName(game) {
+  switch (getWarriorDoctrine(game)) {
+    case "paladin":
+      return "Sanctify";
+    case "berserker":
+      return "Bloodhowl";
+    case "gladiator":
+      return "Arena Command";
+    case "eldritch":
+      return "Arcane Armament";
+    default:
+      return "Battle Cry";
   }
-  return bonus;
 }
 
-export function getWarriorHeavyHandCleaveArcBonus(game) {
-  return getWarriorTalentPoints(game, "heavyHand") >= 2 ? 0.1 : 0;
+export function getWarriorClassSkillColor(game) {
+  switch (getWarriorDoctrine(game)) {
+    case "paladin":
+      return "#e7d184";
+    case "berserker":
+      return "#dd6e62";
+    case "gladiator":
+      return "#d5ab73";
+    case "eldritch":
+      return "#8aa2ff";
+    default:
+      return "#d14f4f";
+  }
 }
 
-export function getWarriorHeavyHandRangeBonus() {
-  return 0;
+export function getWarriorClassSkillCooldown(game) {
+  return getWarriorDoctrine(game) === "gladiator" ? 9 : 10;
 }
 
-export function getWarriorBloodheatAttackSpeedBonus(game) {
-  return getWarriorTalentPoints(game, "bloodheat") * 0.05;
+export function getWarriorClassSkillDuration(game) {
+  switch (getWarriorDoctrine(game)) {
+    case "paladin":
+      return 3.5;
+    case "berserker":
+    case "eldritch":
+      return 4;
+    default:
+      return 3;
+  }
 }
 
-export function getWarriorBloodheatMoveSpeedBonus(game) {
-  return getWarriorTalentPoints(game, "bloodheat") >= 3 ? 0.05 : 0;
-}
-
-export function getWarriorBloodheatRageLifeLeechBonus(game) {
-  return 0;
-}
-
-export function getWarriorBloodheatRageMoveSpeedBonus(game) {
-  return getWarriorTalentPoints(game, "bloodheat") >= 2 ? 0.05 : 0;
-}
-
-export function hasWarriorGuardedAdvance(game) {
-  return getWarriorTalentPoints(game, "guardedAdvance") > 0;
-}
-
-export function getWarriorGuardedAdvanceMeleeDefenseBonusPct(game) {
-  return 0;
-}
-
-export function getWarriorGuardedAdvanceRetaliationDamage(game) {
-  return 0;
-}
-
-export function getWarriorGuardedAdvanceCounterChance(game) {
-  return 0;
-}
-
-export function getWarriorGuardedAdvanceIgnoreHitChance(game) {
-  return 0;
-}
-
-export function getWarriorGuardedAdvanceAllyFlatReduction(game, damageType = "physical") {
-  return 0;
-}
-
-export function getWarriorGuardedAdvanceMissileReflectChance(game, entity = null) {
-  return 0;
-}
-
-export function hasWarriorReflectShare(game, entity = null) {
-  return false;
+export function getWarriorSwapCooldown() {
+  return 2;
 }
 
 export function hasWarriorCleaveDiscipline(game) {
   return getWarriorTalentPoints(game, "cleaveDiscipline") > 0;
 }
 
-export function getWarriorRageMasteryAttackSpeedBonus(game) {
-  return hasWarriorRageMastery(game) ? 0.25 : 0;
+export function hasWarriorExecutionersReach(game) {
+  return getWarriorTalentPoints(game, "executionersReach") > 0;
 }
 
-export function getWarriorRageMasteryMoveSpeedBonus(game) {
-  return hasWarriorRageMastery(game) ? 0.10 : 0;
+export function hasWarriorBattleFrenzy(game) {
+  return getWarriorTalentPoints(game, "battleFrenzy") > 0;
 }
 
-export function hasWarriorRageMastery(game) {
-  return getWarriorTalentPoints(game, "rageMastery") > 0;
+export function hasWarriorJudgmentWave(game) {
+  return getWarriorTalentPoints(game, "shockRelease") > 0;
 }
 
-export function getWarriorExecutionerRageRangeBonus(game) {
-  return getWarriorTalentPoints(game, "executionersReach") > 0 ? 0.1 : 0;
-}
-
-export function getWarriorExecutionerMultiHitBonus() {
-  return 0;
-}
-
-export function getWarriorExecutionerExecuteBonus() {
-  return 0;
-}
-
-export function getWarriorExecutionerExecuteChance(game) {
-  return getWarriorTalentPoints(game, "executionersReach") * 0.1;
-}
-
-export function getWarriorBattleFrenzyDuration() {
-  return 3;
-}
-
-export function getWarriorBattleFrenzyAttackSpeedBonus() {
-  return 0;
-}
-
-export function getWarriorBattleFrenzyMoveSpeedBonus(game) {
-  return getWarriorTalentPoints(game, "battleFrenzy") * 0.1;
-}
-
-export function getWarriorBattleFrenzyDamageBonus(game) {
-  return getWarriorTalentPoints(game, "battleFrenzy") * 0.05;
-}
-
-export function getWarriorBattleFrenzyLifeLeechBonus() {
-  return 0;
-}
-
-export function getWarriorUnbrokenLifeLeechBonus(game, healthRatio = 1) {
-  return 0;
-}
-
-export function getWarriorUnbrokenDamageReduction(game, healthRatio = 1) {
-  return 0;
-}
-
-export function hasWarriorUnbrokenCheatDeath(game) {
-  return false;
-}
-
-export function getWarriorSecondWindHealPct(game) {
-  return getWarriorTalentPoints(game, "unbroken") > 0 ? 0.25 : 0;
-}
-
-export function getWarriorSecondWindAllyHealPct(game) {
-  return getWarriorTalentPoints(game, "unbroken") > 0 ? 0.1 : 0;
-}
-
-export function isWarriorPassiveRageActive(game) {
-  return false;
-}
-
-export function isWarriorRaging(game) {
-  const activeTimer = Number.isFinite(game?.warriorRageActiveTimer) ? game.warriorRageActiveTimer : 0;
-  return activeTimer > 0 || isWarriorPassiveRageActive(game);
-}
-
-export function hasWarriorStonewall(game) {
-  return getWarriorTalentPoints(game, "judgmentWave") > 0;
+export function hasWarriorShockRelease(game) {
+  return hasWarriorJudgmentWave(game);
 }
 
 export function hasWarriorButchersPath(game) {
@@ -583,63 +691,109 @@ export function hasWarriorRedTempest(game) {
   return getWarriorTalentPoints(game, "redTempest") > 0;
 }
 
-export function getWarriorStonewallLifeLeechBonus(game) {
-  return 0;
+export function hasWarriorSecondWind(game) {
+  return getWarriorTalentPoints(game, "secondWind") > 0;
 }
 
-export function getWarriorStonewallAllyDefenseAuraPct(game) {
-  return 0;
+export function hasWarriorConsecratedGround(game) {
+  return getWarriorTalentPoints(game, "consecratedGround") > 0;
 }
 
-export function hasWarriorCrusaderInvestment(game) {
-  return getWarriorTalentPoints(game, "ironGuard") > 0 ||
-    getWarriorTalentPoints(game, "guardedAdvance") > 0 ||
-    getWarriorTalentPoints(game, "unbroken") > 0 ||
-    getWarriorTalentPoints(game, "judgmentWave") > 0;
+export function hasWarriorBastion(game) {
+  return getWarriorCapstone(game) === "bastion";
+}
+
+export function hasWarriorRavager(game) {
+  return getWarriorCapstone(game) === "ravager";
+}
+
+export function hasWarriorParagon(game) {
+  return getWarriorCapstone(game) === "paragon";
+}
+
+export function hasWarriorSpellknight(game) {
+  return getWarriorCapstone(game) === "spellknight";
+}
+
+export function isWarriorRaging(game) {
+  const activeTimer = Number.isFinite(game?.warriorRageActiveTimer) ? game.warriorRageActiveTimer : 0;
+  return activeTimer > 0;
+}
+
+export function getWarriorBattleFrenzyDuration() {
+  return 3;
+}
+
+export function getWarriorBattleFrenzyMoveSpeedBonus(game) {
+  return hasWarriorBattleFrenzy(game) ? 0.16 : 0;
+}
+
+export function getWarriorBattleFrenzyDamageBonus(game) {
+  return hasWarriorBattleFrenzy(game) ? 0.1 : 0;
+}
+
+export function getWarriorSecondWindHealPct(game) {
+  return hasWarriorSecondWind(game) ? 0.22 : 0;
+}
+
+export function getWarriorSecondWindAllyHealPct(game) {
+  return hasWarriorSecondWind(game) ? 0.08 : 0;
 }
 
 export function getWarriorConsecratedRadiusTiles(game) {
-  let radius = 3;
-  if (getWarriorTalentPoints(game, "unbroken") >= 1) radius *= 1.15;
-  return radius;
+  return hasWarriorConsecratedGround(game) ? 3.5 : 0;
 }
 
 export function getWarriorConsecratedDps(game) {
-  let dps = 9;
-  if (getWarriorTalentPoints(game, "unbroken") >= 2) dps *= 1.15;
-  return dps;
+  return hasWarriorConsecratedGround(game) ? 10 : 0;
 }
 
 export function getWarriorConsecratedUndeadMultiplier(game) {
-  return 1.5;
+  return hasWarriorConsecratedGround(game) ? 1.5 : 1;
 }
 
 export function getWarriorConsecratedHealingMultiplier(game) {
-  return hasWarriorGuardedAdvance(game) ? 1.25 : 1;
+  return hasWarriorSecondWind(game) ? 1.25 : 1;
 }
 
 export function getWarriorConsecratedDamageReductionPct(game) {
-  return hasWarriorGuardedAdvance(game) ? 0.05 : 0;
+  return hasWarriorConsecratedGround(game) || hasWarriorBastion(game) ? 0.08 : 0;
 }
 
 export function getWarriorConsecratedShredPct(game) {
-  return getWarriorTalentPoints(game, "unbroken") >= 3 ? 0.2 : 0;
-}
-
-export function hasWarriorJudgmentWave(game) {
-  return hasWarriorStonewall(game);
+  return hasWarriorJudgmentWave(game) ? 0.2 : 0;
 }
 
 export function getWarriorJudgmentWaveChance(game) {
-  return hasWarriorStonewall(game) ? 0.25 : 0;
+  return hasWarriorJudgmentWave(game) ? 0.18 : 0;
 }
 
 export function getWarriorJudgmentWaveDamageMultiplier(game) {
-  return hasWarriorStonewall(game) ? 0.7 : 0;
+  return hasWarriorJudgmentWave(game) ? 0.65 : 0;
 }
 
 export function getWarriorJudgmentWaveShredPct(game) {
-  return hasWarriorStonewall(game) ? 0.2 : 0;
+  return hasWarriorJudgmentWave(game) ? 0.2 : 0;
+}
+
+export function getWarriorExecutionerExecuteChance(game) {
+  return hasWarriorExecutionersReach(game) ? 0.14 : 0;
+}
+
+export function getWarriorExecutionerRageRangeBonus(game) {
+  return hasWarriorExecutionersReach(game) ? 0.2 : 0;
+}
+
+export function getWarriorExecutionerRageCleaveWidthBonus(game) {
+  return hasWarriorCleaveDiscipline(game) ? 0.2 : 0;
+}
+
+export function getWarriorButchersPathNextHitDamageBonus(game) {
+  return hasWarriorButchersPath(game) ? 0.35 : 0;
+}
+
+export function getWarriorButchersPathNextHitArcBonus(game) {
+  return hasWarriorButchersPath(game) ? 0.25 : 0;
 }
 
 export function getWarriorRedTempestMoveSpeedBonus(game) {
@@ -654,16 +808,135 @@ export function getWarriorRedTempestFullArcDuration(game) {
   return hasWarriorRedTempest(game) ? 5 : 0;
 }
 
-export function getWarriorExecutionerRageCleaveWidthBonus(game) {
-  return hasWarriorCleaveDiscipline(game) ? 0.10 : 0;
+export function getWarriorRageMasteryAttackSpeedBonus(game) {
+  return getWarriorDoctrine(game) === "berserker" ? 0.2 : 0;
 }
 
-export function getWarriorButchersPathNextHitDamageBonus(game) {
-  return hasWarriorButchersPath(game) ? 0.2 : 0;
+export function getWarriorRageMasteryMoveSpeedBonus(game) {
+  return getWarriorDoctrine(game) === "berserker" ? 0.1 : 0;
 }
 
-export function getWarriorButchersPathNextHitArcBonus(game) {
-  return hasWarriorButchersPath(game) ? 0.2 : 0;
+export function hasWarriorRageMastery(game) {
+  return getWarriorDoctrine(game) === "berserker";
+}
+
+export function getWarriorBloodheatAttackSpeedBonus(game) {
+  return getWarriorStanceModifier(game, "A") === "swift" || getWarriorStanceModifier(game, "B") === "swift" ? 0.08 : 0;
+}
+
+export function getWarriorBloodheatMoveSpeedBonus(game) {
+  return getWarriorDoctrine(game) === "berserker" ? 0.05 : 0;
+}
+
+export function getWarriorBloodheatRageMoveSpeedBonus(game) {
+  return getWarriorDoctrine(game) === "berserker" ? 0.1 : 0;
+}
+
+export function getWarriorCrusaderUndeadDamageBonus(game, enemy = null) {
+  if ((getWarriorDoctrine(game) !== "paladin" && !hasWarriorJudgmentWave(game) && !hasWarriorConsecratedGround(game)) || !enemy) return 0;
+  return enemy?.type === "ghost" || enemy?.type === "skeleton_warrior" || enemy?.type === "skeleton" || enemy?.type === "necromancer" || enemy?.type === "mummy"
+    ? 0.08
+    : 0;
+}
+
+export function getWarriorHeavyHandDamageBonus() {
+  return 0;
+}
+
+export function getWarriorHeavyHandCleaveArcBonus() {
+  return 0;
+}
+
+export function getWarriorIronGuardMaxHealthBonusPct() {
+  return 0;
+}
+
+export function getWarriorIronGuardMaxHealthFlat() {
+  return 0;
+}
+
+export function getWarriorIronGuardDefenseBonusPct() {
+  return 0;
+}
+
+export function getWarriorPassiveRegenBonusPct() {
+  return 0;
+}
+
+export function hasWarriorGuardedAdvance(game) {
+  return hasWarriorConsecratedGround(game);
+}
+
+export function getWarriorGuardedAdvanceMeleeDefenseBonusPct(game) {
+  return hasWarriorBastion(game) ? 0.12 : 0;
+}
+
+export function getWarriorGuardedAdvanceRetaliationDamage() {
+  return 0;
+}
+
+export function getWarriorGuardedAdvanceCounterChance() {
+  return 0;
+}
+
+export function getWarriorGuardedAdvanceIgnoreHitChance() {
+  return 0;
+}
+
+export function getWarriorGuardedAdvanceAllyFlatReduction() {
+  return 0;
+}
+
+export function getWarriorGuardedAdvanceMissileReflectChance() {
+  return 0;
+}
+
+export function hasWarriorReflectShare() {
+  return false;
+}
+
+export function getWarriorBattleFrenzyAttackSpeedBonus() {
+  return 0;
+}
+
+export function getWarriorBattleFrenzyLifeLeechBonus() {
+  return 0;
+}
+
+export function getWarriorUnbrokenLifeLeechBonus() {
+  return 0;
+}
+
+export function getWarriorUnbrokenDamageReduction() {
+  return 0;
+}
+
+export function hasWarriorUnbrokenCheatDeath() {
+  return false;
+}
+
+export function isWarriorPassiveRageActive() {
+  return false;
+}
+
+export function hasWarriorStonewall(game) {
+  return hasWarriorJudgmentWave(game);
+}
+
+export function getWarriorStonewallLifeLeechBonus() {
+  return 0;
+}
+
+export function getWarriorStonewallAllyDefenseAuraPct(game) {
+  return hasWarriorBastion(game) ? 0.1 : 0;
+}
+
+export function hasWarriorCrusaderInvestment(game) {
+  return getWarriorDoctrine(game) === "paladin" || hasWarriorJudgmentWave(game);
+}
+
+export function hasWarriorEldritchInvestment(game) {
+  return getWarriorDoctrine(game) === "eldritch" || hasWarriorSpellknight(game);
 }
 
 export function getWarriorSkillPointGainForLevel(level, classType) {

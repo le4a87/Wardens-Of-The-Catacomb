@@ -29,14 +29,30 @@ export function createWarriorRuntimeState() {
     lastProtectedByWarriorId: null,
     rageCritReady: false,
     butcherCritReady: false,
+    butcherEmpowerReady: false,
     secondWindPool: 0,
     secondWindTimer: 0,
     secondWindTotalDuration: 0,
     battleFrenzyCooldownTimer: 0,
     tempHp: 0,
     tempHpTimer: 0,
+    eldritchWardHp: 0,
+    eldritchWardCooldownTimer: 0,
     rageArcTimer: 0,
-    cheatDeathCooldown: 0
+    cheatDeathCooldown: 0,
+    activeAttackMode: "primary",
+    attackSwapCooldownTimer: 0,
+    eldritchSurgeTimer: 0,
+    gladiatorSwapTimer: 0,
+    gladiatorSwapMode: "",
+    shockReleaseCharges: 0,
+    shockReleaseComboTimer: 0,
+    shockReleaseReady: false,
+    paladinGuardedChargeTimer: 3,
+    eldritchMarkedSparkTimer: 0,
+    berserkerMarkedFrenzyCooldown: 0,
+    paragonPrimaryReady: false,
+    paragonSecondaryReady: false
   };
 }
 

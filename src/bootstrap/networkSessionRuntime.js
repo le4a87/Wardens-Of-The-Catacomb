@@ -435,7 +435,7 @@ export function createNetworkSessionController({
       const nowMs = performance.now();
       const inputDt = netLastInputProcessAt > 0 ? Math.min(0.05, Math.max(0.001, (nowMs - netLastInputProcessAt) / 1000)) : NET_INPUT_DT;
       netLastInputProcessAt = nowMs;
-      if (nowMs - netLastInputSendAt < NET_MIN_SEND_MS && !input.firePrimaryQueued && !input.fireAltQueued) return;
+      if (nowMs - netLastInputSendAt < NET_MIN_SEND_MS && !input.firePrimaryQueued && !input.fireAltQueued && !input.swapAttackQueued) return;
       if (!shouldSendNetworkInput(input, nowMs, netLastSentInput, netLastInputSendAt, NET_FORCE_SEND_IDLE_MS)) return;
       netLastInputSendAt = nowMs;
       netLastSentInput = {
@@ -446,10 +446,12 @@ export function createNetworkSessionController({
         aimY: input.aimY,
         aimDirX: input.aimDirX,
         aimDirY: input.aimDirY,
+        swapAttackQueued: input.swapAttackQueued,
         firePrimaryQueued: input.firePrimaryQueued,
         fireAltQueued: input.fireAltQueued
       };
       if (!isNetworkController()) {
+        input.swapAttackQueued = false;
         input.firePrimaryQueued = false;
         input.firePrimaryHeld = false;
         input.fireAltQueued = false;

@@ -24,7 +24,7 @@ export function shouldSendNetworkInput(input, nowMs, previous, lastInputSendAt, 
     previous.hasAim &&
     (Math.abs((input.aimDirX || 0) - (previous.aimDirX || 0)) > 0.01 || Math.abs((input.aimDirY || 0) - (previous.aimDirY || 0)) > 0.01);
   const changedPrimaryHold = !!input.firePrimaryHeld !== !!previous.firePrimaryHeld;
-  const hasQueuedAction = !!input.firePrimaryQueued || !!input.fireAltQueued;
+  const hasQueuedAction = !!input.firePrimaryQueued || !!input.fireAltQueued || !!input.swapAttackQueued;
   const hasContinuousInput = !!input.firePrimaryHeld || !!input.moveX || !!input.moveY;
   if (changedMove || changedAimMode || changedAimPos || changedAimDir || changedPrimaryHold || hasQueuedAction || hasContinuousInput) return true;
   return nowMs - lastInputSendAt >= forceSendIdleMs;

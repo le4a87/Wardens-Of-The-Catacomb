@@ -168,6 +168,10 @@ export const rendererEffectsProjectileMethods = {
         this.drawHolyWaveProjectile(b, cameraX, cameraY, game.time);
         continue;
       }
+      if (b.projectileType === "arcaneWave") {
+        this.drawArcaneWaveProjectile(b, cameraX, cameraY, game.time);
+        continue;
+      }
       if (b.projectileType === "fleshBall") {
         this.drawFleshBallProjectile(b, cameraX, cameraY, game.time);
         continue;
@@ -286,24 +290,62 @@ export const rendererEffectsProjectileMethods = {
     const y = projectile.y - cameraY;
     const size = Number.isFinite(projectile.size) ? projectile.size : 28;
     const pulse = 0.92 + Math.sin(time * 12 + projectile.x * 0.02) * 0.08;
+    const damageType = typeof projectile.damageType === "string" ? projectile.damageType : "holy";
+    const arcane = damageType === "arcane";
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Number.isFinite(projectile.angle) ? projectile.angle : 0);
-    ctx.strokeStyle = "rgba(255, 216, 120, 0.28)";
+    ctx.strokeStyle = arcane ? "rgba(128, 142, 255, 0.3)" : "rgba(255, 216, 120, 0.28)";
     ctx.lineWidth = Math.max(8, size * 0.42);
     ctx.beginPath();
     ctx.arc(0, 0, size * 0.9 * pulse, -0.56, 0.56);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(255, 241, 186, 0.96)";
+    ctx.strokeStyle = arcane ? "rgba(189, 198, 255, 0.96)" : "rgba(255, 241, 186, 0.96)";
     ctx.lineWidth = Math.max(4, size * 0.16);
     ctx.beginPath();
     ctx.arc(0, 0, size * 0.92 * pulse, -0.58, 0.58);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(255, 250, 224, 0.82)";
+    ctx.strokeStyle = arcane ? "rgba(229, 230, 255, 0.82)" : "rgba(255, 250, 224, 0.82)";
     ctx.lineWidth = Math.max(2, size * 0.07);
     ctx.beginPath();
     ctx.arc(0, 0, size * 0.78 * pulse, -0.52, 0.52);
     ctx.stroke();
+    ctx.restore();
+  },
+
+  drawArcaneWaveProjectile(projectile, cameraX, cameraY, time = 0) {
+    const ctx = this.ctx;
+    const x = projectile.x - cameraX;
+    const y = projectile.y - cameraY;
+    const size = Number.isFinite(projectile.size) ? projectile.size : 24;
+    const pulse = 0.9 + Math.sin(time * 11 + projectile.x * 0.018) * 0.08;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Number.isFinite(projectile.angle) ? projectile.angle : 0);
+    ctx.strokeStyle = "rgba(103, 86, 255, 0.24)";
+    ctx.lineWidth = Math.max(8, size * 0.38);
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.82 * pulse, -0.6, 0.6);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(142, 158, 255, 0.95)";
+    ctx.lineWidth = Math.max(4, size * 0.15);
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.86 * pulse, -0.62, 0.62);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(216, 205, 255, 0.82)";
+    ctx.lineWidth = Math.max(2, size * 0.06);
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.72 * pulse, -0.56, 0.56);
+    ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      const t = time * 7 + i * 0.9;
+      ctx.strokeStyle = `rgba(167, 150, 255, ${0.5 - i * 0.12})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.2 + Math.sin(t) * 3, -size * 0.1 + i * 2);
+      ctx.lineTo(size * 0.32 + Math.cos(t) * 4, size * 0.08 - i * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   },
 
@@ -358,38 +400,171 @@ export const rendererEffectsProjectileMethods = {
     const dirY = Math.sin(swing.angle);
     const originPlayer = player && Number.isFinite(player.x) && Number.isFinite(player.y) ? player : null;
     if (![x, y, range, arc, start, end, dirX, dirY].every(Number.isFinite)) return;
+    const style = typeof swing.style === "string" ? swing.style : "broadswing";
+    const modifier = typeof swing.modifier === "string" ? swing.modifier : "";
+    const doctrine = typeof swing.doctrine === "string" ? swing.doctrine : "";
+    const palette =
+      doctrine === "paladin"
+        ? { core: "rgba(255, 236, 176, 0.96)", edge: "#ffe39f", shadow: "rgba(181, 128, 48, 0)" }
+        : doctrine === "eldritch"
+        ? { core: "rgba(166, 190, 255, 0.94)", edge: "#aac4ff", shadow: "rgba(78, 104, 196, 0)" }
+        : doctrine === "berserker"
+        ? { core: "rgba(255, 170, 154, 0.94)", edge: "#ff9c8d", shadow: "rgba(171, 42, 26, 0)" }
+        : { core: "rgba(255, 232, 188, 0.9)", edge: "#f4d8b3", shadow: "rgba(189, 96, 64, 0)" };
 
     ctx.save();
-    ctx.globalAlpha = 0.55 * alpha;
-    const slashGrad = ctx.createRadialGradient(x, y, range * 0.15, x + dirX * range * 0.6, y + dirY * range * 0.6, range);
-    if (swing.executeProc) {
-      slashGrad.addColorStop(0, "rgba(255, 106, 106, 0.96)");
-      slashGrad.addColorStop(0.55, "rgba(221, 48, 48, 0.7)");
-      slashGrad.addColorStop(1, "rgba(128, 12, 12, 0)");
+    if (style === "longspear") {
+      const shaftX = x + dirX * range * 0.84;
+      const shaftY = y + dirY * range * 0.84;
+      const spread = Math.max(8, range * (modifier === "cleaving" ? 0.2 : modifier === "focused" ? 0.1 : 0.14));
+      const width = Math.max(5, spread * 0.75);
+      const leftX = shaftX + -dirY * spread;
+      const leftY = shaftY + dirX * spread;
+      const rightX = shaftX - -dirY * spread;
+      const rightY = shaftY - dirX * spread;
+      ctx.globalAlpha = 0.24 * alpha;
+      ctx.fillStyle = doctrine === "eldritch" ? "rgba(126, 156, 255, 0.24)" : doctrine === "paladin" ? "rgba(255, 232, 162, 0.22)" : "rgba(246, 225, 192, 0.18)";
+      ctx.beginPath();
+      ctx.moveTo(x + dirX * 10, y + dirY * 10);
+      ctx.lineTo(leftX, leftY);
+      ctx.lineTo(shaftX + dirX * 12, shaftY + dirY * 12);
+      ctx.lineTo(rightX, rightY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.52 * alpha;
+      const grad = ctx.createLinearGradient(x, y, shaftX, shaftY);
+      grad.addColorStop(0, "rgba(255,255,255,0.02)");
+      grad.addColorStop(0.35, palette.core);
+      grad.addColorStop(1, palette.shadow);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = width;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x + dirX * 10, y + dirY * 10);
+      ctx.lineTo(shaftX, shaftY);
+      ctx.stroke();
+      ctx.globalAlpha = 0.9 * alpha;
+      ctx.strokeStyle = swing.executeProc ? "#ff5f5f" : palette.edge;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(x + dirX * 12, y + dirY * 12);
+      ctx.lineTo(shaftX, shaftY);
+      ctx.stroke();
+      ctx.fillStyle = swing.executeProc ? "#ffd0d0" : "#f3efe3";
+      ctx.beginPath();
+      ctx.moveTo(shaftX + dirX * 9, shaftY + dirY * 9);
+      ctx.lineTo(shaftX - dirX * 2 + -dirY * 6, shaftY - dirY * 2 + dirX * 6);
+      ctx.lineTo(shaftX - dirX * 2 - -dirY * 6, shaftY - dirY * 2 - dirX * 6);
+      ctx.closePath();
+      ctx.fill();
+    } else if (style === "warWhip") {
+      const isCleaving = modifier === "cleaving";
+      const curveA = isCleaving ? 0.28 : 0.18;
+      const curveB = isCleaving ? 0.34 : 0.22;
+      const tipReach = isCleaving ? 1.02 : 0.98;
+      const ctrl1X = x + dirX * range * 0.28 + -dirY * range * curveA;
+      const ctrl1Y = y + dirY * range * 0.28 + dirX * range * curveA;
+      const ctrl2X = x + dirX * range * 0.68 - -dirY * range * curveB;
+      const ctrl2Y = y + dirY * range * 0.68 - dirX * range * curveB;
+      const tipX = x + dirX * range * tipReach;
+      const tipY = y + dirY * range * tipReach;
+      const ribbonWidth = isCleaving ? 12 : modifier === "focused" ? 5 : 7;
+      ctx.globalAlpha = 0.16 * alpha;
+      ctx.strokeStyle = doctrine === "eldritch" ? "rgba(144, 176, 255, 0.44)" : "rgba(255, 220, 184, 0.38)";
+      ctx.lineWidth = ribbonWidth * (isCleaving ? 3.1 : 2.6);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x + dirX * 10, y + dirY * 10);
+      ctx.bezierCurveTo(ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, tipX, tipY);
+      ctx.stroke();
+      if (isCleaving) {
+        ctx.globalAlpha = 0.11 * alpha;
+        ctx.strokeStyle = doctrine === "eldritch" ? "rgba(184, 196, 255, 0.42)" : "rgba(255, 232, 198, 0.34)";
+        ctx.lineWidth = ribbonWidth * 4.4;
+        ctx.beginPath();
+        ctx.moveTo(x + dirX * 8, y + dirY * 8);
+        ctx.bezierCurveTo(
+          x + dirX * range * 0.24 + -dirY * range * 0.38,
+          y + dirY * range * 0.24 + dirX * range * 0.38,
+          x + dirX * range * 0.62 - -dirY * range * 0.42,
+          y + dirY * range * 0.62 - dirX * range * 0.42,
+          x + dirX * range * 1.04,
+          y + dirY * range * 1.04
+        );
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.5 * alpha;
+      ctx.strokeStyle = doctrine === "eldritch" ? "rgba(144, 176, 255, 0.84)" : "rgba(244, 206, 167, 0.82)";
+      ctx.lineWidth = ribbonWidth;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x + dirX * 10, y + dirY * 10);
+      ctx.bezierCurveTo(ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, tipX, tipY);
+      ctx.stroke();
+      ctx.globalAlpha = 0.95 * alpha;
+      ctx.strokeStyle = swing.executeProc ? "#ff7474" : palette.edge;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + dirX * 10, y + dirY * 10);
+      ctx.bezierCurveTo(ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, tipX, tipY);
+      ctx.stroke();
+      ctx.fillStyle = swing.executeProc ? "#ffd0d0" : "#f6ead6";
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (style === "twinHatchets") {
+      const baseR = range * 0.9;
+      const off = 8;
+      for (const sign of [-1, 1]) {
+        ctx.globalAlpha = 0.46 * alpha;
+        ctx.strokeStyle = sign < 0 ? "rgba(255, 194, 168, 0.9)" : palette.core;
+        ctx.lineWidth = 6.4;
+        ctx.beginPath();
+        ctx.arc(x + -dirY * off * sign, y + dirX * off * sign, baseR, start + sign * 0.06, end + sign * 0.06);
+        ctx.stroke();
+        ctx.globalAlpha = 0.88 * alpha;
+        ctx.strokeStyle = swing.executeProc ? "#ff7c7c" : "#fff0dc";
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(x + -dirY * off * sign, y + dirX * off * sign, baseR * 0.94, start + sign * 0.08, end + sign * 0.08);
+        ctx.stroke();
+      }
     } else {
-      slashGrad.addColorStop(0, "rgba(255, 232, 188, 0.9)");
-      slashGrad.addColorStop(1, "rgba(189, 96, 64, 0)");
+      ctx.globalAlpha = 0.55 * alpha;
+      const slashGrad = ctx.createRadialGradient(x, y, range * 0.15, x + dirX * range * 0.6, y + dirY * range * 0.6, range);
+      if (swing.executeProc) {
+        slashGrad.addColorStop(0, "rgba(255, 106, 106, 0.96)");
+        slashGrad.addColorStop(0.55, "rgba(221, 48, 48, 0.7)");
+        slashGrad.addColorStop(1, "rgba(128, 12, 12, 0)");
+      } else {
+        slashGrad.addColorStop(0, palette.core);
+        slashGrad.addColorStop(1, palette.shadow);
+      }
+      ctx.fillStyle = slashGrad;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.arc(x, y, range, start, end);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.globalAlpha = 0.85 * alpha;
+      ctx.strokeStyle = swing.executeProc ? "#ff5f5f" : palette.edge;
+      ctx.lineWidth = swing.executeProc ? 3 : 2.4;
+      ctx.beginPath();
+      ctx.arc(x, y, range * 0.82, start, end);
+      ctx.stroke();
     }
-    ctx.fillStyle = slashGrad;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.arc(x, y, range, start, end);
-    ctx.closePath();
-    ctx.fill();
 
-    ctx.globalAlpha = 0.85 * alpha;
-    ctx.strokeStyle = swing.executeProc ? "#ff5f5f" : "#f4d8b3";
-    ctx.lineWidth = swing.executeProc ? 3 : 2.4;
-    ctx.beginPath();
-    ctx.arc(x, y, range * 0.82, start, end);
-    ctx.stroke();
-
-    if (swing.executeProc) {
+    if (swing.executeProc && style !== "longspear") {
       ctx.globalAlpha = 0.95 * alpha;
       ctx.strokeStyle = "#ff4545";
       ctx.lineWidth = 3.2;
       ctx.beginPath();
-      ctx.arc(x, y, range * 0.88, start + arc * 0.08, end - arc * 0.08);
+      if (style === "twinHatchets") {
+        ctx.arc(x, y, range * 0.72, start + arc * 0.08, end - arc * 0.08);
+      } else {
+        ctx.arc(x, y, range * 0.88, start + arc * 0.08, end - arc * 0.08);
+      }
       ctx.stroke();
     }
 
@@ -397,7 +572,7 @@ export const rendererEffectsProjectileMethods = {
     const bladeY = y + dirY * (range * 0.72);
     ctx.strokeStyle = swing.executeProc ? "#ffd0d0" : "#e9e0d1";
     ctx.lineWidth = swing.executeProc ? 2.3 : 2;
-    if (originPlayer) {
+    if (originPlayer && style !== "warWhip" && style !== "twinHatchets") {
       ctx.beginPath();
       ctx.moveTo(originPlayer.x - cameraX + dirX * 12, originPlayer.y - cameraY + dirY * 12);
       ctx.lineTo(bladeX, bladeY);
@@ -531,32 +706,115 @@ export const rendererEffectsProjectileMethods = {
       }
       return;
     }
-    if (zone.zoneType === "crusaderAura") {
+    if (zone.zoneType === "crusaderAura" || zone.zoneType === "warCircle") {
       const radius = Number.isFinite(zone.radius) ? Math.max(0, zone.radius) : 0;
       if (radius <= 0) return;
       const totalLife = Number.isFinite(zone.totalLife) && zone.totalLife > 0 ? zone.totalLife : 8;
       const lifeFrac = Math.max(0, Math.min(1, zone.life / totalLife));
       const pulse = 0.95 + Math.sin(time * 5 + zone.x * 0.01 + zone.y * 0.008) * 0.04;
       const outer = ctx.createRadialGradient(x, y, 2, x, y, radius * pulse);
-      outer.addColorStop(0, `rgba(255, 245, 188, ${0.34 * lifeFrac + 0.14})`);
-      outer.addColorStop(0.5, `rgba(245, 207, 111, ${0.28 * lifeFrac + 0.14})`);
-      outer.addColorStop(1, `rgba(125, 92, 26, ${0.08 * lifeFrac})`);
+      const damageType = typeof zone.damageType === "string" ? zone.damageType : "holy";
+      const palette = damageType === "arcane"
+        ? ["rgba(206, 196, 255,", "rgba(132, 118, 255,", "rgba(38, 22, 76,"]
+        : zone.doctrine === "berserker"
+        ? ["rgba(255, 202, 196,", "rgba(216, 88, 74,", "rgba(94, 28, 22,"]
+        : zone.doctrine === "gladiator"
+        ? ["rgba(250, 225, 188,", "rgba(213, 171, 115,", "rgba(94, 66, 26,"]
+        : ["rgba(255, 245, 188,", "rgba(245, 207, 111,", "rgba(125, 92, 26,"];
+      outer.addColorStop(0, `${palette[0]} ${0.34 * lifeFrac + 0.14})`);
+      outer.addColorStop(0.5, `${palette[1]} ${0.28 * lifeFrac + 0.14})`);
+      outer.addColorStop(1, `${palette[2]} ${0.08 * lifeFrac})`);
       ctx.fillStyle = outer;
       ctx.beginPath();
       ctx.arc(x, y, radius * pulse, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(255, 239, 166, ${0.55 * lifeFrac + 0.18})`;
+      ctx.strokeStyle = damageType === "arcane"
+        ? `rgba(218, 210, 255, ${0.55 * lifeFrac + 0.18})`
+        : zone.doctrine === "berserker"
+        ? `rgba(255, 190, 170, ${0.55 * lifeFrac + 0.18})`
+        : zone.doctrine === "gladiator"
+        ? `rgba(245, 221, 182, ${0.55 * lifeFrac + 0.18})`
+        : `rgba(255, 239, 166, ${0.55 * lifeFrac + 0.18})`;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(x, y, radius * 0.96, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = `rgba(255, 248, 214, ${0.7 * lifeFrac + 0.18})`;
+      ctx.strokeStyle = damageType === "arcane"
+        ? `rgba(235, 232, 255, ${0.7 * lifeFrac + 0.18})`
+        : zone.doctrine === "berserker"
+        ? `rgba(255, 220, 212, ${0.7 * lifeFrac + 0.18})`
+        : zone.doctrine === "gladiator"
+        ? `rgba(255, 241, 218, ${0.7 * lifeFrac + 0.18})`
+        : `rgba(255, 248, 214, ${0.7 * lifeFrac + 0.18})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(x - radius * 0.22, y);
       ctx.lineTo(x + radius * 0.22, y);
       ctx.moveTo(x, y - radius * 0.22);
       ctx.lineTo(x, y + radius * 0.22);
+      ctx.stroke();
+      return;
+    }
+    if (zone.zoneType === "tempestAura") {
+      const radius = Number.isFinite(zone.radius) ? Math.max(0, zone.radius) : 0;
+      if (radius <= 0) return;
+      const totalLife = Number.isFinite(zone.totalLife) && zone.totalLife > 0 ? zone.totalLife : 3;
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / totalLife));
+      const pulse = 0.94 + Math.sin(time * 8 + zone.x * 0.015 + zone.y * 0.01) * 0.08;
+      const damageType = typeof zone.damageType === "string" ? zone.damageType : "physical";
+      const outer = ctx.createRadialGradient(x, y, 2, x, y, radius * pulse);
+      if (damageType === "arcane") {
+        outer.addColorStop(0, `rgba(220, 214, 255, ${0.18 + lifeFrac * 0.18})`);
+        outer.addColorStop(0.5, `rgba(121, 102, 255, ${0.18 + lifeFrac * 0.22})`);
+        outer.addColorStop(1, `rgba(34, 18, 68, ${0.06 + lifeFrac * 0.08})`);
+      } else if (damageType === "holy") {
+        outer.addColorStop(0, `rgba(255, 244, 198, ${0.18 + lifeFrac * 0.18})`);
+        outer.addColorStop(0.5, `rgba(245, 207, 111, ${0.18 + lifeFrac * 0.22})`);
+        outer.addColorStop(1, `rgba(125, 92, 26, ${0.06 + lifeFrac * 0.08})`);
+      } else if (zone.doctrine === "berserker") {
+        outer.addColorStop(0, `rgba(255, 212, 198, ${0.18 + lifeFrac * 0.18})`);
+        outer.addColorStop(0.5, `rgba(224, 96, 72, ${0.18 + lifeFrac * 0.22})`);
+        outer.addColorStop(1, `rgba(92, 24, 18, ${0.06 + lifeFrac * 0.08})`);
+      } else {
+        outer.addColorStop(0, `rgba(247, 233, 204, ${0.18 + lifeFrac * 0.18})`);
+        outer.addColorStop(0.5, `rgba(213, 171, 115, ${0.18 + lifeFrac * 0.22})`);
+        outer.addColorStop(1, `rgba(87, 60, 24, ${0.06 + lifeFrac * 0.08})`);
+      }
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        ctx.strokeStyle = damageType === "arcane"
+          ? `rgba(202, 194, 255, ${0.42 * lifeFrac - i * 0.08})`
+          : damageType === "holy"
+          ? `rgba(255, 240, 190, ${0.42 * lifeFrac - i * 0.08})`
+          : zone.doctrine === "berserker"
+          ? `rgba(255, 196, 176, ${0.42 * lifeFrac - i * 0.08})`
+          : `rgba(246, 226, 188, ${0.42 * lifeFrac - i * 0.08})`;
+        ctx.lineWidth = 3 - i * 0.6;
+        ctx.beginPath();
+        ctx.arc(x, y, radius * (0.45 + i * 0.17), time * (1.8 + i * 0.4), time * (1.8 + i * 0.4) + Math.PI * 1.1);
+        ctx.stroke();
+      }
+      return;
+    }
+    if (zone.zoneType === "arcaneChain") {
+      const tx = (Number.isFinite(zone.targetX) ? zone.targetX : zone.x) - cameraX;
+      const ty = (Number.isFinite(zone.targetY) ? zone.targetY : zone.y) - cameraY;
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / (zone.totalLife || 0.18)));
+      const grad = ctx.createLinearGradient(x, y, tx, ty);
+      grad.addColorStop(0, `rgba(110, 92, 255, ${0.18 + lifeFrac * 0.22})`);
+      grad.addColorStop(0.55, `rgba(171, 159, 255, ${0.6 * lifeFrac})`);
+      grad.addColorStop(1, `rgba(228, 223, 255, ${0.18 + lifeFrac * 0.12})`);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x, y - 2);
+      ctx.lineTo(x + (tx - x) * 0.3, y + Math.sin(time * 24 + x * 0.06) * 5);
+      ctx.lineTo(x + (tx - x) * 0.68, y + (ty - y) * 0.68 + Math.cos(time * 24 + y * 0.04) * 4);
+      ctx.lineTo(tx, ty - 2);
       ctx.stroke();
       return;
     }

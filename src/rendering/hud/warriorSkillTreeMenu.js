@@ -1,13 +1,11 @@
 import {
   canSpendWarriorNode,
-  canSpendWarriorUtility,
   formatWarriorLaneLabel,
   getWarriorAvailableSkillPoints,
   getWarriorSpentSkillPoints,
   getWarriorTalentDefs,
   getWarriorTalentPoints,
   getWarriorTooltip,
-  getWarriorUtilityLevel,
   isWarriorRowAccessible
 } from "../../game/warriorTalentTree.js";
 import { drawSkillRefundFooter } from "./skillTreeMenuSections.js";
@@ -16,25 +14,12 @@ function isPointInRect(x, y, rect) {
   return !!rect && x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
 }
 
-function drawRankPips(ctx, x, y, filled, total, color, locked) {
-  const size = 10;
-  const gap = 4;
-  for (let i = 0; i < total; i++) {
-    const px = x + i * (size + gap);
-    ctx.fillStyle = i < filled ? color : locked ? "rgba(68, 74, 86, 0.92)" : "rgba(28, 34, 44, 0.96)";
-    ctx.fillRect(px, y, size, size);
-    ctx.strokeStyle = locked ? "rgba(110, 116, 128, 0.72)" : "rgba(220, 228, 238, 0.52)";
-    ctx.strokeRect(px + 0.5, y + 0.5, size - 1, size - 1);
-  }
-}
-
 function drawIcon(ctx, rect, icon, fill, locked) {
   ctx.fillStyle = locked ? "rgba(48, 52, 61, 0.96)" : fill;
   ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   ctx.strokeStyle = locked ? "rgba(119, 124, 134, 0.82)" : "rgba(242, 236, 224, 0.62)";
   ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
-  const useDarkText = !locked && typeof fill === "string" && ["#d8c77e", "#ead692", "#f2e6b8", "#fff0bd"].includes(fill.toLowerCase());
-  ctx.fillStyle = useDarkText ? "#16110b" : "#f4efe3";
+  ctx.fillStyle = "#f4efe3";
   ctx.font = "bold 11px Trebuchet MS";
   ctx.textAlign = "center";
   ctx.fillText(icon, rect.x + rect.w * 0.5, rect.y + rect.h * 0.62);
@@ -82,8 +67,30 @@ export function drawWarriorSkillTreeMenu(renderer, game, layout, frame) {
   const contentTop = menuY + 48;
   const contentBottom = menuY + menuH - 84;
   const visibleH = contentBottom - contentTop;
-  const rowH = 98;
-  const contentHeight = 5 * rowH + 40;
+  const defs = getWarriorTalentDefs();
+  const maxTier = defs.reduce((max, def) => Math.max(max, def.tier || 1), 1);
+  const tiers = new Map();
+  for (const def of defs) {
+    const list = tiers.get(def.tier) || [];
+    list.push(def);
+    tiers.set(def.tier, list);
+  }
+  const getTierColumnCount = (tier, count) => {
+    if (tier === 5) return Math.min(4, Math.max(2, count));
+    if (count >= 6) return 3;
+    if (count >= 4) return 2;
+    return Math.max(1, count);
+  };
+  const tierLayouts = [];
+  let contentHeight = 40;
+  for (let tier = 1; tier <= maxTier; tier++) {
+    const nodes = tiers.get(tier) || [];
+    const columns = getTierColumnCount(tier, nodes.length || 1);
+    const rows = Math.max(1, Math.ceil(Math.max(1, nodes.length) / Math.max(1, columns)));
+    const height = 58 + rows * 48 + Math.max(0, rows - 1) * 8;
+    tierLayouts.push({ tier, nodes, columns, rows, height });
+    contentHeight += height + 10;
+  }
   const scrollMax = Math.max(0, contentHeight - visibleH);
   const scroll = Math.max(0, Math.min(scrollMax, game.uiScroll?.skillTree || 0));
   game.uiScroll.skillTree = scroll;
@@ -99,94 +106,58 @@ export function drawWarriorSkillTreeMenu(renderer, game, layout, frame) {
   ctx.fillStyle = "#d2d9e8";
   ctx.textAlign = "right";
   ctx.fillText(
-    `SP ${getWarriorSpentSkillPoints(game)}/${getWarriorSpentSkillPoints(game) + getWarriorAvailableSkillPoints(game)}   Available ${getWarriorAvailableSkillPoints(game)}`,
+    `SP ${getWarriorSpentSkillPoints(game)}   Available ${getWarriorAvailableSkillPoints(game)}`,
     menuX + menuW - 46,
     menuY + 30
   );
   ctx.textAlign = "left";
+
+  let hovered = null;
+  const mouseX = game.input?.mouse?.screenX;
+  const mouseY = game.input?.mouse?.screenY;
 
   ctx.save();
   ctx.beginPath();
   ctx.rect(menuX + 8, contentTop, menuW - 16, visibleH);
   ctx.clip();
 
-  const defs = getWarriorTalentDefs();
-  const rowNodes = new Map();
-  for (const def of defs) {
-    const list = rowNodes.get(def.row) || [];
-    list.push(def);
-    rowNodes.set(def.row, list);
-  }
-  const utilityDefs = [
-    { key: "moveSpeed", label: "Move Speed Training", icon: "MV", color: "#7cd5ff" },
-    { key: "attackSpeed", label: "Attack Speed Training", icon: "AT", color: "#88efaa" },
-    { key: "damage", label: "Damage Training", icon: "DM", color: "#ffba6d" },
-    { key: "defense", label: "Defense Training", icon: "DF", color: "#cbb5ff" }
-  ];
-
-  let hovered = null;
-  const mouseX = game.input?.mouse?.screenX;
-  const mouseY = game.input?.mouse?.screenY;
-
-  for (let row = 0; row <= 4; row++) {
-    const rowY = sy(menuY + 62 + row * rowH);
-    const rowRect = { x: menuX + 18, y: rowY, w: menuW - 36, h: rowH - 10 };
-    const accessible = row === 0 || isWarriorRowAccessible(game, row);
+  let tierCursorY = menuY + 62;
+  for (const layoutEntry of tierLayouts) {
+    const { tier, nodes, columns, rows, height } = layoutEntry;
+    const rowY = sy(tierCursorY);
+    const rowRect = { x: menuX + 18, y: rowY, w: menuW - 36, h: height };
+    const accessible = isWarriorRowAccessible(game, tier - 1);
     ctx.fillStyle = accessible ? "rgba(24, 20, 18, 0.94)" : "rgba(26, 22, 22, 0.86)";
     ctx.fillRect(rowRect.x, rowRect.y, rowRect.w, rowRect.h);
     ctx.strokeStyle = accessible ? "rgba(196, 156, 120, 0.55)" : "rgba(96, 92, 90, 0.52)";
     ctx.strokeRect(rowRect.x, rowRect.y, rowRect.w, rowRect.h);
     ctx.fillStyle = accessible ? "#f5eadc" : "#9a948b";
     ctx.font = "bold 14px Trebuchet MS";
-    const label = row === 0 ? "Row 0  Core + Utility" : `Row ${row}  Requires ${row === 1 ? "Rage" : `${row === 2 ? 3 : row === 3 ? 8 : 14} total points`}`;
-    ctx.fillText(label, rowRect.x + 12, rowRect.y + 20);
-    if (!accessible && row > 0) {
-      ctx.font = "12px Trebuchet MS";
-      ctx.fillStyle = "#c9a67b";
-      const gateText =
-        row === 1
-          ? "Requires Rage first."
-          : row === 4
-          ? "Requires 14 total points for the first capstone, then 20 for the second."
-          : `Requires ${row === 2 ? 3 : 8} total points spent.`;
-      ctx.fillText(gateText, rowRect.x + 12, rowRect.y + 36);
-    }
+    const tierLabel =
+      tier === 1 ? "Tier 1  Weapon Form" :
+      tier === 2 ? "Tier 2  Stance A Modifier" :
+      tier === 3 ? "Tier 3  Stance B Modifier" :
+      tier === 4 ? "Tier 4  Doctrine + Class Skill" :
+      tier === 5 ? "Tier 5  Extras" :
+      "Tier 6  Capstone";
+    ctx.fillText(tierLabel, rowRect.x + 12, rowRect.y + 20);
+    ctx.font = "12px Trebuchet MS";
+    ctx.fillStyle = accessible ? "#cfd7e6" : "#c9a67b";
+    const gateText = `Unlocks at level ${tier === 1 ? 2 : tier === 2 ? 3 : tier === 3 ? 4 : tier === 4 ? 6 : tier === 5 ? 8 : 10}`;
+    ctx.fillText(gateText, rowRect.x + 12, rowRect.y + 36);
 
-    if (row === 0) {
-      const activeDef = defs.find((def) => def.key === "rageActive");
-      const activeRect = { x: rowRect.x + 14, y: rowRect.y + 30, w: 120, h: 48 };
-      const activeLocked = !canSpendWarriorNode(game, activeDef.key) && getWarriorTalentPoints(game, activeDef.key) <= 0;
-      drawIcon(ctx, { x: activeRect.x, y: activeRect.y, w: 30, h: 30 }, activeDef.icon, activeDef.color, activeLocked);
-      ctx.fillStyle = activeLocked ? "#9ea4af" : "#f2efe7";
-      ctx.font = "bold 13px Trebuchet MS";
-      ctx.fillText(activeDef.label, activeRect.x + 40, activeRect.y + 14);
-      drawRankPips(ctx, activeRect.x + 40, activeRect.y + 20, getWarriorTalentPoints(game, activeDef.key), 1, activeDef.color, activeLocked);
-      game.uiRects.skillTreeNodes.push({ key: activeDef.key, kind: "node", rect: activeRect });
-      if (Number.isFinite(mouseX) && Number.isFinite(mouseY) && isPointInRect(mouseX, mouseY, activeRect)) {
-        hovered = getWarriorTooltip(game, { key: activeDef.key, kind: "node", locked: activeLocked });
-      }
-
-      utilityDefs.forEach((def, index) => {
-        const x = rowRect.x + 150 + index * 86;
-        const rect = { x, y: rowRect.y + 28, w: 78, h: 54 };
-        const level = getWarriorUtilityLevel(game, def.key);
-        const locked = !canSpendWarriorUtility(game, def.key) && level <= 0;
-        drawIcon(ctx, { x: rect.x + 4, y: rect.y + 4, w: 24, h: 24 }, def.icon, def.color, locked);
-        ctx.fillStyle = locked ? "#9ea4af" : "#f2efe7";
-        ctx.font = "bold 11px Trebuchet MS";
-        ctx.fillText(def.label.split(" ")[0], rect.x + 34, rect.y + 16);
-        drawRankPips(ctx, rect.x + 6, rect.y + 34, level, 4, def.color, locked);
-        game.uiRects.skillTreeNodes.push({ key: def.key, kind: "utility", rect });
-        if (Number.isFinite(mouseX) && Number.isFinite(mouseY) && isPointInRect(mouseX, mouseY, rect)) {
-          hovered = getWarriorTooltip(game, { key: def.key, kind: "utility", locked });
-        }
-      });
-      continue;
-    }
-
-    const nodes = (rowNodes.get(row) || []).filter((def) => def.key !== "rageActive");
+    const cardGap = 10;
+    const cardH = 42;
+    const cardW = Math.max(120, Math.floor((rowRect.w - 24 - Math.max(0, columns - 1) * cardGap) / Math.max(1, columns)));
     nodes.forEach((def, index) => {
-      const rect = { x: rowRect.x + 18 + index * 152, y: rowRect.y + 34, w: 136, h: 44 };
+      const col = index % columns;
+      const row = Math.floor(index / columns);
+      const rect = {
+        x: rowRect.x + 12 + col * (cardW + cardGap),
+        y: rowRect.y + 46 + row * (cardH + 8),
+        w: cardW,
+        h: cardH
+      };
       const points = getWarriorTalentPoints(game, def.key);
       const locked = !canSpendWarriorNode(game, def.key) && points <= 0;
       drawIcon(ctx, { x: rect.x + 4, y: rect.y + 6, w: 28, h: 28 }, def.icon, def.color, locked || !accessible);
@@ -196,12 +167,16 @@ export function drawWarriorSkillTreeMenu(renderer, game, layout, frame) {
       ctx.font = "11px Trebuchet MS";
       ctx.fillStyle = locked || !accessible ? "#828894" : "#cfd7e6";
       ctx.fillText(formatWarriorLaneLabel(def.lane), rect.x + 38, rect.y + 30);
-      drawRankPips(ctx, rect.x + 38, rect.y + 32, points, def.maxRanks, def.color, locked || !accessible);
+      if (points > 0) {
+        ctx.fillStyle = "#f6ddb4";
+        ctx.fillText("Selected", rect.x + rect.w - 50, rect.y + 30);
+      }
       game.uiRects.skillTreeNodes.push({ key: def.key, kind: "node", rect });
       if (Number.isFinite(mouseX) && Number.isFinite(mouseY) && isPointInRect(mouseX, mouseY, rect)) {
         hovered = getWarriorTooltip(game, { key: def.key, kind: "node", locked: locked || !accessible });
       }
     });
+    tierCursorY += height + 10;
   }
 
   ctx.restore();

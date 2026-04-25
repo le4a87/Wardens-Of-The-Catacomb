@@ -314,6 +314,7 @@
         aimY: this.mouse.worldY,
         aimDirX,
         aimDirY,
+        swapAttackQueued: !gameplayBlocked && consumeQueued ? this.consumeKeyQueued("q") : false,
         firePrimaryQueued: false,
         firePrimaryHeld: true,
         fireAltQueued: !gameplayBlocked && consumeQueued ? this.consumeRightQueued() : false
@@ -332,6 +333,7 @@
       aimY: this.mouse.worldY,
       aimDirX: hasAim ? rawAimX / rawAimLen : fallbackAimDirX,
       aimDirY: hasAim ? rawAimY / rawAimLen : fallbackAimDirY,
+      swapAttackQueued: !gameplayBlocked && consumeQueued ? this.consumeKeyQueued("q") : false,
       firePrimaryQueued: !gameplayBlocked && consumeQueued ? this.consumeLeftQueued() : false,
       firePrimaryHeld: !gameplayBlocked && !!this.mouse.leftDown,
       fireAltQueued: !gameplayBlocked && consumeQueued ? this.consumeRightQueued() : false
