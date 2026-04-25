@@ -176,6 +176,8 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       else if (enemy.type === "necromancer") this.drawNecromancer(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "leprechaun") this.drawLeprechaunBoss(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "minotaur") this.drawMinotaur(enemy, enemy.x - cameraX, enemy.y - cameraY);
+      else if (enemy.type === "golem") this.drawGolemBoss(enemy, enemy.x - cameraX, enemy.y - cameraY, game.time);
+      else if (enemy.type === "shardling") this.drawShardling(enemy, enemy.x - cameraX, enemy.y - cameraY, game.time);
       else if (enemy.type === "skeleton") this.drawSkeleton(enemy, enemy.x - cameraX, enemy.y - cameraY);
       else if (enemy.type === "mimic") {
         if (enemy.dormant) this.drawBreakable(game, { type: "box", size: enemy.size }, enemy.x - cameraX, enemy.y - cameraY);

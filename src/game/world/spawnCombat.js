@@ -10,6 +10,8 @@ import {
   spawnSkeletonWarrior as spawnSkeletonWarriorEntity,
   spawnNecromancer as spawnNecromancerEntity,
   spawnMinotaur as spawnMinotaurEntity,
+  spawnGolemBoss as spawnGolemBossEntity,
+  spawnShardling as spawnShardlingEntity,
   spawnSonyaBoss as spawnSonyaBossEntity,
   spawnLeprechaunBoss as spawnLeprechaunBossEntity,
   spawnSkeleton as spawnSkeletonEntity
@@ -103,6 +105,14 @@ export function spawnMinotaur(game, x, y) {
   return spawnMinotaurEntity(game, x, y);
 }
 
+export function spawnGolemBoss(game, x, y, options) {
+  return spawnGolemBossEntity(game, x, y, options);
+}
+
+export function spawnShardling(game, x, y) {
+  return spawnShardlingEntity(game, x, y);
+}
+
 export function spawnSonyaBoss(game, x, y) {
   return spawnSonyaBossEntity(game, x, y);
 }
@@ -157,6 +167,55 @@ export function applyEnemyDamage(game, enemy, amount, damageType = "physical", o
   enemy.lastDamageType = damageType;
   if (ownerId) enemy.lastDamageOwnerId = ownerId;
   enemy.hp -= effective;
+  if (enemy?.type === "golem" && effective > 0) {
+    const shardlingCap = Math.max(0, game.config.enemy.golemShardlingSpawnCap || 10);
+    const activeShardlings = (game.enemies || []).filter((other) => other && other.type === "shardling" && (other.hp || 0) > 0).length;
+    if ((enemy.fractureSpawnCooldown || 0) <= 0 && activeShardlings < shardlingCap && typeof game.spawnShardling === "function") {
+      const spawnCount = Math.min(
+        Math.max(1, game.config.enemy.golemShardlingSpawnCount || 1),
+        shardlingCap - activeShardlings
+      );
+      for (let i = 0; i < spawnCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = (game.config.map.tile || 32) * (0.65 + Math.random() * 0.4);
+        const safePoint = typeof game.findNearestSafePoint === "function"
+          ? game.findNearestSafePoint(enemy.x + Math.cos(angle) * distance, enemy.y + Math.sin(angle) * distance, 5)
+          : { x: enemy.x + Math.cos(angle) * distance, y: enemy.y + Math.sin(angle) * distance };
+        if (!safePoint) continue;
+        game.enemies.push(game.spawnShardling(safePoint.x, safePoint.y));
+      }
+      enemy.fractureSpawnCooldown = game.config.enemy.golemShardlingSpawnCooldown || 0.2;
+      if (typeof game.spawnFloatingText === "function") {
+        game.spawnFloatingText(enemy.x, enemy.y - enemy.size * 0.9, "Fracture", "#7ce7ff", 0.55, 12);
+      }
+    }
+
+    const splitThreshold = (enemy.maxHp || 1) * 0.25;
+    if (enemy.canSplit && !enemy.splitTriggered && enemyHpBefore > splitThreshold && enemy.hp <= splitThreshold) {
+      enemy.splitTriggered = true;
+      const splitHp = Math.max(2, Math.ceil(splitThreshold));
+      const offset = (game.config.map.tile || 32) * 0.9;
+      const leftPoint = typeof game.findNearestSafePoint === "function"
+        ? game.findNearestSafePoint(enemy.x - offset, enemy.y, 5)
+        : { x: enemy.x - offset, y: enemy.y };
+      const rightPoint = typeof game.findNearestSafePoint === "function"
+        ? game.findNearestSafePoint(enemy.x + offset, enemy.y, 5)
+        : { x: enemy.x + offset, y: enemy.y };
+      if (typeof game.spawnGolemBoss === "function") {
+        const spawnA = leftPoint || { x: enemy.x - offset, y: enemy.y };
+        const spawnB = rightPoint || { x: enemy.x + offset, y: enemy.y };
+        game.enemies.push(game.spawnGolemBoss(spawnA.x, spawnA.y, { hp: splitHp, isSplitClone: true, isFloorBoss: true, splitTriggered: true }));
+        game.enemies.push(game.spawnGolemBoss(spawnB.x, spawnB.y, { hp: splitHp, isSplitClone: true, isFloorBoss: true, splitTriggered: true }));
+      }
+      enemy.skipRewardsOnDeath = true;
+      enemy.isFloorBoss = false;
+      enemy.hp = 0;
+      if (typeof game.setFloorBossEncounterPhase === "function") game.setFloorBossEncounterPhase("split");
+      if (typeof game.spawnFloatingText === "function") {
+        game.spawnFloatingText(enemy.x, enemy.y - enemy.size, "Fractured", "#ffbf82", 1, 16);
+      }
+    }
+  }
   if (!(game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy))) {
     const owner = typeof game.getPlayerEntityById === "function" ? game.getPlayerEntityById(ownerId) : game.player;
     if (typeof game.recordDamageDealtByPlayerEntity === "function") game.recordDamageDealtByPlayerEntity(owner, dealt);

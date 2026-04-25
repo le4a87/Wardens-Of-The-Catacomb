@@ -10,6 +10,8 @@ import {
   updateSkeletonWarrior as updateSkeletonWarriorEntity,
   updateNecromancer as updateNecromancerEntity,
   updateMinotaur as updateMinotaurEntity,
+  updateGolemBoss as updateGolemBossEntity,
+  updateShardling as updateShardlingEntity,
   getEnemyTacticKey as getEnemyTacticKeyEntity,
   getEnemyTacticDefinition as getEnemyTacticDefinitionEntity,
   ensureEnemyTacticsState as ensureEnemyTacticsStateEntity,
@@ -22,6 +24,7 @@ import {
   dropArmorLoot as dropArmorLootEntity,
   dropNecromancerLoot as dropNecromancerLootEntity,
   dropMinotaurLoot as dropMinotaurLootEntity,
+  dropGolemLoot as dropGolemLootEntity,
   dropLeprechaunLoot as dropLeprechaunLootEntity
 } from "./enemySystems.js";
 import { GameRuntimeWorld } from "./GameRuntimeWorld.js";
@@ -253,6 +256,14 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
     updateMinotaurEntity(this, enemy, dt, speedScale);
   }
 
+  updateGolemBoss(enemy, dt, speedScale) {
+    updateGolemBossEntity(this, enemy, dt, speedScale);
+  }
+
+  updateShardling(enemy, dt, speedScale) {
+    updateShardlingEntity(this, enemy, dt, speedScale);
+  }
+
   updateLeprechaunBoss(enemy, dt, speedScale) {
     updateLeprechaunBossEntity(this, enemy, dt, speedScale);
   }
@@ -345,6 +356,10 @@ export class GameRuntimeSystems extends GameRuntimeWorld {
 
   dropMinotaurLoot(x, y) {
     dropMinotaurLootEntity(this, x, y);
+  }
+
+  dropGolemLoot(x, y) {
+    dropGolemLootEntity(this, x, y);
   }
 
   dropLeprechaunLoot(x, y) {

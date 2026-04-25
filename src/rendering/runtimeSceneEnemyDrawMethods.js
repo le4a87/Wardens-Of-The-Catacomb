@@ -118,6 +118,33 @@ export const runtimeSceneEnemyDrawMethods = {
     ctx.fillRect(screenX + 2, screenY - half * 0.56, 2, 2);
   },
 
+  drawShardling(enemy, screenX, screenY, time = 0) {
+    const ctx = this.ctx;
+    const half = enemy.size * 0.5;
+    const pulse = 0.92 + Math.sin(time * 12 + (enemy.x || 0) * 0.03) * 0.08;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.72, half * 0.9, half * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#a56f62";
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.1, screenY - half * 0.35);
+    ctx.quadraticCurveTo(screenX + half * 0.7, screenY - half * 0.6, screenX + half * 0.76, screenY + half * 0.05);
+    ctx.quadraticCurveTo(screenX + half * 0.5, screenY + half * 0.6, screenX, screenY + half * 0.42);
+    ctx.quadraticCurveTo(screenX - half * 0.56, screenY + half * 0.58, screenX - half * 0.8, screenY + half * 0.02);
+    ctx.quadraticCurveTo(screenX - half * 0.7, screenY - half * 0.56, screenX - half * 0.08, screenY - half * 0.38);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#d3a09a";
+    ctx.fillRect(screenX - half * 0.08, screenY - half * 0.2, half * 0.16, half * 0.36);
+    ctx.fillStyle = `rgba(171, 46, 46, ${0.66 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(screenX + half * 0.02, screenY - half * 0.08, half * 0.13, 0, Math.PI * 2);
+    ctx.fill();
+  },
+
   drawRatArcher(enemy, screenX, screenY) {
     const ctx = this.ctx;
     const half = enemy.size * 0.5;

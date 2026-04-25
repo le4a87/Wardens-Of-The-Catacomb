@@ -295,6 +295,81 @@ export function spawnMinotaur(game, x, y) {
   };
 }
 
+export function spawnGolemBoss(game, x, y, options = {}) {
+  const hpBase = game.rollScaledEnemyHealth(game.config.enemy.golemHpMin, game.config.enemy.golemHpMax);
+  const isSplitClone = !!options.isSplitClone;
+  const speed = game.config.enemy.golemSpeed * (isSplitClone ? (game.config.enemy.golemSplitSpeedMultiplier || 1.28) : 1);
+  const size = 38 * (isSplitClone ? (game.config.enemy.golemSplitSizeMultiplier || 0.8) : 1);
+  const hp = Math.max(1, Math.round(Number.isFinite(options.hp) ? options.hp : hpBase));
+  const radius = Math.max(6, size * 0.5);
+  let spawnX = x;
+  let spawnY = y;
+  if (typeof game?.isPositionWalkable === "function" && !game.isPositionWalkable(spawnX, spawnY, radius, true)) {
+    const safePoint = typeof game.findNearestSafePoint === "function"
+      ? game.findNearestSafePoint(spawnX, spawnY, 12, radius)
+      : null;
+    if (safePoint) {
+      spawnX = safePoint.x;
+      spawnY = safePoint.y;
+    }
+  }
+  return {
+    type: "golem",
+    tacticKey: "golem",
+    x: spawnX,
+    y: spawnY,
+    size,
+    speed,
+    hp,
+    maxHp: hp,
+    baseMaxHp: hp,
+    baseSpeed: speed,
+    hpBarTimer: 9999,
+    damageMin: game.config.enemy.golemDamageMin,
+    damageMax: game.config.enemy.golemDamageMax,
+    isFloorBoss: !!options.isFloorBoss,
+    bossVariant: "golem",
+    bossName: "Flesh Golem",
+    dirX: 1,
+    dirY: 0,
+    contactAttackCooldown: 0,
+    meleeWindup: 0,
+    meleeApplied: false,
+    boulderCooldown: Math.max(0.8, game.config.enemy.golemBoulderCooldown * (isSplitClone ? 0.92 : 1)),
+    boulderWindup: 0,
+    fractureSpawnCooldown: 0,
+    splitTriggered: !!options.splitTriggered,
+    canSplit: !isSplitClone,
+    collapseActive: false,
+    collapseCooldown: game.config.enemy.golemCollapseCooldown || 2.4,
+    kiteDetectTimer: 0,
+    previousTargetDistance: null,
+    movementSampleCooldown: 0
+  };
+}
+
+export function spawnShardling(game, x, y) {
+  const hp = game.rollScaledEnemyHealth(game.config.enemy.shardlingHpMin, game.config.enemy.shardlingHpMax);
+  return {
+    type: "shardling",
+    tacticKey: "shardling",
+    x,
+    y,
+    size: 16,
+    speed: game.config.enemy.shardlingSpeed,
+    hp,
+    maxHp: hp,
+    baseMaxHp: hp,
+    baseSpeed: game.config.enemy.shardlingSpeed,
+    hpBarTimer: 0,
+    damageMin: game.config.enemy.shardlingDamageMin,
+    damageMax: game.config.enemy.shardlingDamageMax,
+    contactAttackCooldown: 0,
+    dirX: 1,
+    dirY: 0
+  };
+}
+
 export function spawnLeprechaunBoss(game, x, y) {
   const hp = game.rollScaledEnemyHealth(game.config.enemy.leprechaunHpMin, game.config.enemy.leprechaunHpMax);
   const pot = game.findNearestSafePoint(

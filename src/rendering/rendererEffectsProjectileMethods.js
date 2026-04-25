@@ -168,6 +168,10 @@ export const rendererEffectsProjectileMethods = {
         this.drawHolyWaveProjectile(b, cameraX, cameraY, game.time);
         continue;
       }
+      if (b.projectileType === "fleshBall") {
+        this.drawFleshBallProjectile(b, cameraX, cameraY, game.time);
+        continue;
+      }
       drawArrowLikeProjectile(b, 1);
     }
     for (const arrow of game.fireArrows) {
@@ -244,6 +248,33 @@ export const rendererEffectsProjectileMethods = {
       ctx.fillStyle = colors[i];
       ctx.beginPath();
       ctx.arc(Math.cos((i / 4) * Math.PI * 2) * 3, Math.sin((i / 4) * Math.PI * 2) * 3, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  },
+
+  drawFleshBallProjectile(projectile, cameraX, cameraY, time = 0) {
+    const ctx = this.ctx;
+    const x = projectile.x - cameraX;
+    const y = projectile.y - cameraY;
+    const size = Number.isFinite(projectile.size) ? projectile.size : 16;
+    const pulse = 0.94 + Math.sin(time * 8 + projectile.x * 0.03) * 0.06;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((projectile.angle || 0) + time * 2.2);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath();
+    ctx.arc(0, size * 0.18, size * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#8b403b";
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.72 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#d99895";
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2 + time * 1.3;
+      ctx.beginPath();
+      ctx.arc(Math.cos(angle) * size * 0.28, Math.sin(angle) * size * 0.22, size * 0.12, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -426,6 +457,26 @@ export const rendererEffectsProjectileMethods = {
       }
       return;
     }
+    if (zone.zoneType === "bloodPool") {
+      const lifeFrac = Math.max(0, Math.min(1, zone.life / (this.config.enemy?.golemFleshBallPoolDuration || 4.2)));
+      const pulse = 0.92 + Math.sin(time * 6 + zone.x * 0.02 + zone.y * 0.013) * 0.05;
+      const outer = ctx.createRadialGradient(x, y, 2, x, y, zone.radius * pulse);
+      outer.addColorStop(0, `rgba(148, 24, 30, ${0.34 * lifeFrac + 0.16})`);
+      outer.addColorStop(0.55, `rgba(116, 14, 18, ${0.24 * lifeFrac + 0.1})`);
+      outer.addColorStop(1, `rgba(42, 6, 8, ${0.08 * lifeFrac})`);
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(x, y, zone.radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(196, 76, 76, ${0.14 * lifeFrac + 0.08})`;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + time * 1.2;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * zone.radius * 0.25, y + Math.sin(a) * zone.radius * 0.18, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
     if (zone.zoneType === "sonyaFire") {
       const lifeFrac = Math.max(0, Math.min(1, zone.life / (this.config.enemy?.sonyaFirePatchDuration || 3.6)));
       const radius = Number.isFinite(zone.radius) ? Math.max(0, zone.radius) : 0;
@@ -507,6 +558,28 @@ export const rendererEffectsProjectileMethods = {
       ctx.moveTo(x, y - radius * 0.22);
       ctx.lineTo(x, y + radius * 0.22);
       ctx.stroke();
+      return;
+    }
+    if (zone.zoneType === "golemCollapseWarning") {
+      const size = Number.isFinite(zone.size) ? zone.size : (zone.radius || 16) * 2;
+      const lifeFrac = Number.isFinite(zone.strikeAt) && zone.strikeAt > 0 ? Math.max(0, Math.min(1, zone.life / zone.strikeAt)) : 1;
+      ctx.fillStyle = `rgba(255, 145, 59, ${0.16 + (1 - lifeFrac) * 0.22})`;
+      ctx.fillRect(x - size * 0.5, y - size * 0.5, size, size);
+      ctx.strokeStyle = `rgba(255, 197, 108, ${0.55 + (1 - lifeFrac) * 0.25})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - size * 0.5 + 1, y - size * 0.5 + 1, size - 2, size - 2);
+      return;
+    }
+    if (zone.zoneType === "golemCollapseImpact") {
+      const size = Number.isFinite(zone.size) ? zone.size : (zone.radius || 16) * 2;
+      const outer = ctx.createRadialGradient(x, y, 2, x, y, size * 0.7);
+      outer.addColorStop(0, "rgba(255, 222, 154, 0.45)");
+      outer.addColorStop(0.5, "rgba(255, 138, 72, 0.28)");
+      outer.addColorStop(1, "rgba(95, 68, 52, 0.06)");
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(x, y, size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
       return;
     }
     const lifeFrac = Math.max(0, Math.min(1, zone.life / this.config.fireArrow.lingerDuration));
