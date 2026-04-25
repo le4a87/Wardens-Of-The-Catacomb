@@ -505,7 +505,7 @@ export const runtimePlayerAttackMethods = {
     let hitAnyEnemy = false;
     let markedKill = false;
     const ownerId = this.player?.id || null;
-    const currentlyMarkedEnemy = this.getWarriorMarkedEnemy(ownerId);
+    const markedEnemyAtAttackStart = this.getWarriorMarkedEnemy(ownerId);
     const markedHits = [];
     let markedTargetKilled = false;
     const guaranteedCrit = !!(this.warriorRuntime?.rageCritReady || this.warriorRuntime?.butcherCritReady);
@@ -543,7 +543,7 @@ export const runtimePlayerAttackMethods = {
       while (diff < -Math.PI) diff += Math.PI * 2;
       if (Math.abs(diff) <= halfArc) {
         const hpBefore = Number.isFinite(enemy.hp) ? enemy.hp : 0;
-        const wasMarked = (enemy.arcaneMarkTimer || 0) > 0 && enemy.arcaneMarkOwnerId === ownerId;
+        const wasMarked = enemy === markedEnemyAtAttackStart;
         let damage = this.rollPrimaryDamage() * (Number.isFinite(attackProfile?.damageMult) ? attackProfile.damageMult : 1);
         if (isWarriorTalentGame(this)) {
           damage *= 1 + getWarriorHeavyHandDamageBonus(this, enemy);
@@ -691,7 +691,7 @@ export const runtimePlayerAttackMethods = {
         }
         if (hpBefore > 0 && enemy.hp <= 0 && wasMarked) {
           markedKill = true;
-          if (currentlyMarkedEnemy === enemy) markedTargetKilled = true;
+          if (markedEnemyAtAttackStart === enemy) markedTargetKilled = true;
         }
         if (wasMarked && getWarriorDoctrine(this) === "gladiator") {
           this.warriorRuntime.gladiatorSwapTimer = Math.min(1.6, Math.max(this.warriorRuntime.gladiatorSwapTimer || 0, 0.6) + 0.22);
