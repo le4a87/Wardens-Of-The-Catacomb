@@ -2,6 +2,38 @@ import { RendererRuntimeBase } from "./RendererRuntimeBase.js";
 import { runtimeSceneDrawMethods } from "./runtimeSceneDrawMethods.js";
 import { getNetworkDeathRulesLabel } from "../net/networkDeathRules.js";
 
+function drawArcaneMarkSigil(ctx, enemy, screenX, screenY, time = 0) {
+  const timer = Number.isFinite(enemy?.arcaneMarkTimer) ? enemy.arcaneMarkTimer : 0;
+  if (timer <= 0) return;
+  const alpha = Math.max(0.24, Math.min(0.8, timer / 4));
+  const r = Math.max(12, (enemy?.size || 20) * 0.58);
+  ctx.save();
+  ctx.translate(screenX, screenY - (enemy?.size || 20) * 0.45);
+  ctx.rotate(time * 0.8);
+  ctx.strokeStyle = `rgba(118, 104, 255, ${alpha})`;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(199, 189, 255, ${alpha * 0.9})`;
+  ctx.lineWidth = 1.1;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * (r * 0.34), Math.sin(a) * (r * 0.34));
+    ctx.lineTo(Math.cos(a) * (r * 0.8), Math.sin(a) * (r * 0.8));
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.42);
+  ctx.lineTo(r * 0.26, 0);
+  ctx.lineTo(0, r * 0.42);
+  ctx.lineTo(-r * 0.26, 0);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawMultiplayerResultsOverlay(ctx, game, canvas) {
   const results = game?.networkFinalResults && typeof game.networkFinalResults === "object" ? game.networkFinalResults : null;
   if (!results) return false;
@@ -185,6 +217,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       } else {
         this.drawGhost(enemy, enemy.x - cameraX, enemy.y - cameraY, enemy.size);
       }
+      drawArcaneMarkSigil(ctx, enemy, enemy.x - cameraX, enemy.y - cameraY, game.time);
       this.drawEnemyHealthBar(enemy, enemy.x - cameraX, enemy.y - cameraY);
     }
 

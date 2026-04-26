@@ -78,7 +78,7 @@ function applyLeprechaunPunch(game, enemy) {
   });
   const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
   const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
-  game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, game.getWarriorRageDamageTaken(reducedByDefense), "physical"), "physical");
+  game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, game.getWarriorRageDamageTaken(reducedByDefense), "physical", enemy), "physical", enemy);
   if (typeof game.applyPlayerKnockback === "function" && (enemy.punchKnockbackCooldown || 0) <= 0) {
     if (game.isPrimaryPlayerEntity && game.isPrimaryPlayerEntity(target)) {
       game.applyPlayerKnockback(

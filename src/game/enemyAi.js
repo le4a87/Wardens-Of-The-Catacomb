@@ -99,7 +99,7 @@ export function updateGhost(game, enemy, dt, speedScale) {
     enemy.siphonTickTimer += siphonTickInterval;
     const scaledDamage = siphonDps * siphonTickInterval * game.getEnemyDamageScale();
     if (game.isPlayerEntity && game.isPlayerEntity(target)) {
-      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledDamage, "unholy"), "unholy");
+      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledDamage, "unholy", enemy), "unholy", enemy);
     } else if (target && (target.hp || 0) > 0) {
       game.applyEnemyDamage(target, scaledDamage, "necrotic", ownerId);
     }
@@ -116,7 +116,7 @@ export function updateGhost(game, enemy, dt, speedScale) {
           target.hitCooldown = 1.0;
           const rawDamage = game.rollEnemyContactDamage(enemy);
           const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-          game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical"), "physical");
+          game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical", enemy), "physical", enemy);
         }
       } else if (target && (target.hp || 0) > 0) {
         game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical", ownerId);
@@ -195,7 +195,7 @@ export function updateGoblin(game, enemy, dt, speedScale) {
       threat.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);
       const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-      game.applyDamageToPlayerEntity(threat, game.getDamageTakenForPlayerEntity(threat, scaledEnemyDamage, "physical"), "physical");
+      game.applyDamageToPlayerEntity(threat, game.getDamageTakenForPlayerEntity(threat, scaledEnemyDamage, "physical", enemy), "physical", enemy);
       enemy.contactAttackCooldown = 0.55;
     } else if (!game.isPlayerEntity || !game.isPlayerEntity(threat)) {
       game.applyEnemyDamage(threat, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical", ownerId);
@@ -288,7 +288,7 @@ export function updateMimic(game, enemy, dt, speedScale) {
       target.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);
       const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical"), "physical");
+      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical", enemy), "physical", enemy);
     } else if (!game.isPlayerEntity || !game.isPlayerEntity(target)) {
       game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical", ownerId);
     }
@@ -359,7 +359,7 @@ export function updatePrisoner(game, enemy, dt, speedScale) {
           const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
           const reducedByDefense = Math.max(1, Math.round(scaledEnemyDamage - game.getDefenseFlatReduction()));
           const damageTaken = game.getWarriorRageDamageTaken(reducedByDefense);
-          game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, damageTaken, "physical"), "physical");
+          game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, damageTaken, "physical", enemy), "physical", enemy);
         }
       } else if (target && (!game.isPlayerEntity || !game.isPlayerEntity(target)) && inSwingArc(target.x, target.y, (target.size || 20) * 0.5)) {
         game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical");

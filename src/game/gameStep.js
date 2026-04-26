@@ -87,6 +87,17 @@ export function stepGame(game, dt, controls = {}) {
   game.warriorRageVictoryRushTimer = Math.max(0, (Number.isFinite(game.warriorRageVictoryRushTimer) ? game.warriorRageVictoryRushTimer : 0) - dt);
   game.warriorRuntime = game.warriorRuntime && typeof game.warriorRuntime === "object" ? game.warriorRuntime : {};
   game.warriorRuntime.battleFrenzyCooldownTimer = Math.max(0, (Number.isFinite(game.warriorRuntime.battleFrenzyCooldownTimer) ? game.warriorRuntime.battleFrenzyCooldownTimer : 0) - dt);
+  game.warriorRuntime.attackSwapCooldownTimer = Math.max(0, (Number.isFinite(game.warriorRuntime.attackSwapCooldownTimer) ? game.warriorRuntime.attackSwapCooldownTimer : 0) - dt);
+  game.warriorRuntime.eldritchSurgeTimer = Math.max(0, (Number.isFinite(game.warriorRuntime.eldritchSurgeTimer) ? game.warriorRuntime.eldritchSurgeTimer : 0) - dt);
+  game.warriorRuntime.eldritchMarkedSparkTimer = Math.max(0, (Number.isFinite(game.warriorRuntime.eldritchMarkedSparkTimer) ? game.warriorRuntime.eldritchMarkedSparkTimer : 0) - dt);
+  game.warriorRuntime.berserkerMarkedFrenzyCooldown = Math.max(0, (Number.isFinite(game.warriorRuntime.berserkerMarkedFrenzyCooldown) ? game.warriorRuntime.berserkerMarkedFrenzyCooldown : 0) - dt);
+  game.warriorRuntime.gladiatorSwapTimer = Math.max(0, (Number.isFinite(game.warriorRuntime.gladiatorSwapTimer) ? game.warriorRuntime.gladiatorSwapTimer : 0) - dt);
+  game.warriorRuntime.shockReleaseComboTimer = Math.max(0, (Number.isFinite(game.warriorRuntime.shockReleaseComboTimer) ? game.warriorRuntime.shockReleaseComboTimer : 0) - dt);
+  if ((game.warriorRuntime.gladiatorSwapTimer || 0) <= 0) game.warriorRuntime.gladiatorSwapMode = "";
+  if ((game.warriorRuntime.shockReleaseComboTimer || 0) <= 0) {
+    game.warriorRuntime.shockReleaseCharges = 0;
+    game.warriorRuntime.shockReleaseReady = false;
+  }
   game.necromancerRuntime = game.necromancerRuntime && typeof game.necromancerRuntime === "object" ? game.necromancerRuntime : {};
   game.necromancerRuntime.vigorTimer = Math.max(0, (Number.isFinite(game.necromancerRuntime.vigorTimer) ? game.necromancerRuntime.vigorTimer : 0) - dt);
   game.rangerDanceMoveTimer = Math.max(0, (Number.isFinite(game.rangerDanceMoveTimer) ? game.rangerDanceMoveTimer : 0) - dt);
@@ -400,6 +411,9 @@ export function stepGame(game, dt, controls = {}) {
       beam.healTickTimer = 0;
     }
   } else if (primaryPlayerAlive) {
+    if (controls.swapAttackQueued && typeof game.toggleWarriorAttackMode === "function") {
+      game.toggleWarriorAttackMode();
+    }
     if (controls.firePrimaryQueued) game.fire(game.player.dirX, game.player.dirY);
     if (!controls.firePrimaryQueued && controls.firePrimaryHeld && controls.hasAim) {
       game.fire(game.player.dirX, game.player.dirY);
@@ -536,10 +550,25 @@ export function stepGame(game, dt, controls = {}) {
   for (const enemy of game.enemies) {
     enemy.lastX = enemy.x;
     enemy.lastY = enemy.y;
+    enemy.hitCooldown = Math.max(0, (Number.isFinite(enemy.hitCooldown) ? enemy.hitCooldown : 0) - dt);
+    if (Math.abs(enemy.vx || 0) > 0.01 || Math.abs(enemy.vy || 0) > 0.01) {
+      if (typeof game.moveWithCollision === "function") game.moveWithCollision(enemy, (enemy.vx || 0) * dt, (enemy.vy || 0) * dt);
+      else {
+        enemy.x += (enemy.vx || 0) * dt;
+        enemy.y += (enemy.vy || 0) * dt;
+      }
+      enemy.vx = (enemy.vx || 0) * Math.max(0, 1 - dt * 7.5);
+      enemy.vy = (enemy.vy || 0) * Math.max(0, 1 - dt * 7.5);
+      if (Math.abs(enemy.vx || 0) < 1) enemy.vx = 0;
+      if (Math.abs(enemy.vy || 0) < 1) enemy.vy = 0;
+    }
     enemy.burningTimer = Math.max(0, (Number.isFinite(enemy.burningTimer) ? enemy.burningTimer : 0) - dt);
     if ((enemy.burningTimer || 0) <= 0) enemy.burningDps = 0;
     enemy.pinningSlowTimer = Math.max(0, (Number.isFinite(enemy.pinningSlowTimer) ? enemy.pinningSlowTimer : 0) - dt);
     if ((enemy.pinningSlowTimer || 0) <= 0) enemy.pinningSlowPct = 0;
+    enemy.exposeTimer = Math.max(0, (Number.isFinite(enemy.exposeTimer) ? enemy.exposeTimer : 0) - dt);
+    if ((enemy.exposeTimer || 0) <= 0) enemy.exposePct = 0;
+    enemy.arcaneMarkTimer = Math.max(0, (Number.isFinite(enemy.arcaneMarkTimer) ? enemy.arcaneMarkTimer : 0) - dt);
     enemy.hpBarTimer = Math.max(0, (enemy.hpBarTimer || 0) - dt);
     enemy.damageTextTimer = Math.max(0, (enemy.damageTextTimer || 0) - dt);
     enemy.damageBuffTimer = Math.max(0, (enemy.damageBuffTimer || 0) - dt);
@@ -547,6 +576,7 @@ export function stepGame(game, dt, controls = {}) {
     if (!alwaysActiveBoss && !isActive(enemy, 72)) continue;
     activeEnemies.push(enemy);
     if (enemy.charmLocked) continue;
+    if ((enemy.hitCooldown || 0) > 0) continue;
     const appliedEnemySpeedScale = enemySpeedScale * (1 - Math.max(0, Math.min(0.85, enemy.pinningSlowPct || 0)));
     if (typeof game.updateEnemyTactics === "function") game.updateEnemyTactics(enemy, dt, appliedEnemySpeedScale);
     else if (typeof game.updateGenericEnemy === "function") game.updateGenericEnemy(enemy, dt, appliedEnemySpeedScale);

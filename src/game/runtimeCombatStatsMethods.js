@@ -32,6 +32,10 @@ import {
   getWarriorBloodheatAttackSpeedBonus,
   getWarriorBloodheatMoveSpeedBonus,
   getWarriorBloodheatRageMoveSpeedBonus,
+  getWarriorClassSkillCooldown,
+  getWarriorClassSkillDuration,
+  getWarriorClassSkillName,
+  getWarriorDoctrine,
   getWarriorConsecratedDps,
   getWarriorConsecratedHealingMultiplier,
   getWarriorConsecratedRadiusTiles,
@@ -49,12 +53,18 @@ import {
   getWarriorRedTempestTempHpPct,
   getWarriorSecondWindAllyHealPct,
   getWarriorSecondWindHealPct,
+  getWarriorSwapCooldown,
   getWarriorTalentPoints,
+  hasWarriorBastion,
+  hasWarriorBattleFrenzy,
   hasWarriorCleaveDiscipline,
   hasWarriorButchersPath,
   hasWarriorGuardedAdvance,
+  hasWarriorParagon,
   hasWarriorRageMastery,
   hasWarriorRedTempest,
+  hasWarriorRavager,
+  hasWarriorSpellknight,
   isWarriorRaging,
   isWarriorTalentGame,
   spendWarriorNode,
@@ -68,6 +78,36 @@ import {
   spendNecromancerNode,
   spendNecromancerUtility
 } from "./necromancerTalentTree.js";
+
+function getWarCircleFlavor(doctrine = "") {
+  switch (doctrine) {
+    case "paladin":
+      return { label: "Consecrated Ground", color: "#f5cf6f", damageType: "holy", displayName: "Consecrated Ground", radiusMult: 1.12 };
+    case "eldritch":
+      return { label: "Runic Field", color: "#9d8cff", damageType: "arcane", displayName: "Runic Field", radiusMult: 0.92 };
+    case "berserker":
+      return { label: "Blood Circle", color: "#d96b63", damageType: "physical", displayName: "Blood Circle", radiusMult: 0.78 };
+    case "gladiator":
+      return { label: "Arena Circle", color: "#d5ab73", damageType: "physical", displayName: "Arena Circle", radiusMult: 1.08 };
+    default:
+      return { label: "War Circle", color: "#f4efe3", damageType: "physical", displayName: "War Circle", radiusMult: 1 };
+  }
+}
+
+function getTempestFlavor(doctrine = "") {
+  switch (doctrine) {
+    case "paladin":
+      return { label: "Tempest", color: "#f5cf6f", damageType: "holy", chain: false };
+    case "eldritch":
+      return { label: "Tempest", color: "#9d8cff", damageType: "arcane", chain: true };
+    case "berserker":
+      return { label: "Tempest", color: "#dd6e62", damageType: "physical", chain: false };
+    case "gladiator":
+      return { label: "Tempest", color: "#d5ab73", damageType: "physical", chain: false };
+    default:
+      return { label: "Tempest", color: "#f4efe3", damageType: "physical", chain: false };
+  }
+}
 
 export const runtimeCombatStatsMethods = {
   getSpentSkillPointCount() {
@@ -112,8 +152,20 @@ export const runtimeCombatStatsMethods = {
       ? Math.max(0, this.classSpec.levelAttackSpeedPct) * Math.max(0, this.level - 1)
       : 0;
     let attackMultiplier = this.getAttackSpeedMultiplier() * (1 + levelAttackBonusPct);
-    if (isWarriorTalentGame(this) && isWarriorRaging(this)) {
-      attackMultiplier *= 1 + getWarriorRageMasteryAttackSpeedBonus(this);
+    if (isWarriorTalentGame(this)) {
+      attackMultiplier *= 1 + getWarriorBloodheatAttackSpeedBonus(this);
+      const warCircle = typeof this.getCrusaderConsecratedZoneForEntity === "function" ? this.getCrusaderConsecratedZoneForEntity(this.player) : null;
+      if (warCircle?.zoneType === "warCircle") {
+        if (warCircle.doctrine === "berserker") attackMultiplier *= 1.15;
+        else if (warCircle.doctrine === "gladiator") attackMultiplier *= 1.06;
+      }
+      if (isWarriorRaging(this)) {
+        attackMultiplier *= 1 + getWarriorRageMasteryAttackSpeedBonus(this);
+      }
+      if (hasWarriorRavager(this)) {
+        const missingRatio = this.player?.maxHealth > 0 ? 1 - ((this.player?.health || 0) / this.player.maxHealth) : 0;
+        attackMultiplier *= 1 + 0.25 * Math.max(0, Math.min(1, missingRatio));
+      }
     }
     return Math.max(this.classSpec.minAttackCooldown, this.classSpec.baseAttackCooldown / attackMultiplier);
   },
@@ -372,16 +424,16 @@ export const runtimeCombatStatsMethods = {
   },
 
   getWarriorRageDuration() {
+    if (isWarriorTalentGame(this)) return getWarriorClassSkillDuration(this);
     const c = this.config.warriorRage || {};
     const base = Number.isFinite(c.duration) ? c.duration : 10;
-    if (isWarriorTalentGame(this) && hasWarriorRageMastery(this)) return base * 1.15;
+    if (hasWarriorRageMastery(this)) return base * 1.15;
     return base;
   },
 
   getWarriorRageCooldown(points = this.skills.warriorRage.points) {
     if (isWarriorTalentGame(this)) {
-      const c = this.config.warriorRage || {};
-      return Number.isFinite(c.cooldown) ? c.cooldown : 20;
+      return getWarriorClassSkillCooldown(this);
     }
     const c = this.config.warriorRage || {};
     const base = Number.isFinite(c.cooldown) ? c.cooldown : 20;
@@ -397,7 +449,12 @@ export const runtimeCombatStatsMethods = {
   getWarriorRageBaseDamageBonus(points = this.skills.warriorRage.points) {
     if (this.classSpec.usesRanged) return 0;
     if (isWarriorTalentGame(this)) {
-      return 0.3;
+      const doctrine = getWarriorDoctrine(this);
+      if (doctrine === "berserker") return 0.28;
+      if (doctrine === "gladiator") return 0.16;
+      if (doctrine === "eldritch") return 0.12;
+      if (doctrine === "paladin") return 0.1;
+      return 0.1;
     }
     const c = this.config.warriorRage || {};
     const baseBonus = Number.isFinite(c.baseDamageBonus) ? c.baseDamageBonus : 0.3;
@@ -415,19 +472,18 @@ export const runtimeCombatStatsMethods = {
     if (this.classSpec.usesRanged || !isWarriorRaging(this)) return rawDamage;
     const safe = Number.isFinite(rawDamage) ? rawDamage : 0;
     if (isWarriorTalentGame(this)) {
-      const normalized = typeof damageType === "string" ? damageType.toLowerCase() : "physical";
-      const physicalLike = normalized === "physical" || normalized === "melee" || normalized === "arrow";
-      if (!physicalLike) return safe;
-      return Math.floor(Math.max(0, safe) * 0.5);
+      const doctrine = getWarriorDoctrine(this);
+      let reduction = doctrine === "paladin" ? 0.2 : doctrine === "gladiator" ? 0.1 : 0;
+      if (hasWarriorBastion(this)) reduction += 0.1;
+      if (reduction <= 0) return safe;
+      return Math.floor(Math.max(0, safe) * (1 - reduction));
     }
     return Math.floor(Math.max(0, safe) * 0.5);
   },
 
   getWarriorRageVictoryRushPerKillPct(points = this.skills.warriorRage.points) {
     if (isWarriorTalentGame(this)) {
-      const rank = getWarriorTalentPoints(this, "battleFrenzy");
-      if (rank <= 0) return 0;
-      return rank * 0.01;
+      return hasWarriorBattleFrenzy(this) ? 0.02 : 0;
     }
     if (this.classSpec.usesRanged) return 0;
     const c = this.config.warriorRage || {};
@@ -453,9 +509,8 @@ export const runtimeCombatStatsMethods = {
 
   getWarriorRageVictoryRushPoolCap() {
     if (isWarriorTalentGame(this)) {
-      const rank = getWarriorTalentPoints(this, "battleFrenzy");
-      if (rank <= 0) return 0;
-      return Math.max(1, this.player.maxHealth * (0.05 * rank));
+      if (!hasWarriorBattleFrenzy(this)) return 0;
+      return Math.max(1, this.player.maxHealth * 0.1);
     }
     const c = this.config.warriorRage || {};
     const capPct = Number.isFinite(c.victoryRushPoolCapPct) ? Math.max(0, c.victoryRushPoolCapPct) : 0.2;
@@ -495,7 +550,7 @@ export const runtimeCombatStatsMethods = {
   },
 
   isWarriorRageUnlocked() {
-    if (isWarriorTalentGame(this)) return getWarriorTalentPoints(this, "rageActive") > 0;
+    if (isWarriorTalentGame(this)) return true;
     return !this.classSpec.usesRanged && (this.skills?.warriorRage?.points || 0) > 0;
   },
 
@@ -516,6 +571,31 @@ export const runtimeCombatStatsMethods = {
     this.warriorRuntime.rageCritReady = hasWarriorCleaveDiscipline(this);
     this.warriorRuntime.cleaveCounter = 0;
     this.warriorRuntime.rageArcTimer = 0;
+    const doctrine = getWarriorDoctrine(this);
+    if (hasWarriorParagon(this)) {
+      this.warriorRuntime.paragonPrimaryReady = true;
+      this.warriorRuntime.paragonSecondaryReady = true;
+    }
+    const tile = this.config?.map?.tile || 32;
+    if (typeof this.markHighestHpEnemy === "function") {
+      if (doctrine === "berserker" || doctrine === "gladiator") {
+        const candidates = (this.enemies || []).filter((enemy) =>
+          enemy &&
+          (enemy.hp || 0) > 0 &&
+          !this.isEnemyFriendlyToPlayer(enemy) &&
+          Math.hypot((enemy.x || 0) - this.player.x, (enemy.y || 0) - this.player.y) <= tile * 8
+        );
+        const markedEnemy = this.markHighestHpEnemy(candidates, 5, this.player.x, this.player.y);
+        if (doctrine === "berserker" && markedEnemy && Math.random() < 0.2) {
+          markedEnemy.hitCooldown = Math.max(markedEnemy.hitCooldown || 0, 1);
+        }
+      } else if (doctrine === "paladin" && typeof this.getWarriorMarkedEnemy === "function" && typeof this.refreshWarriorMark === "function") {
+        const currentMark = this.getWarriorMarkedEnemy();
+        if (currentMark && Math.hypot((currentMark.x || 0) - this.player.x, (currentMark.y || 0) - this.player.y) <= tile * 8) {
+          this.refreshWarriorMark(currentMark, 5);
+        }
+      }
+    }
     const secondWindPct = getWarriorSecondWindHealPct(this);
     if (secondWindPct > 0) {
       this.warriorRuntime.secondWindPool = Math.max(1, this.player.maxHealth * secondWindPct);
@@ -537,17 +617,38 @@ export const runtimeCombatStatsMethods = {
       this.warriorRuntime.tempHp = Math.max(0, Math.round(this.player.maxHealth * tempHpPct));
       this.warriorRuntime.tempHpTimer = this.warriorRageActiveTimer;
       this.warriorRuntime.rageArcTimer = hasWarriorRedTempest(this) ? 5 : 0;
-    }
-    if (isWarriorTalentGame(this) && hasWarriorGuardedAdvance(this)) {
-      const tile = this.config?.map?.tile || 32;
+      const tempest = getTempestFlavor(doctrine);
       this.fireZones.push({
         x: this.player.x,
         y: this.player.y,
-        radius: tile * getWarriorConsecratedRadiusTiles(this),
+        radius: tile * 1.8,
+        life: Math.min(3.2, this.warriorRageActiveTimer),
+        totalLife: Math.min(3.2, this.warriorRageActiveTimer),
+        zoneType: "tempestAura",
+        ownerId: this.player.id || null,
+        followOwner: true,
+        doctrine,
+        damageType: tempest.damageType,
+        dps: this.rollPrimaryDamage() * 0.42,
+        tickInterval: 0.33,
+        tickTimer: 0.05,
+        chainArc: !!tempest.chain
+      });
+      this.spawnFloatingText(this.player.x, this.player.y - 34, tempest.label, tempest.color, 0.85, 15);
+    }
+    if (isWarriorTalentGame(this) && hasWarriorGuardedAdvance(this)) {
+      const tile = this.config?.map?.tile || 32;
+      const field = getWarCircleFlavor(doctrine);
+      this.fireZones.push({
+        x: this.player.x,
+        y: this.player.y,
+        radius: tile * getWarriorConsecratedRadiusTiles(this) * (field.radiusMult || 1),
         life: this.warriorRageActiveTimer,
         totalLife: this.warriorRageActiveTimer,
-        zoneType: "crusaderAura",
+        zoneType: "warCircle",
         ownerId: this.player.id || null,
+        doctrine,
+        damageType: field.damageType,
         dps: getWarriorConsecratedDps(this),
         undeadDamageMultiplier: getWarriorConsecratedUndeadMultiplier(this),
         healingMultiplier: getWarriorConsecratedHealingMultiplier(this),
@@ -555,7 +656,31 @@ export const runtimeCombatStatsMethods = {
         tickInterval: 0.3,
         tickTimer: 0.05
       });
-      this.spawnFloatingText(this.player.x, this.player.y - 36, "Consecrated Ground", "#f5cf6f", 0.9, 15);
+      this.spawnFloatingText(this.player.x, this.player.y - 36, field.displayName, field.color, 0.9, 15);
+    }
+    if (hasWarriorSpellknight(this)) {
+      const angle = Math.atan2(this.player.dirY || 0, this.player.dirX || 1);
+      const tile = this.config?.map?.tile || 32;
+      const life = 0.75;
+      const speed = (tile * 9) / life;
+      this.bullets.push({
+        x: this.player.x + Math.cos(angle) * 18,
+        y: this.player.y + Math.sin(angle) * 18,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        angle,
+        life,
+        size: 24,
+        faction: "player",
+        projectileType: "arcaneWave",
+        damage: this.rollPrimaryDamage() * 0.55,
+        damageType: "arcane",
+        hitTargets: new Set(),
+        ownerId: this.player.id || null
+      });
+    }
+    if (typeof this.spawnFloatingText === "function") {
+      this.spawnFloatingText(this.player.x, this.player.y - 50, getWarriorClassSkillName(this), "#f4efe3", 0.85, 15);
     }
     return true;
   },
@@ -563,7 +688,7 @@ export const runtimeCombatStatsMethods = {
   triggerWarriorMomentumOnKill() {
     if (this.classSpec.usesRanged) return;
     if (isWarriorTalentGame(this)) {
-      if (getWarriorTalentPoints(this, "battleFrenzy") <= 0) return;
+      if (!hasWarriorBattleFrenzy(this)) return;
       this.warriorRuntime = this.warriorRuntime && typeof this.warriorRuntime === "object" ? this.warriorRuntime : {};
       if ((this.warriorRuntime.battleFrenzyCooldownTimer || 0) > 0) return;
       const wasInactive = (this.warriorMomentumTimer || 0) <= 0;
@@ -629,20 +754,9 @@ export const runtimeCombatStatsMethods = {
       return false;
     }
     if (isWarriorTalentGame(this)) {
-      if (spendWarriorUtility(this, skillKey)) {
-        this.spawnFloatingText(this.player.x, this.player.y - 26, "Training improved", "#b7e38a", 0.85, 14);
-        return true;
-      }
       if (!canSpendWarriorNode(this, skillKey) && !canSpendWarriorUtility(this, skillKey)) return false;
       if (spendWarriorNode(this, skillKey)) {
-        if (skillKey === "ironGuard") {
-          const hpGain = 8;
-          this.player.maxHealth += hpGain;
-          this.player.health = Math.min(this.player.maxHealth, this.player.health + hpGain);
-          this.markPlayerHealthBarVisible();
-        }
-        if (skillKey === "rageActive") this.spawnFloatingText(this.player.x, this.player.y - 26, "Rage Unlocked!", "#ff9d8e", 1.0, 15);
-        else this.spawnFloatingText(this.player.x, this.player.y - 26, "Talent improved", "#ffcf9b", 0.85, 14);
+        this.spawnFloatingText(this.player.x, this.player.y - 26, "Talent improved", "#ffcf9b", 0.85, 14);
         return true;
       }
       return false;

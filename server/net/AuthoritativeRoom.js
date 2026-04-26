@@ -755,6 +755,7 @@ export class AuthoritativeRoom {
         state.moving = false;
         input.moveX = 0;
         input.moveY = 0;
+        input.swapAttackQueued = false;
         input.firePrimaryQueued = false;
         input.firePrimaryHeld = false;
         input.fireAltQueued = false;
@@ -786,6 +787,7 @@ export class AuthoritativeRoom {
       state.classType = client.classType;
       state.color = this.getClientRunColor(client);
       this.applyRemotePlayerCombat(client, state, input, dt);
+      input.swapAttackQueued = false;
       input.firePrimaryQueued = false;
       input.fireAltQueued = false;
     }
@@ -793,6 +795,12 @@ export class AuthoritativeRoom {
 
   applyRemotePlayerCombat(client, state, input, dt) {
     if (!client || !state || !input || state.alive === false || (state.health || 0) <= 0) return;
+    if (input.swapAttackQueued && state.classType === "fighter") {
+      this.performActionForActivePlayer(client.id, (context) => {
+        if (typeof context.toggleWarriorAttackMode !== "function") return false;
+        return context.toggleWarriorAttackMode();
+      });
+    }
     const wantsPrimary = !!input.firePrimaryQueued || (!!input.firePrimaryHeld && !!input.hasAim);
     if (state.classType === "necromancer") {
       this.processRemoteNecromancerBeam(state, input, dt);
@@ -1146,6 +1154,7 @@ export class AuthoritativeRoom {
       if (!(typeof fireArrow.ownerId === "string" && fireArrow.ownerId)) fireArrow.ownerId = ownerId;
     }
     if (controllerClient) {
+      controllerClient.input.swapAttackQueued = false;
       controllerClient.input.firePrimaryQueued = false;
       controllerClient.input.fireAltQueued = false;
     }

@@ -1,6 +1,7 @@
 import { vecLength } from "../utils.js";
 import { finalizeProjectilesAndTransientState, resolveSpecialProjectileCollision } from "./stepCombatProjectileSpecials.js";
 import { getNecromancerPlaguecraftRiseChance, getNecromancerRotDps, getNecromancerRotDuration, hasNecromancerHarvester, hasNecromancerPlaguecraftRot, isNecromancerTalentGame } from "./necromancerTalentTree.js";
+import { hasWarriorSpellknight } from "./warriorTalentTree.js";
 import { spawnGhost, spawnSkeleton } from "./enemySpawnFactories.js";
 
 export function resolveCombatAndDrops({
@@ -14,10 +15,10 @@ export function resolveCombatAndDrops({
   skeletonIgnoresArrow
 }) {
   const getLivingPlayers = () => (typeof game.getLivingPlayerEntities === "function" ? game.getLivingPlayerEntities() : [game.player]);
-  const damagePlayer = (player, amount, type = "physical") => {
+  const damagePlayer = (player, amount, type = "physical", source = null) => {
     if (!player || amount <= 0) return;
-    const resolved = typeof game.getDamageTakenForPlayerEntity === "function" ? game.getDamageTakenForPlayerEntity(player, amount, type) : amount;
-    if (typeof game.applyDamageToPlayerEntity === "function") game.applyDamageToPlayerEntity(player, resolved, type);
+    const resolved = typeof game.getDamageTakenForPlayerEntity === "function" ? game.getDamageTakenForPlayerEntity(player, amount, type, source) : amount;
+    if (typeof game.applyDamageToPlayerEntity === "function") game.applyDamageToPlayerEntity(player, resolved, type, source);
     else game.applyPlayerDamage(resolved);
   };
   const healPlayer = (player, amount) => {
@@ -181,13 +182,27 @@ export function resolveCombatAndDrops({
           b.hitTargets.add(enemy);
           continue;
         }
-        const projectileDamage = typeof game.getRangerArrowDamageAgainst === "function"
+        const projectileDamage = b.projectileType === "holyWave"
+          ? (Number.isFinite(b.damage) ? b.damage : game.rollPrimaryDamage()) * Math.max(0.01, Number.isFinite(b.damageMult) ? b.damageMult : 1)
+          : typeof game.getRangerArrowDamageAgainst === "function"
           ? game.getRangerArrowDamageAgainst(enemy, b)
           : (Number.isFinite(b.damage) ? b.damage : game.rollPrimaryDamage()) * Math.max(0.01, Number.isFinite(b.damageMult) ? b.damageMult : 1);
-        const damageType = b.projectileType === "holyWave" ? "holy" : "arrow";
+        const damageType = typeof b.damageType === "string" && b.damageType ? b.damageType : (b.projectileType === "holyWave" ? "holy" : "arrow");
         game.applyEnemyDamage(enemy, projectileDamage, damageType, b.ownerId || null);
+        if (b.projectileType === "holyWave") {
+          if ((b.shockKnockback || 0) > 0) {
+            const angle = Number.isFinite(b.angle) ? b.angle : Math.atan2((b.vy || 0), (b.vx || 1));
+            const knockbackScale = enemy.isBoss ? 0.35 : 1;
+            enemy.vx = (enemy.vx || 0) + Math.cos(angle) * b.shockKnockback * knockbackScale;
+            enemy.vy = (enemy.vy || 0) + Math.sin(angle) * b.shockKnockback * knockbackScale;
+          }
+          if ((b.shockStun || 0) > 0) {
+            enemy.hitCooldown = Math.max(enemy.hitCooldown || 0, b.shockStun);
+          }
+        }
         if (
           b.projectileType === "holyWave" &&
+          damageType === "holy" &&
           typeof game.isUndeadEnemy === "function" &&
           game.isUndeadEnemy(enemy) &&
           Number.isFinite(b.undeadDefenseShredPct) &&
@@ -195,6 +210,15 @@ export function resolveCombatAndDrops({
         ) {
           enemy.crusaderDefenseShredPct = Math.max(enemy.crusaderDefenseShredPct || 0, b.undeadDefenseShredPct);
           enemy.crusaderDefenseShredTimer = Math.max(enemy.crusaderDefenseShredTimer || 0, 4);
+        }
+        if (b.projectileType === "holyWave" && b.markOnHit && typeof game.getPlayerEntityById === "function") {
+          const owner = game.getPlayerEntityById(b.ownerId || null);
+          const hpValue = Number.isFinite(enemy.maxHp) && enemy.maxHp > 0 ? enemy.maxHp : (enemy.hp || 0);
+          if (!b.markCandidate || hpValue > (b.markCandidateHp || -Infinity)) {
+            b.markCandidate = enemy;
+            b.markCandidateHp = hpValue;
+            if (owner && typeof game.applyWarriorMark === "function") game.applyWarriorMark(enemy, b.markDuration || 5);
+          }
         }
         if (typeof game.applyConsumableOnHitEffects === "function") game.applyConsumableOnHitEffects(enemy, b.ownerId || null);
         if (b.projectileType !== "holyWave" && typeof game.applyRangerOnHitEffects === "function") game.applyRangerOnHitEffects(enemy, b.x, b.y);
@@ -243,6 +267,15 @@ export function resolveCombatAndDrops({
 
   for (const zone of game.fireZones) {
     if (!isActive(zone, zone.radius || 0)) continue;
+    if (zone.followOwner) {
+      const owner = typeof game.getPlayerEntityById === "function"
+        ? (game.getPlayerEntityById(zone.ownerId || null) || (((zone.ownerId || null) === (game.player?.id || null) || !zone.ownerId) ? game.player : null))
+        : game.player;
+      if (owner) {
+        zone.x = owner.x;
+        zone.y = owner.y;
+      }
+    }
     if (zone.zoneType === "deathBolt") {
       zone.pulseTimer = Math.max(-4, (Number.isFinite(zone.pulseTimer) ? zone.pulseTimer : (game.config.deathBolt?.pulseInterval || 1)) - dt);
       while (zone.life > 0 && zone.pulseTimer <= 0) {
@@ -334,7 +367,7 @@ export function resolveCombatAndDrops({
       }
       continue;
     }
-    if (zone.zoneType === "crusaderAura") {
+    if (zone.zoneType === "crusaderAura" || zone.zoneType === "warCircle") {
       const tickInterval = Math.max(0.15, zone.tickInterval || 0.3);
       zone.tickTimer = Math.max(-2, (Number.isFinite(zone.tickTimer) ? zone.tickTimer : tickInterval) - dt);
       while (zone.life > 0 && zone.tickTimer <= 0) {
@@ -342,16 +375,60 @@ export function resolveCombatAndDrops({
         const pulseDamageBase = baseDps * tickInterval;
         const undeadMult = Number.isFinite(zone.undeadDamageMultiplier) ? zone.undeadDamageMultiplier : 1.5;
         const shredPct = Number.isFinite(zone.defenseShredPct) ? zone.defenseShredPct : 0;
+        const damageType = typeof zone.damageType === "string" && zone.damageType ? zone.damageType : "holy";
         for (const enemy of activeEnemies) {
           if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
           if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
           if (vecLength(zone.x - enemy.x, zone.y - enemy.y) >= zone.radius + enemy.size * 0.35) continue;
           const isUndead = typeof game.isUndeadEnemy === "function" && game.isUndeadEnemy(enemy);
-          const pulseDamage = pulseDamageBase * (isUndead ? undeadMult : 1);
-          game.applyEnemyDamage(enemy, pulseDamage, "holy", zone.ownerId || null);
-          if (isUndead && shredPct > 0) {
+          const pulseDamage = pulseDamageBase * (isUndead && damageType === "holy" ? undeadMult : 1);
+          game.applyEnemyDamage(enemy, pulseDamage, damageType, zone.ownerId || null);
+          if (isUndead && damageType === "holy" && shredPct > 0) {
             enemy.crusaderDefenseShredPct = Math.max(enemy.crusaderDefenseShredPct || 0, shredPct);
             enemy.crusaderDefenseShredTimer = Math.max(enemy.crusaderDefenseShredTimer || 0, tickInterval + 0.2);
+          }
+        }
+        zone.tickTimer += tickInterval;
+      }
+      continue;
+    }
+    if (zone.zoneType === "tempestAura") {
+      const tickInterval = Math.max(0.18, zone.tickInterval || 0.33);
+      zone.tickTimer = Math.max(-2, (Number.isFinite(zone.tickTimer) ? zone.tickTimer : tickInterval) - dt);
+      while (zone.life > 0 && zone.tickTimer <= 0) {
+        const damageType = typeof zone.damageType === "string" && zone.damageType ? zone.damageType : "physical";
+        const pulseDamage = (Number.isFinite(zone.dps) ? zone.dps : 8) * tickInterval;
+        let chainSource = null;
+        for (const enemy of activeEnemies) {
+          if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
+          if (enemy.type === "skeleton_warrior" && enemy.collapsed) continue;
+          if (vecLength(zone.x - enemy.x, zone.y - enemy.y) >= zone.radius + enemy.size * 0.35) continue;
+          game.applyEnemyDamage(enemy, pulseDamage, damageType, zone.ownerId || null);
+          if (!chainSource) chainSource = enemy;
+        }
+        if (zone.chainArc && chainSource) {
+          const tile = game.config?.map?.tile || 32;
+          let chainTarget = null;
+          let bestDist = Number.POSITIVE_INFINITY;
+          for (const enemy of activeEnemies) {
+            if (!enemy || enemy === chainSource || (enemy.hp || 0) <= 0) continue;
+            if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy)) continue;
+            const dist = vecLength((enemy.x || 0) - (chainSource.x || 0), (enemy.y || 0) - (chainSource.y || 0));
+            if (dist > tile * 2.8 || dist >= bestDist) continue;
+            bestDist = dist;
+            chainTarget = enemy;
+          }
+          if (chainTarget) {
+            game.applyEnemyDamage(chainTarget, pulseDamage * 0.7, "arcane", zone.ownerId || null);
+            game.fireZones.push({
+              x: chainSource.x,
+              y: chainSource.y,
+              targetX: chainTarget.x,
+              targetY: chainTarget.y,
+              zoneType: "arcaneChain",
+              life: 0.18,
+              totalLife: 0.18
+            });
           }
         }
         zone.tickTimer += tickInterval;
@@ -505,9 +582,34 @@ export function resolveCombatAndDrops({
       const isFinalGolemBossDeath = enemy.type === "golem" &&
         enemy.isFloorBoss &&
         !(game.enemies || []).some((other) => other && other !== enemy && other.isFloorBoss && (other.hp || 0) > 0);
+      const spellknightDetonationOwnerId = typeof enemy.arcaneMarkOwnerId === "string" && enemy.arcaneMarkOwnerId ? enemy.arcaneMarkOwnerId : null;
+      const spellknightDetonationOwner = spellknightDetonationOwnerId && typeof game.getPlayerEntityById === "function" ? game.getPlayerEntityById(spellknightDetonationOwnerId) : null;
+      const markedForSpellknight =
+        !!spellknightDetonationOwner &&
+        (enemy.arcaneMarkTimer || 0) > 0 &&
+        enemy.arcaneMarkOwnerId === spellknightDetonationOwnerId &&
+        hasWarriorSpellknight(spellknightDetonationOwner);
       const wasFriendly = game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(enemy);
       if (wasFriendly && typeof game.triggerExplodingDeath === "function") game.triggerExplodingDeath(enemy);
       if (wasFriendly) return false;
+      if (markedForSpellknight) {
+        const detonationDamage = (typeof game.rollPrimaryDamage === "function" ? game.rollPrimaryDamage() : 10) * 0.7;
+        const tile = game.config?.map?.tile || 32;
+        for (const other of activeEnemies) {
+          if (!other || other === enemy || (other.hp || 0) <= 0) continue;
+          if (game.isEnemyFriendlyToPlayer && game.isEnemyFriendlyToPlayer(other)) continue;
+          if (vecLength((other.x || 0) - (enemy.x || 0), (other.y || 0) - (enemy.y || 0)) > tile * 1.8 + (other.size || 20) * 0.35) continue;
+          game.applyEnemyDamage(other, detonationDamage, "arcane", spellknightDetonationOwnerId);
+        }
+        game.fireZones.push({
+          x: enemy.x,
+          y: enemy.y,
+          radius: tile * 1.2,
+          life: 0.2,
+          totalLife: 0.2,
+          zoneType: "arcaneBurst"
+        });
+      }
       if (
         isNecromancerTalentGame(game) &&
         !game.isUndeadEnemy(enemy) &&

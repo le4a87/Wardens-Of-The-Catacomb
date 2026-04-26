@@ -261,7 +261,7 @@ export function updateSkeletonWarrior(game, enemy, dt, speedScale) {
       target.hitCooldown = 1.0;
       const rawDamage = game.rollEnemyContactDamage(enemy);
       const scaledEnemyDamage = rawDamage * game.getEnemyDamageScale();
-      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical"), "physical");
+      game.applyDamageToPlayerEntity(target, game.getDamageTakenForPlayerEntity(target, scaledEnemyDamage, "physical", enemy), "physical", enemy);
     } else if (!game.isPlayerEntity || !game.isPlayerEntity(target)) {
       game.applyEnemyDamage(target, game.rollEnemyContactDamage(enemy) * game.getEnemyDamageScale(), "physical", ownerId);
     }

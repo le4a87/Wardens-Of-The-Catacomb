@@ -32,3 +32,6 @@ data/leaderboard.json
 # Temporary local scratch files seen in this repo
 =500{print}
 CON
+
+# Capacitor build outputs
+www/
