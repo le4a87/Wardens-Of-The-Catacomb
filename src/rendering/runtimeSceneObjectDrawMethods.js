@@ -105,6 +105,55 @@ export const runtimeSceneObjectDrawMethods = {
     }
   },
 
+  drawTreasureChest(chest, screenX, screenY) {
+    const ctx = this.ctx;
+    const size = Number.isFinite(chest?.size) ? Math.max(20, chest.size) : 28;
+    const half = size * 0.5;
+    const opened = !!chest?.opened;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY + half * 0.62, half * 0.95, half * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#4e2915";
+    ctx.fillRect(screenX - half * 0.82, screenY - half * 0.18, half * 1.64, half * 0.92);
+    ctx.fillStyle = "#8d4c1f";
+    ctx.fillRect(screenX - half * 0.72, screenY - half * 0.06, half * 1.44, half * 0.56);
+    ctx.strokeStyle = "#d1a14a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(screenX - half * 0.72, screenY + half * 0.18);
+    ctx.lineTo(screenX + half * 0.72, screenY + half * 0.18);
+    ctx.stroke();
+
+    ctx.fillStyle = "#e1bd58";
+    ctx.fillRect(screenX - 2.5, screenY + half * 0.02, 5, half * 0.42);
+    if (opened) {
+      ctx.save();
+      ctx.translate(screenX, screenY - half * 0.18);
+      ctx.rotate(-0.34);
+      ctx.fillStyle = "#6d3516";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, half * 0.82, half * 0.5, 0, Math.PI, Math.PI * 2);
+      ctx.lineTo(half * 0.82, 0);
+      ctx.lineTo(-half * 0.82, 0);
+      ctx.fill();
+      ctx.strokeStyle = "#d1a14a";
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    ctx.fillStyle = "#6d3516";
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY - half * 0.12, half * 0.82, half * 0.56, 0, Math.PI, Math.PI * 2);
+    ctx.lineTo(screenX + half * 0.82, screenY - half * 0.12);
+    ctx.lineTo(screenX - half * 0.82, screenY - half * 0.12);
+    ctx.fill();
+    ctx.strokeStyle = "#d1a14a";
+    ctx.stroke();
+  },
+
   drawWallTrap(trap, screenX, screenY, palette = null) {
     const ctx = this.ctx;
     const colors = palette || {};

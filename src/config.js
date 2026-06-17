@@ -105,6 +105,16 @@ export const CONFIG = {
     sprintParticleSpawnRate: 24,
     meleeSwingLife: 0.17
   },
+  treasure: {
+    minChests: 1,
+    maxChests: 3,
+    chestCountFactor: 4200,
+    keyDropRate: 0.012,
+    keyMaxDropsPerFloor: 3,
+    minPlacementDistanceFromPlayerTiles: 7,
+    goldMin: 38,
+    goldMax: 74
+  },
   enemy: {
     maxCount: 120,
     activeCapBase: 30,

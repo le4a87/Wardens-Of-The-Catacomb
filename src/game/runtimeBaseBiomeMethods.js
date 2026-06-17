@@ -108,6 +108,7 @@ export const runtimeBaseBiomeMethods = {
     this.drops = [];
     this.enemies = [];
     this.armorStands = [];
+    this.treasureChests = [];
     this.lightSources = [];
     this.breakables = [];
     this.wallTraps = [];
@@ -126,6 +127,7 @@ export const runtimeBaseBiomeMethods = {
     this.navDistance = Array.from({ length: this.map.length }, () => Array(this.map[0].length).fill(-1));
     this.navPlayerTile = { x: -1, y: -1 };
     this.hasKey = false;
+    this.treasureKeyDropsThisFloor = 0;
     this.door = { x: 0, y: 0, open: true };
     this.pickup = { x: 0, y: 0, taken: true };
     this.portal = { x: 0, y: 0, active: false };
@@ -134,6 +136,7 @@ export const runtimeBaseBiomeMethods = {
     this.placeArmorStands();
     this.placeWallTraps();
     this.placeBreakables();
+    if (typeof this.placeTreasureChests === "function") this.placeTreasureChests();
     if (typeof this.placeTorches === "function") this.placeTorches();
     this.ensurePlayerSafePosition(12);
   },

@@ -153,6 +153,11 @@ Higher-floor dev starts now use room-centered spawn selection instead of arbitra
 - Gold drops scale with player level and floor level.
 - Health drops use a computed drop-rate helper instead of a flat static chance.
 - Health pickups restore `25%` of max health.
+- Each generated floor places a small number of locked treasure chests away from spawn and progression markers.
+- Treasure chests become shared minimap markers after any living player reveals the chest within normal exploration range.
+- Chest keys are a rare enemy drop and are tracked separately from the floor exit key. Touching a locked chest spends one chest key.
+- Opened chests pay out gold and a health potion pickup, grant one consumable item directly to the opening player, and grant one free run upgrade as gear.
+- In multiplayer, treasure key pickups and chest inventory/gear rewards are owned by the collecting or opening player instead of mutating another teammate's inventory.
 - Gold-find and spawn-rate shop upgrades were removed from the shop.
 - The current shop is consumable-only. Consumables are active or passive, have finite charges, appear in the HUD while owned, and follow the schema in [CONSUMABLES_SHOP_DESIGN.md](CONSUMABLES_SHOP_DESIGN.md).
 - Pressing `Call for Aid` opens an in-game radial aid menu around the player instead of a modal shop window. The menu does not pause local or multiplayer gameplay. Each radial entry shows the consumable icon and remaining stock; hover tooltips show the item name, type, rarity, price, effect, and purchase failure reason. On touch layouts, the first tap pins the tooltip and the second tap buys.

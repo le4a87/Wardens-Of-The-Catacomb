@@ -265,6 +265,7 @@ export class RendererRuntimeScene extends RendererRuntimeBase {
       if (stand.animated && stand.activated) continue;
       this.drawArmorStand(game, stand, stand.x - cameraX, stand.y - cameraY);
     }
+    for (const chest of game.treasureChests || []) this.drawTreasureChest(chest, chest.x - cameraX, chest.y - cameraY);
     for (const light of game.lightSources || []) {
       if (light?.type === "torch") this.drawTorch(game, light, light.x - cameraX, light.y - cameraY);
       else if (light?.type === "holyCandle") drawHolyCandleVisual(this.ctx, game, light, light.x - cameraX, light.y - cameraY);

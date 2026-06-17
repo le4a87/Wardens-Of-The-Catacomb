@@ -802,9 +802,9 @@ export function resolveCombatAndDrops({
     if (drop.life <= 0) continue;
     for (const player of getLivingPlayers()) {
       if (vecLength(player.x - drop.x, player.y - drop.y) >= game.getPickupRadius()) continue;
-      if (drop.type === "health" || drop.type === "mushroom") {
-        healPlayer(player, drop.amount);
-        if (player.classType === "archer" && game.rangerTalents?.forager?.points > 0) {
+      if (drop.type === "health" || drop.type === "mushroom" || drop.type === "treasure_key") {
+        if (drop.type === "treasure_key" && typeof game.collectTreasureKey === "function") game.collectTreasureKey(player, drop); else healPlayer(player, drop.amount);
+        if (drop.type !== "treasure_key" && player.classType === "archer" && game.rangerTalents?.forager?.points > 0) {
           player.rangerRuntime = player.rangerRuntime && typeof player.rangerRuntime === "object" ? player.rangerRuntime : {};
           player.rangerRuntime.foragerRegenTimer = Math.max(player.rangerRuntime.foragerRegenTimer || 0, 4);
           if (drop.type === "mushroom") player.rangerRuntime.mushroomSpawnTimer = 30;

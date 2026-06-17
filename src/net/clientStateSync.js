@@ -444,6 +444,7 @@ export function applySnapshotToGame({
     const enemyDespawns = Array.isArray(state.delta.enemies?.despawn) ? state.delta.enemies.despawn.slice() : [];
     game.enemies = applyDeltaCollection(game.enemies, state.delta.enemies, { keyframe, positionAlpha: snapAlpha });
     game.drops = applyDeltaCollection(game.drops, state.delta.drops, { keyframe, positionAlpha: snapAlpha });
+    game.treasureChests = applyDeltaCollection(game.treasureChests, state.delta.treasureChests, { keyframe, positionAlpha: 1 });
     game.lightSources = applyDeltaCollection(game.lightSources, state.delta.lightSources, { keyframe, positionAlpha: 1 });
     game.breakables = applyDeltaCollection(game.breakables, state.delta.breakables, { keyframe, positionAlpha: 1 });
     game.wallTraps = applyDeltaCollection(game.wallTraps, state.delta.wallTraps, { keyframe, positionAlpha: 1 });
@@ -469,6 +470,7 @@ export function applySnapshotToGame({
     game.armorStands = syncByIdLerp(game.armorStands, state.armorStands, 1);
     game.enemies = syncByIdLerp(game.enemies, state.enemies, snapAlpha);
     game.drops = syncByIdLerp(game.drops, state.drops, snapAlpha);
+    game.treasureChests = syncByIdLerp(game.treasureChests, state.treasureChests, 1);
     game.lightSources = syncByIdLerp(game.lightSources, state.lightSources, 1);
     game.breakables = syncByIdLerp(game.breakables, state.breakables, 1);
     game.wallTraps = syncByIdLerp(game.wallTraps, state.wallTraps, 1);

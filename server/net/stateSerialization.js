@@ -1,4 +1,5 @@
 import { createActivePlayerSnapshot, createPlayerSnapshot } from "../../src/net/playerSnapshotSchema.js";
+import { serializeTreasureChest } from "./treasureChestSerialization.js";
 
 function resolveControlledEnemyColor(room, enemy) {
   const ownerId = typeof enemy?.controllerPlayerId === "string" && enemy.controllerPlayerId ? enemy.controllerPlayerId : null;
@@ -456,6 +457,7 @@ export function serializeState(room) {
   const floorBoss = sim.floorBoss && typeof sim.floorBoss === "object" ? { ...sim.floorBoss } : null;
   const activeEnemies = sim.enemies.filter((e) => isInsideBounds(e, activeBounds, 56));
   const activeDrops = sim.drops.filter((d) => isInsideBounds(d, activeBounds, 40));
+  const activeTreasureChests = (sim.treasureChests || []).filter((chest) => chest?.discovered || isInsideBounds(chest, activeBounds, 48));
   const activeBreakables = (sim.breakables || []).filter((b) => isInsideBounds(b, activeBounds, 48));
   const activeWallTraps = (sim.wallTraps || []).filter((t) => isInsideBounds(t, activeBounds, 48));
   const activeBullets = sim.bullets.filter((b) => isInsideBounds(b, activeBounds, 128));
@@ -466,10 +468,7 @@ export function serializeState(room) {
     .map((event) => serializeFloatingTextEvent(event))
     .filter(Boolean);
   const activePlayers = typeof room.getActivePlayerStates === "function" ? room.getActivePlayerStates() : [];
-  const primaryPlayer =
-    (typeof room.syncPrimaryActivePlayerFromSim === "function" ? room.syncPrimaryActivePlayerFromSim() : null) ||
-    activePlayers[0] ||
-    sim.player;
+  const primaryPlayer = (typeof room.syncPrimaryActivePlayerFromSim === "function" ? room.syncPrimaryActivePlayerFromSim() : null) || activePlayers[0] || sim.player;
   return {
     mapSignature: typeof sim.getMapSignature === "function" ? sim.getMapSignature() : `${sim.biomeKey}:${sim.floor}:${sim.mapWidth}x${sim.mapHeight}`,
     time: sim.time,
@@ -487,6 +486,7 @@ export function serializeState(room) {
     shopRotationEvents: sim.shopRotationEvents || [],
     enemies: activeEnemies.map((e) => serializeEnemy(room, e)),
     drops: activeDrops.map((d) => serializeDrop(room, d)),
+    treasureChests: activeTreasureChests.map((chest) => serializeTreasureChest(getStableId, room, chest)),
     lightSources: (sim.lightSources || []).map((light) => serializeLightSource(room, light)),
     breakables: activeBreakables.map((b) => serializeBreakable(room, b)),
     wallTraps: activeWallTraps.map((t) => serializeWallTrap(room, t)),

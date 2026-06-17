@@ -165,6 +165,7 @@ export function stepGame(game, dt, controls = {}) {
   game.player.moving = !!(mx || my);
   if (primaryPlayerAlive) game.revealAroundPlayer();
   if (typeof game.updateLightingInteractions === "function") game.updateLightingInteractions(dt);
+  if (typeof game.updateTreasureChests === "function") game.updateTreasureChests(dt);
 
   const trapCfg = typeof game.getWallTrapConfig === "function" ? game.getWallTrapConfig() : game.config?.traps?.wall || {};
   const moveLen = vecLength(mx, my) || 1;

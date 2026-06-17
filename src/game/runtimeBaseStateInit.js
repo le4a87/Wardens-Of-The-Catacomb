@@ -43,6 +43,8 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.level = 1;
   game.expToNextLevel = config.progression.baseXpToLevel;
   game.hasKey = false;
+  game.treasureKeys = 0;
+  game.treasureKeyDropsThisFloor = 0;
   game.gameOver = false;
   game.gameOverTitle = "GAME OVER";
   game.deathTransitionDuration = 12;
@@ -77,6 +79,7 @@ export function initializeRuntimeBaseState(game, { classType, classSpec, config 
   game.drops = [];
   game.enemies = [];
   game.armorStands = [];
+  game.treasureChests = [];
   game.lightSources = [];
   game.flameOfTheFallen = null;
   game.breakables = [];

@@ -85,6 +85,7 @@ export function buildJoinKeyframeState(fullState) {
       keyframe: true,
       enemies: toKeyframeCollection(fullState.enemies),
       drops: toKeyframeCollection(fullState.drops),
+      treasureChests: toKeyframeCollection(fullState.treasureChests),
       lightSources: toKeyframeCollection(fullState.lightSources),
       breakables: toKeyframeCollection(fullState.breakables),
       wallTraps: toKeyframeCollection(fullState.wallTraps),

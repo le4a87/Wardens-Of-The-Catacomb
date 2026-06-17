@@ -143,15 +143,18 @@ export function drawHud(renderer, game, layout) {
   ctx.fillText(`Score: ${game.score}`, 14, 24);
   ctx.fillText(`Time: ${formatTime(game.time)}`, 192, 24);
   ctx.fillText(`Floor: ${game.floor}`, 340, 24);
+  const chestKeyLabel = (game.treasureKeys || 0) > 0 ? `Chest Keys: ${game.treasureKeys}` : "";
+  if (chestKeyLabel) ctx.fillText(chestKeyLabel, 430, 24);
   if (game.networkEnabled) {
     ctx.fillStyle = game.networkRole === "Controller" ? "#8fe3a2" : "#dfc670";
     const netLabel = `Net: ${game.networkRole || "Connected"}`;
-    ctx.fillText(netLabel, 470, 24);
+    const netX = chestKeyLabel ? 580 : 470;
+    ctx.fillText(netLabel, netX, 24);
     const debugSummary = formatNetworkDebugSummary(game);
     if (debugSummary) {
       ctx.fillStyle = "#bfe8ff";
       ctx.font = "13px Trebuchet MS";
-      const debugX = Math.min(layout.playW - 12, 470 + ctx.measureText(netLabel).width + 18);
+      const debugX = Math.min(layout.playW - 12, netX + ctx.measureText(netLabel).width + 18);
       if (debugX < layout.playW - 180) ctx.fillText(debugSummary, debugX, 24);
       ctx.font = "16px Trebuchet MS";
     }

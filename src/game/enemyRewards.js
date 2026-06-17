@@ -98,6 +98,7 @@ export function maybeSpawnDrop(game, x, y) {
       life: game.config.drops.life
     });
   }
+  if (typeof game.maybeSpawnTreasureKeyDrop === "function") game.maybeSpawnTreasureKeyDrop(x, y);
 }
 
 export function dropTreasureBag(game, x, y, goldEaten) {

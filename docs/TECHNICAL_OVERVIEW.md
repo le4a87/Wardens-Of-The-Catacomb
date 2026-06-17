@@ -170,6 +170,7 @@ This document summarizes the current high-level architecture and validation work
   - new class progression effects must include targeted local-vs-network validation before merge, rather than waiting for manual multiplayer reports
 - The authoritative room still keeps one primary `sim.player` path for the pause owner, but snapshots now also serialize a `players` collection for all active participants.
 - Owl delivery state serializes as top-level `owlDelivery` snapshot data, while slain/expired delivery parcels use the existing `drops` collection with `type: "owl_item"`, purchaser id, item key, quantity, and normal drop lifetime cleanup. Clients apply `owlDelivery` directly for in-world Veronica rendering, portal-away presentation, minimap destination/drop markers, audio events, and de-duplicated top-HUD notification events. Flame of the Fallen serializes as top-level `flameOfTheFallen` state so clients render the same pyre radius, timer, and soul progress while the authoritative sim owns revive completion.
+- Treasure chest state serializes through the top-level `treasureChests` collection and delta protocol. Discovered chests remain serialized outside the local active bounds so teammate discovery and minimap markers stay shared, while undiscovered chests can remain culled until near active players.
 - Authoritative player-state copying lives in `server/net/activePlayerState.js`; keep new multiplayer player fields there instead of duplicating mappings inside `AuthoritativeRoom`.
 - Player snapshot DTO fields live in `src/net/playerSnapshotSchema.js`; server serialization and client snapshot application both use this schema to reduce single-player/multiplayer state drift.
 - The client runtime resolves the local player out of `state.players`, keeps remote players in `game.remotePlayers`, and renders/interpolates them separately from the local predicted avatar.
@@ -291,6 +292,8 @@ This document summarizes the current high-level architecture and validation work
   - now uses reliable target-selection and repositioning so misses on drifting enemies do not masquerade as combat-feedback regressions
 - `validate:player-state-sync`
   - verifies authoritative active-player adapter round trips, serialized active-player snapshot fields, and client snapshot application for player build/runtime state
+- `node server/validate-treasure-chests.js`
+  - verifies treasure chest floor placement, shared minimap discovery state, locked-chest feedback, rare chest-key pickup state, reward payout, player snapshot key fields, chest state serialization, and multiplayer ownership isolation for non-primary key pickup/chest rewards
 - `validate:network-shared-rewards`
   - verifies authoritative two-player XP/gold reward sharing and master-volume output scaling
 - `validate:network-archer`

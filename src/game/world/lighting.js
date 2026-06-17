@@ -197,7 +197,7 @@ export function placeTorches(game) {
   const mapH = game.map.length;
   const mapW = game.map[0]?.length || 0;
   const candidates = [];
-  const reserved = [game.player, game.door, game.pickup, game.portal].filter(Boolean);
+  const reserved = [game.player, game.door, game.pickup, game.portal, ...(game.treasureChests || [])].filter(Boolean);
   const minReservedDistance = tile * 2.5;
   const minPlayerDistance = tile * 6;
 

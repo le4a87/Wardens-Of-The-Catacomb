@@ -41,6 +41,12 @@ import {
   updateLightingInteractions
 } from "./world/lighting.js";
 import {
+  collectTreasureKey,
+  maybeSpawnTreasureKeyDrop,
+  placeTreasureChests,
+  updateTreasureChests
+} from "./world/treasureChests.js";
+import {
   getEnemySpawnInterval,
   getMoveSpeedMultiplier,
   getGoldFindMultiplier,
@@ -137,6 +143,22 @@ export class GameRuntimeWorld extends GameRuntimeBase {
 
   placeTorches() {
     return placeTorches(this);
+  }
+
+  placeTreasureChests() {
+    return placeTreasureChests(this);
+  }
+
+  maybeSpawnTreasureKeyDrop(x, y) {
+    return maybeSpawnTreasureKeyDrop(this, x, y);
+  }
+
+  collectTreasureKey(player, drop) {
+    return collectTreasureKey(this, player, drop);
+  }
+
+  updateTreasureChests(dt) {
+    return updateTreasureChests(this, dt);
   }
 
   getPlayerLightRadius(player = this.player) {

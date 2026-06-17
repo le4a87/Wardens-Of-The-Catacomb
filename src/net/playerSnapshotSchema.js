@@ -12,6 +12,7 @@ export const PLAYER_SNAPSHOT_FIELDS = [
   "expToNextLevel",
   "skillPoints",
   "refundCount",
+  "treasureKeys",
   "levelWeaponDamageBonus",
   "lanternFuel",
   "skills",
@@ -48,6 +49,7 @@ export const ACTIVE_PLAYER_SNAPSHOT_FIELDS = [
   "expToNextLevel",
   "skillPoints",
   "refundCount",
+  "treasureKeys",
   "levelWeaponDamageBonus",
   "lanternFuel",
   "fireCooldown",
@@ -136,6 +138,7 @@ export function applyPlayerSnapshotToGameState(game, snapshotPlayer, { isNetwork
   if (Number.isFinite(snapshotPlayer.expToNextLevel)) game.expToNextLevel = snapshotPlayer.expToNextLevel;
   if (Number.isFinite(snapshotPlayer.skillPoints)) game.skillPoints = snapshotPlayer.skillPoints;
   if (Number.isFinite(snapshotPlayer.refundCount)) game.refundCount = snapshotPlayer.refundCount;
+  if (Number.isFinite(snapshotPlayer.treasureKeys)) game.treasureKeys = snapshotPlayer.treasureKeys;
   if (Number.isFinite(snapshotPlayer.levelWeaponDamageBonus)) game.levelWeaponDamageBonus = snapshotPlayer.levelWeaponDamageBonus;
   if (Number.isFinite(snapshotPlayer.lanternFuel)) game.player.lanternFuel = snapshotPlayer.lanternFuel;
   if (Number.isFinite(snapshotPlayer.warriorMomentumTimer)) game.warriorMomentumTimer = snapshotPlayer.warriorMomentumTimer;

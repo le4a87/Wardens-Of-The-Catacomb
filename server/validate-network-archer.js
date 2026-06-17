@@ -221,8 +221,10 @@ async function main() {
             before.player.y - before.camera.y + lane.dy * 120
           );
       await page.mouse.move(aimPoint.x, aimPoint.y);
-      const baselineProjectileCount = Array.isArray(before.combat?.ownedProjectiles)
-        ? before.combat.ownedProjectiles.filter((entry) => entry?.source === "authoritative").length
+      const baselineProjectileSeq = Array.isArray(before.combat?.ownedProjectiles)
+        ? before.combat.ownedProjectiles
+            .filter((entry) => entry?.source === "authoritative" && Number.isFinite(entry.spawnSeq))
+            .reduce((max, entry) => Math.max(max, Math.floor(entry.spawnSeq)), 0)
         : 0;
       await page.keyboard.down(lane.key);
       await delay(260);
@@ -231,22 +233,29 @@ async function main() {
       await delay(70);
       await page.keyboard.up(lane.key);
 
-      const projectileReadyHandle = await page.waitForFunction(({ baselineCount }) => {
+      const projectileReadyHandle = await page.waitForFunction(({ baselineSeq }) => {
         const state = window.__WOTC_DEBUG__?.getState?.();
         if (!state) return null;
         const owned = Array.isArray(state.combat?.ownedProjectiles) ? state.combat.ownedProjectiles : [];
-        const authoritative = owned.filter((projectile) => projectile && projectile.source === "authoritative");
-        if (authoritative.length <= baselineCount) return null;
-        const matched = authoritative.find((projectile) =>
-          Number.isFinite(projectile.angle) && String(projectile.projectileType || "").startsWith("ranger_")
+        const authoritative = owned.filter((projectile) =>
+          projectile &&
+          projectile.source === "authoritative" &&
+          Number.isFinite(projectile.spawnSeq) &&
+          Math.floor(projectile.spawnSeq) > baselineSeq
         );
+        if (authoritative.length <= 0) return null;
+        const matched = authoritative
+          .filter((projectile) =>
+            Number.isFinite(projectile.angle) && String(projectile.projectileType || "").startsWith("ranger_")
+          )
+          .sort((a, b) => Math.floor(b.spawnSeq) - Math.floor(a.spawnSeq))[0];
         if (!matched) return null;
         return {
           state,
           projectile: matched,
           visibleAtMs: performance.now()
         };
-      }, { baselineCount: baselineProjectileCount }, { timeout: 800 }).catch(() => null);
+      }, { baselineSeq: baselineProjectileSeq }, { timeout: 800 }).catch(() => null);
       if (!projectileReadyHandle) {
         skippedAttempts.push({
           attemptIndex,

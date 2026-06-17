@@ -33,6 +33,7 @@ export function createActivePlayerStateForRoom(room, client, spawn = null) {
     expToNextLevel: room.sim.config?.progression?.baseXpToLevel || 10,
     skillPoints: 0,
     refundCount: 0,
+    treasureKeys: 0,
     levelWeaponDamageBonus: 0,
     lanternFuel: Number.isFinite(spawn?.lanternFuel) ? spawn.lanternFuel : room.sim.config?.lighting?.lanternInitialFuel,
     kills: 0,
@@ -106,6 +107,7 @@ export function syncSimPrimaryPlayerStateForRoom(room) {
   room.sim.expToNextLevel = Number.isFinite(state.expToNextLevel) ? state.expToNextLevel : room.sim.expToNextLevel;
   room.sim.skillPoints = Number.isFinite(state.skillPoints) ? state.skillPoints : room.sim.skillPoints;
   room.sim.refundCount = Number.isFinite(state.refundCount) ? state.refundCount : room.sim.refundCount;
+  room.sim.treasureKeys = Number.isFinite(state.treasureKeys) ? state.treasureKeys : room.sim.treasureKeys;
   room.sim.levelWeaponDamageBonus = Number.isFinite(state.levelWeaponDamageBonus) ? state.levelWeaponDamageBonus : room.sim.levelWeaponDamageBonus;
   room.sim.skills = cloneSkillState(state.skills);
   room.sim.rangerTalents = cloneRangerTalentState(state.rangerTalents);
@@ -159,6 +161,7 @@ export function syncPrimaryActivePlayerFromSimForRoom(room) {
   state.expToNextLevel = room.sim.expToNextLevel;
   state.skillPoints = room.sim.skillPoints;
   state.refundCount = Number.isFinite(room.sim.refundCount) ? room.sim.refundCount : 0;
+  state.treasureKeys = Number.isFinite(room.sim.treasureKeys) ? room.sim.treasureKeys : 0;
   state.levelWeaponDamageBonus = room.sim.levelWeaponDamageBonus;
   state.lanternFuel = room.sim.player.lanternFuel;
   state.kills = room.sim.runStats?.totalKills || 0;
@@ -203,6 +206,7 @@ export function createPlayerSimulationContextForRoom(room, state) {
     : room.sim.config?.progression?.baseXpToLevel || 10;
   context.skillPoints = Number.isFinite(state.skillPoints) ? state.skillPoints : 0;
   context.refundCount = Number.isFinite(state.refundCount) ? state.refundCount : 0;
+  context.treasureKeys = Number.isFinite(state.treasureKeys) ? state.treasureKeys : 0;
   context.levelWeaponDamageBonus = Number.isFinite(state.levelWeaponDamageBonus) ? state.levelWeaponDamageBonus : 0;
   context.skills = cloneSkillState(state.skills);
   context.rangerTalents = cloneRangerTalentState(state.rangerTalents);
@@ -237,6 +241,7 @@ export function syncActivePlayerStateFromContextForRoom(state, context) {
   state.expToNextLevel = Number.isFinite(context.expToNextLevel) ? context.expToNextLevel : state.expToNextLevel;
   state.skillPoints = Number.isFinite(context.skillPoints) ? context.skillPoints : state.skillPoints;
   state.refundCount = Number.isFinite(context.refundCount) ? context.refundCount : state.refundCount;
+  state.treasureKeys = Number.isFinite(context.treasureKeys) ? context.treasureKeys : state.treasureKeys;
   state.levelWeaponDamageBonus = Number.isFinite(context.levelWeaponDamageBonus)
     ? context.levelWeaponDamageBonus
     : state.levelWeaponDamageBonus;

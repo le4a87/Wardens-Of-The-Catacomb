@@ -8,6 +8,7 @@ import {
   getWarriorVisualSpec
 } from "./warriorVisualPresentation.js";
 import { drawWarriorBattleCryAura } from "./warriorBattleCryAura.js";
+import { drawMinimapWorldMarkers } from "./minimapWorldMarkers.js";
 
 import { rendererEffectsFighterRigMethods } from "./rendererEffectsFighterRigMethods.js";
 import { rendererEffectsMageStaffMethods } from "./rendererEffectsMageStaffMethods.js";
@@ -425,40 +426,7 @@ export const rendererEffectsPlayerMethods = {
       ctx.fill();
     }
 
-    const owlDelivery = game.owlDelivery;
-    const owl = owlDelivery?.active;
-    if (owl) {
-      const destX = miniX + (owl.destX / this.config.map.tile) * scale;
-      const destY = miniY + (owl.destY / this.config.map.tile) * scale;
-      const owlX = miniX + ((Number.isFinite(owl.displayX) ? owl.displayX : owl.x) / this.config.map.tile) * scale;
-      const owlY = miniY + ((Number.isFinite(owl.displayY) ? owl.displayY : owl.y) / this.config.map.tile) * scale;
-      ctx.save();
-      ctx.strokeStyle = "rgba(255, 142, 42, 0.88)";
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(destX, destY, Math.max(3.5, scale * 1.6), 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = "#ff8a24";
-      ctx.beginPath();
-      ctx.arc(owlX, owlY, Math.max(2.5, scale * 1.3), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    } else if (owlDelivery?.lastMarker) {
-      const marker = owlDelivery.lastMarker;
-      const mx = miniX + (marker.x / this.config.map.tile) * scale;
-      const my = miniY + (marker.y / this.config.map.tile) * scale;
-      ctx.save();
-      ctx.fillStyle = "#7a4a2a";
-      ctx.strokeStyle = "#d09052";
-      ctx.lineWidth = 1.3;
-      ctx.beginPath();
-      ctx.roundRect(mx - 4, my - 3, 8, 7, 1.5);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = "#b9793d";
-      ctx.fillRect(mx - 3, my, 6, 1.3);
-      ctx.restore();
-    }
+    drawMinimapWorldMarkers(this, game, miniX, miniY, scale);
 
     for (const player of Array.isArray(game.remotePlayers) ? game.remotePlayers : []) {
       if (!player || player.alive === false) continue;

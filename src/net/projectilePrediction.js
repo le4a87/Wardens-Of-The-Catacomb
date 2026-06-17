@@ -1,6 +1,6 @@
 import { getRangerCurrentWeaponModeStats, getRangerSelectedWeapon } from "../game/rangerTalentTree.js";
 
-const PREDICTIVE_RANGED_PROJECTILES_ENABLED = false;
+const PREDICTIVE_RANGED_PROJECTILES_ENABLED = true;
 const PREDICTIVE_MELEE_SWINGS_ENABLED = false;
 
 function removeRenderedPredictedProjectile(game, renderId) {

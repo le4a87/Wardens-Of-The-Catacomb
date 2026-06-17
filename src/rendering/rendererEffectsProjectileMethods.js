@@ -785,6 +785,17 @@ export const rendererEffectsProjectileMethods = {
       ctx.fillStyle = "#b9793d";
       ctx.fillRect(x - 6, y - 1, 12, 2);
       ctx.restore();
+    } else if (drop.type === "treasure_key") {
+      ctx.strokeStyle = "#e7c568";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x - 3, y - 2, 4, 0, Math.PI * 2);
+      ctx.moveTo(x, y + 1);
+      ctx.lineTo(x + 9, y + 8);
+      ctx.lineTo(x + 6, y + 8);
+      ctx.moveTo(x + 6, y + 5);
+      ctx.lineTo(x + 4, y + 7);
+      ctx.stroke();
     }
   }
 };

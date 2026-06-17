@@ -82,6 +82,7 @@ export class AuthoritativeRoom {
     this.deltaCache = {
       enemies: new Map(),
       drops: new Map(),
+      treasureChests: new Map(),
       lightSources: new Map(),
       breakables: new Map(),
       wallTraps: new Map(),
@@ -93,6 +94,7 @@ export class AuthoritativeRoom {
     this.idCounters = {
       enemy: 1,
       drop: 1,
+      treasureChest: 1,
       bullet: 1,
       fireArrow: 1,
       fireZone: 1,
@@ -105,6 +107,7 @@ export class AuthoritativeRoom {
     this.idMaps = {
       enemy: new WeakMap(),
       drop: new WeakMap(),
+      treasureChest: new WeakMap(),
       bullet: new WeakMap(),
       fireArrow: new WeakMap(),
       fireZone: new WeakMap(),
@@ -795,6 +798,7 @@ export class AuthoritativeRoom {
     this.deltaCache = {
       enemies: new Map(),
       drops: new Map(),
+      treasureChests: new Map(),
       lightSources: new Map(),
       breakables: new Map(),
       wallTraps: new Map(),
@@ -806,6 +810,7 @@ export class AuthoritativeRoom {
     this.idCounters = {
       enemy: 1,
       drop: 1,
+      treasureChest: 1,
       bullet: 1,
       fireArrow: 1,
       fireZone: 1,
@@ -818,6 +823,7 @@ export class AuthoritativeRoom {
     this.idMaps = {
       enemy: new WeakMap(),
       drop: new WeakMap(),
+      treasureChest: new WeakMap(),
       bullet: new WeakMap(),
       fireArrow: new WeakMap(),
       fireZone: new WeakMap(),
@@ -1262,6 +1268,7 @@ export class AuthoritativeRoom {
     const delta = { keyframe };
     const enemyDelta = this.options.buildDeltaCollection(this.deltaCache.enemies, fullState.enemies, keyframe);
     const dropDelta = this.options.buildDeltaCollection(this.deltaCache.drops, fullState.drops, keyframe);
+    const treasureChestDelta = this.options.buildDeltaCollection(this.deltaCache.treasureChests, fullState.treasureChests, keyframe);
     const lightSourceDelta = this.options.buildDeltaCollection(this.deltaCache.lightSources, fullState.lightSources, keyframe);
     const breakableDelta = this.options.buildDeltaCollection(this.deltaCache.breakables, fullState.breakables, keyframe);
     const wallTrapDelta = this.options.buildDeltaCollection(this.deltaCache.wallTraps, fullState.wallTraps, keyframe);
@@ -1271,6 +1278,7 @@ export class AuthoritativeRoom {
     const meleeSwingDelta = this.options.buildDeltaCollection(this.deltaCache.meleeSwings, fullState.meleeSwings, keyframe);
     if (keyframe || enemyDelta) delta.enemies = enemyDelta || {};
     if (keyframe || dropDelta) delta.drops = dropDelta || {};
+    if (keyframe || treasureChestDelta) delta.treasureChests = treasureChestDelta || {};
     if (keyframe || lightSourceDelta) delta.lightSources = lightSourceDelta || {};
     if (keyframe || breakableDelta) delta.breakables = breakableDelta || {};
     if (keyframe || wallTrapDelta) delta.wallTraps = wallTrapDelta || {};
